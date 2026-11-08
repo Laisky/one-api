@@ -22,6 +22,23 @@ import { isAdmin } from 'utils/common';
 import { ITEMS_PER_PAGE } from 'constants';
 import './LogTable.mobile.css';
 
+/**
+ * nextLogSort returns the sort selected by clicking a sortable log column.
+ *
+ * Parameters:
+ *   - current: the committed sort, as { sortBy, sortOrder }.
+ *   - columnKey: the clicked column.
+ *
+ * Return value: the next { sortBy, sortOrder }. Clicking the active column
+ * toggles its direction; clicking another column sorts it descending.
+ */
+function nextLogSort(current, columnKey) {
+  if (current.sortBy === columnKey) {
+    return { sortBy: columnKey, sortOrder: current.sortOrder === 'asc' ? 'desc' : 'asc' };
+  }
+  return { sortBy: columnKey, sortOrder: 'desc' };
+}
+
 export default function Log() {
   let now = new Date();
   let sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -33,7 +50,8 @@ export default function Log() {
     token_name: '',
     model_name: '',
     start_timestamp: Math.floor(sevenDaysAgo.getTime() / 1000),
-    end_timestamp: new Date().getTime() / 1000 + 3600,
+    // Whole seconds: the server parses timestamps as integers.
+    end_timestamp: Math.floor(new Date().getTime() / 1000) + 3600,
     type: 0,
     channel: ''
   };
@@ -56,15 +74,28 @@ export default function Log() {
   // belongs to a different set of rows than the table displays.
   const keywordActive = (searchKeyword.keyword || '').trim() !== '';
 
-  const loadLogs = async (startIdx) => {
+  // loadLogs fetches one page of logs for the supplied query.
+  //
+  // Parameters:
+  //   - startIdx: zero-based page index.
+  //   - options.filters: the filters and keyword to request; defaults to the
+  //     current form values.
+  //   - options.sort: the { sortBy, sortOrder } to request; defaults to the
+  //     committed sort.
+  //
+  // A handler that has just changed filters or sort must pass the new values,
+  // because state set in the same event is not visible in this closure.
+  //
+  // Return values: none; errors are surfaced through showError.
+  const loadLogs = async (startIdx, { filters = searchKeyword, sort = { sortBy, sortOrder } } = {}) => {
     try {
       setSearching(true);
-      const query = { ...searchKeyword };
+      const query = { ...filters };
 
       query.p = startIdx;
-      if (sortBy) {
-        query.sort_by = sortBy;
-        query.sort_order = sortOrder;
+      if (sort.sortBy) {
+        query.sort_by = sort.sortBy;
+        query.sort_order = sort.sortOrder;
       }
       if (!userIsAdmin) {
         delete query.username;
@@ -80,9 +111,9 @@ export default function Log() {
       if (keyword) {
         url = userIsAdmin ? '/api/log/search' : '/api/log/self/search';
         params = { keyword: keyword, p: startIdx, size: ITEMS_PER_PAGE };
-        if (sortBy) {
-          params.sort = sortBy;
-          params.order = sortOrder;
+        if (sort.sortBy) {
+          params.sort = sort.sortBy;
+          params.order = sort.sortOrder;
         }
       } else {
         url = userIsAdmin ? '/api/log/' : '/api/log/self';
@@ -117,21 +148,20 @@ export default function Log() {
     })();
   };
 
+  /** handleSort applies the sort selected by clicking the supplied column and reloads the first page with that sort. */
   const handleSort = async (columnKey) => {
     // Prevent multiple sort requests
     if (sortLoading) return;
 
-    if (sortBy === columnKey) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(columnKey);
-      setSortOrder('desc');
-    }
+    // The request must use the selected sort, not the previous render's sort.
+    const nextSort = nextLogSort({ sortBy, sortOrder }, columnKey);
+    setSortBy(nextSort.sortBy);
+    setSortOrder(nextSort.sortOrder);
     setActivePage(0);
     setSortLoading(true);
 
     try {
-      await loadLogs(0);
+      await loadLogs(0, { sort: nextSort });
     } finally {
       setSortLoading(false);
     }
@@ -198,10 +228,16 @@ export default function Log() {
     setSelectedLogId(null);
   };
 
+  // Mounting and refreshing load once with cleared filters. Resetting initPage
+  // re-runs this effect, which must then do nothing; the cleared filters are
+  // passed explicitly because setSearchKeyword has not committed yet.
   useEffect(() => {
+    if (!initPage) {
+      return;
+    }
     setSearchKeyword(originalKeyword);
     setActivePage(0);
-    loadLogs(0)
+    loadLogs(0, { filters: originalKeyword })
       .then()
       .catch((reason) => {
         showError(reason);

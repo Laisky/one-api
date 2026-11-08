@@ -256,6 +256,42 @@ describe('primitive compatibility', () => {
     expect(buttonClick).toHaveBeenCalledOnce();
   });
 
+  // withTextBoundaries protects only a primitive's own children. Text inside a
+  // caller-owned element is the caller's boundary, so these cases pin both the
+  // untouched caller markup and the convention that keeps a nested label safe.
+  it('leaves caller-owned Button markup untouched and keeps a label with its own element updatable', () => {
+    /** SaveButton renders a caller-owned icon/label wrapper whose label follows the supplied loading state. */
+    const SaveButton = ({ loading }: { loading: boolean }) => (
+      <Button>
+        <span data-testid="caller-markup">
+          {loading ? <AlertCircle data-testid="loading-icon" /> : <CheckCircle data-testid="ready-icon" />}
+          <span>{loading ? 'Loading' : 'Save'}</span>
+        </span>
+      </Button>
+    );
+    const { rerender } = render(
+      <MutationBoundary>
+        <SaveButton loading={false} />
+      </MutationBoundary>
+    );
+    const callerMarkup = screen.getByTestId('caller-markup');
+    expect(callerMarkup.parentElement).toBe(screen.getByRole('button'));
+    expect(callerMarkup.children).toHaveLength(2);
+    expect(translateText(callerMarkup)).toBeGreaterThan(0);
+
+    rerender(
+      <MutationBoundary>
+        <SaveButton loading />
+      </MutationBoundary>
+    );
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByTestId('caller-markup')).toBe(callerMarkup);
+    expect(screen.getByTestId('loading-icon')).toBeInTheDocument();
+    expect(callerMarkup).toHaveTextContent('Loading');
+    expect(callerMarkup).not.toHaveTextContent('Save');
+  });
+
   it('preserves the normal Button ref and direct icon sibling', () => {
     const ref = createRef<HTMLButtonElement>();
     render(

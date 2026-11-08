@@ -30,6 +30,25 @@ combine adjacent text expressions into one scalar child. A wrapper around an
 entire mixed icon/text container is insufficient: the changing text must remain
 an independently owned text boundary. Test both removals and visible updates.
 
+Text boundaries are a convention for dynamic mixed-content JSX, not a guarantee
+that a primitive protects every descendant. `withTextBoundaries` handles only a
+primitive's own scalar, array and Fragment children; it deliberately leaves
+caller-owned elements untouched so their identity, refs and layout survive.
+`<Button><span><Icon />{isLoading ? 'Loading' : 'Save'}</span></Button>` is
+therefore still unsafe: the caller owns that `span`, so it must give the label
+its own element, as in `<span><Icon /><span>{label}</span></span>`. Values that
+can be `0` must not be rendered through `&&`; use a ternary that yields `null`.
+Add a focused translated-text test whenever a new text-bearing control or a
+state-driven label beside an icon is introduced.
+
+Lint enforcement was evaluated and not adopted. `eslint-plugin-react-google-translate`
+1.1.0, the maintained ESLint 9 option, reports only conditional text. On Modern
+it produced 30 reports at 19 locations: 17 are direct children of primitives that
+`withTextBoundaries` already protects, and the other 2 remount with their data.
+It does not report the MCP status pattern fixed below. React has not changed its
+position on translator-mutated DOM ([react#11538](https://github.com/facebook/react/issues/11538)),
+so the convention is enforced by behavior tests instead.
+
 This follows React's ownership model: application code should avoid altering
 nodes React manages. [React DOM guidance](https://react.dev/learn/manipulating-the-dom-with-refs).
 The implementation keeps browser translation available and does not replace
@@ -57,6 +76,8 @@ Confirmed cases include:
 | Native locale-sensitive text | Authentication prompts, version labels, pricing headers and timestamp prefixes can remain in the previous locale. |
 | Air/Berry log sorting | Switching each sortable column removes a translated arrow through a stale node reference. |
 | Air migration counts | Zero-to-positive crashes; positive-to-positive leaves a stale count. |
+| Channel response time | Testing an untested channel removes a translated bare `-` and throws; untested rows also rendered a stray `0` from `test_time && …`. |
+| MCP server status | Refreshing a translated status swaps the icon before a detached label and throws. |
 
 Air's real log component also had an independent initialization failure: column
 definitions accessed sort state/helpers before initialization. The retained
@@ -78,6 +99,42 @@ and accessible name; a missing separating space between inline boundaries is
 also covered by a dedicated regression.
 Legacy tests execute actual source JSX with React 18; their source selection
 supports historical negative controls through `LEGACY_UI_BASELINE`.
+
+## Request state captured by event handlers
+
+Review of the legacy log sorting fix found a second, unrelated class: a handler
+calls a state setter and then immediately builds a request from the same state,
+which still holds the previous render's value
+([React: state as a snapshot](https://react.dev/learn/state-as-a-snapshot)).
+The standard applied everywhere is the one Modern's log page already used:
+
+- A handler computes the next query (sort, type, range, page size) and passes it
+  to the loader explicitly; loaders default only to committed state.
+- Exactly one code path owns each reload, so one user action sends one request.
+- A superseded request commits nothing. Modern's keyset hook accepts
+  `fetchPage(navigation, { pageSize, isCurrent })` and ignores a stale response
+  instead of moving the cursor under newer rows.
+
+| Surface | Behavior reproduced before fixing |
+| --- | --- |
+| Air/Berry log sorting | The first sort sent no sort, toggles sent the previous direction, and keyword-search sorting sent the previous column. |
+| Air log type filter | Paging and page-size changes sent `type=0`; Query sent the click event (`type=[object Object]`). |
+| Berry log refresh | Mount and refresh sent two requests; the first still carried the cleared keyword. Timestamps were fractional, which the server parses as `0`. |
+| Air dashboard presets | Today/7/30-day buttons requested the previous range. |
+| Air LobeChat link | The token menu opened LobeChat with `sk-undefined`. |
+| Modern log page size | Cursor mode sent a stale-size request whose late response moved Next to the wrong cursor; offset mode sent three requests. |
+
+The legacy suites also resolve every compound UI-library member the source
+reads, such as `Form.Slot` or `Select.Option`, against the installed Semi UI or
+MUI packages. Bundlers check only named imports, so an undefined member fails at
+render time. This found Air's admin log filter (`Form.Field`, which Semi does not
+define, so the admin log page crashed) and Air's models page (`Collapsible.Panel`,
+so every channel card rendered empty).
+
+Legacy behavior tests mount the real page modules with the theme's own React and
+UI library through `.github/scripts/legacy-react-harness.cjs`; only transport,
+toast and unrelated modal modules are replaced, and assertions read the actual
+request parameters and rendered text.
 
 Run the complete frontend suites and builds from the repository root:
 

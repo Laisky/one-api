@@ -79,9 +79,12 @@ const isLikelyChatModelName = (modelName: string) => {
   return !fallbackTestingModelMarkers.some((marker) => lowerName.includes(marker));
 };
 
-/** formatResponseTime renders a response time with its latency severity color. */
+/**
+ * formatResponseTime renders a response time with its latency severity color, or a dash for an untested channel.
+ * Both results are elements so browser translation cannot strand a bare text node when a probe result arrives.
+ */
 const formatResponseTime = (time?: number) => {
-  if (!time) return '-';
+  if (!time) return <span>-</span>;
   const color = time < 1000 ? 'text-success' : time < 3000 ? 'text-warning' : 'text-destructive';
   return <span className={cn('font-mono text-sm', color)}>{`${time}ms`}</span>;
 };
@@ -204,11 +207,12 @@ export const createChannelColumns = ({
       return (
         <div className="text-center" title={responseTitle}>
           {formatResponseTime(responseTime)}
-          {testTime && (
+          {/* test_time is 0 for an untested channel, which must render nothing rather than "0". */}
+          {testTime ? (
             <div className="text-xs text-muted-foreground">
               <TimestampDisplay timestamp={testTime} className="font-mono" />
             </div>
-          )}
+          ) : null}
         </div>
       );
     },

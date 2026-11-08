@@ -193,13 +193,23 @@ const Detail = (props) => {
         }
     };
 
-    const loadQuotaData = async (lineChart, pieChart) => {
+    // loadQuotaData fetches quota data for a time range and redraws both charts.
+    //
+    // Parameters:
+    //   - lineChart, pieChart: the chart instances to update.
+    //   - range: the { start_timestamp, end_timestamp } texts to request;
+    //     defaults to the form's committed range. A handler that has just set
+    //     a new range must pass it, because state set in the same event is not
+    //     visible in this closure.
+    //
+    // Return values: none; errors are surfaced through showError.
+    const loadQuotaData = async (lineChart, pieChart, range = { start_timestamp, end_timestamp }) => {
       try {
           setLoading(true);
 
           let url = '';
-          let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-          let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+          let localStartTimestamp = Date.parse(range.start_timestamp) / 1000;
+          let localEndTimestamp = Date.parse(range.end_timestamp) / 1000;
           if (isAdminUser) {
               url = `/api/data/?username=${username}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
           } else {
@@ -282,8 +292,8 @@ const Detail = (props) => {
             formRef.current.formApi.setValue('end_timestamp', endTimestamp);
         }
 
-        // Immediately trigger data refresh
-        loadQuotaData(modelDataChart, modelDataPieChart).catch(reportUIError);
+        // Immediately load the selected range rather than the previous render's range.
+        loadQuotaData(modelDataChart, modelDataPieChart, { start_timestamp: startTimestamp, end_timestamp: endTimestamp }).catch(reportUIError);
     };
 
     const initChart = async () => {

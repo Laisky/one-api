@@ -200,4 +200,59 @@ describe('useLogCursorPagination', () => {
     expect(result.current.notice).toBeNull();
     expect(result.current.hasMore).toBe(false);
   });
+
+  it('does not let a superseded request commit its traversal state', async () => {
+    const urls: string[] = [];
+    const resolvers: Array<(value: { data: unknown }) => void> = [];
+    const get = vi.fn((url: string) => {
+      urls.push(url);
+      return new Promise<{ data: unknown }>((resolve) => resolvers.push(resolve));
+    });
+    const { result } = setup(get);
+
+    let current = 0;
+    let stale: Promise<unknown> = Promise.resolve();
+    let fresh: Promise<unknown> = Promise.resolve();
+    act(() => {
+      const first = ++current;
+      stale = result.current.fetchPage('first', { isCurrent: () => current === first });
+      const second = ++current;
+      fresh = result.current.fetchPage('first', { pageSize: 5, isCurrent: () => current === second });
+    });
+    expect(urls[0]).toContain('size=2');
+    expect(urls[1]).toContain('size=5');
+
+    // The newer request answers first; the superseded one answers last.
+    await act(async () => {
+      resolvers[1]({ data: pageBody([{ id: 1 }], 'lc1.fresh') });
+      expect(await fresh).toEqual([{ id: 1 }]);
+      resolvers[0]({ data: pageBody([{ id: 7 }, { id: 8 }], 'lc1.stale') });
+      expect(await stale).toBeNull();
+    });
+    expect(result.current.count?.value).toBe(1);
+    expect(result.current.hasMore).toBe(true);
+
+    get.mockImplementationOnce(async (url: string) => {
+      urls.push(url);
+      return { data: pageBody([{ id: 2 }], '') };
+    });
+    await act(async () => {
+      await result.current.fetchPage('next');
+    });
+    expect(urls[2]).toContain('cursor=lc1.fresh');
+    expect(result.current.pageIndex).toBe(1);
+    expect(result.current.rowsBefore).toBe(1);
+  });
+
+  it('keeps the capability when only a superseded request fails', async () => {
+    const get = vi.fn(async () => {
+      throw new Error('aborted');
+    });
+    const { result } = setup(get);
+
+    await act(async () => {
+      expect(await result.current.fetchPage('first', { isCurrent: () => false })).toBeNull();
+    });
+    expect(result.current.supported).toBe(true);
+  });
 });
