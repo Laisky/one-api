@@ -31,12 +31,14 @@ type ResponseAPIStreamEvent struct {
 	// Content events (type contains "content" or "output_text")
 	ItemId       string          `json:"item_id,omitempty"`       // ID of the item containing the content
 	ContentIndex int             `json:"content_index,omitempty"` // Index of the content within the item
+	SummaryIndex int             `json:"summary_index,omitempty"` // Index of the summary part within a reasoning item
 	Part         *OutputContent  `json:"part,omitempty"`          // Content part for part-level events
 	Delta        json.RawMessage `json:"delta,omitempty"`         // Delta payload (string or object)
 	Text         string          `json:"text,omitempty"`          // Full text content (for done events)
 
 	// Function call events (type contains "function_call")
 	Arguments string          `json:"arguments,omitempty"` // Complete function arguments (for done events)
+	Input     string          `json:"input,omitempty"`     // Complete custom-tool input (response.custom_tool_call_input.done)
 	Output    json.RawMessage `json:"output,omitempty"`    // Output payload for structured data events
 	JSON      json.RawMessage `json:"json,omitempty"`      // Direct JSON payload field when provided
 
@@ -413,6 +415,10 @@ func ConvertStreamEventToResponse(event *ResponseAPIStreamEvent) ResponseAPIResp
 	return response
 }
 
+// extractStringFromRaw reads text from a raw delta: a JSON string is returned
+// decoded; for a JSON object the value of the first present key is returned
+// (non-string values JSON-encoded); otherwise the trimmed raw text, unquoted
+// when possible. It returns "" for empty input.
 func extractStringFromRaw(raw json.RawMessage, keys ...string) string {
 	if len(raw) == 0 {
 		return ""
@@ -454,6 +460,10 @@ func extractStringFromRaw(raw json.RawMessage, keys ...string) string {
 	return trimmed
 }
 
+// extractJSONPayloadFromEvent returns the structured payload of an event,
+// checking in order its json field, its part's json and text, its output, its
+// text and its delta (json, partial_json or text members). It returns nil when
+// none is present.
 func extractJSONPayloadFromEvent(event *ResponseAPIStreamEvent) json.RawMessage {
 	if event == nil {
 		return nil
@@ -485,6 +495,9 @@ func extractJSONPayloadFromEvent(event *ResponseAPIStreamEvent) json.RawMessage 
 	return nil
 }
 
+// decodeJSONBlob returns the payload nested in raw (its first json, text or
+// content member, recursively) or a copy of raw itself when it holds no such
+// member or is not valid JSON. It returns nil for empty input.
 func decodeJSONBlob(raw json.RawMessage) json.RawMessage {
 	if len(raw) == 0 {
 		return nil
@@ -499,6 +512,10 @@ func decodeJSONBlob(raw json.RawMessage) json.RawMessage {
 	return cloneRawMessage(raw)
 }
 
+// extractJSONValue returns the payload of a decoded node: for objects the
+// first json, text or content member found recursively, else the re-encoded
+// node; for arrays the first child payload, else the re-encoded array; for
+// strings their normalized text. It returns nil for other values.
 func extractJSONValue(node any) json.RawMessage {
 	switch v := node.(type) {
 	case map[string]any:
@@ -537,6 +554,9 @@ func extractJSONValue(node any) json.RawMessage {
 	return nil
 }
 
+// normalizeJSONRaw returns a copy of text, trimmed and unquoted when it is a
+// quoted string literal, as raw JSON bytes; it does not validate the result.
+// It returns nil for blank text.
 func normalizeJSONRaw(text string) json.RawMessage {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
@@ -553,6 +573,7 @@ func normalizeJSONRaw(text string) json.RawMessage {
 	return json.RawMessage(cloned)
 }
 
+// cloneRawMessage returns an independent copy of raw, or nil for empty input.
 func cloneRawMessage(raw json.RawMessage) json.RawMessage {
 	if len(raw) == 0 {
 		return nil

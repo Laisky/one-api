@@ -1,6 +1,7 @@
 package gemini
 
 import (
+	"context"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -182,7 +183,7 @@ func ConvertNativeRequest(c *gin.Context, request model.GeneralOpenAIRequest) *C
 func ConvertNativeRequestChecked(c *gin.Context, request model.GeneralOpenAIRequest) (*ChatRequest, error) {
 	request.Model = nativeEffectiveModel(c, request.Model)
 	isNanoBanana := geminiOpenaiCompatible.IsGeminiNanoBanana21Model(request.Model)
-	converted, err := convertRequest(request, isNanoBanana)
+	converted, err := convertRequest(requestContext(c), request, isNanoBanana)
 	if err != nil {
 		return nil, errors.Wrap(err, "convert native Gemini request")
 	}
@@ -192,4 +193,13 @@ func ConvertNativeRequestChecked(c *gin.Context, request model.GeneralOpenAIRequ
 		converted.ToolConfig = nil
 	}
 	return converted, nil
+}
+
+// requestContext returns the HTTP request context carried by c, or
+// context.Background when c has no request, so conversions stay cancellable.
+func requestContext(c *gin.Context) context.Context {
+	if c == nil || c.Request == nil {
+		return context.Background()
+	}
+	return c.Request.Context()
 }

@@ -28,6 +28,10 @@ type Content struct {
 	Input     any    `json:"input,omitempty"`
 	Content   string `json:"content,omitempty"`
 	ToolUseId string `json:"tool_use_id,omitempty"`
+	// ContentBlocks, when non-empty, is serialized as this block's "content"
+	// array in place of the string Content. tool_result blocks use it to carry
+	// ordered text and image results; see Content.MarshalJSON.
+	ContentBlocks []Content `json:"-"`
 	// https://docs.anthropic.com/en/docs/build-with-claude/extended-thinking#implementing-extended-thinking
 	Thinking  *string `json:"thinking,omitempty"`
 	Signature *string `json:"signature,omitempty"`
@@ -49,6 +53,23 @@ type Tool struct {
 	Name        string      `json:"name"`
 	Description string      `json:"description,omitempty"`
 	InputSchema InputSchema `json:"input_schema"`
+
+	// Server-tool declaration fields. A non-empty Type marks a provider-executed
+	// tool (for example web_search_20250305); see Tool.MarshalJSON.
+	Type           string                 `json:"type,omitempty"`
+	MaxUses        *int                   `json:"max_uses,omitempty"`
+	AllowedDomains []string               `json:"allowed_domains,omitempty"`
+	BlockedDomains []string               `json:"blocked_domains,omitempty"`
+	UserLocation   *WebSearchUserLocation `json:"user_location,omitempty"`
+}
+
+// WebSearchUserLocation localizes Claude server-side web search results.
+type WebSearchUserLocation struct {
+	Type     string `json:"type"`
+	City     string `json:"city,omitempty"`
+	Region   string `json:"region,omitempty"`
+	Country  string `json:"country,omitempty"`
+	Timezone string `json:"timezone,omitempty"`
 }
 
 type InputSchema struct {

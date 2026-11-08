@@ -10,7 +10,6 @@ import (
 
 	"github.com/Laisky/one-api/common/metrics"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
-	"github.com/Laisky/one-api/relay/apitype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/state"
@@ -59,20 +58,13 @@ func stateOwnerFromMeta(meta *metalib.Meta) state.OwnerScope {
 
 // responseFallbackTarget reports whether a Responses request routed through the
 // Chat fallback actually lowers to Claude Messages (an Anthropic-family upstream),
-// so the hydrator applies the Claude column of the portability table (ST-008). The
-// enforcement is identical for both targets today; the distinction drives the
-// error label and reserves a seam for a future native Responses-to-Claude path.
+// so the hydrator applies the Claude column of the portability table (ST-008).
+// The Claude column additionally carries gateway Claude thinking envelopes, and
+// the distinction drives the error label. Azure channels qualify only when they
+// delegate to Foundry's native Anthropic Messages surface.
 func responseFallbackTarget(meta *metalib.Meta) hydrationTarget {
-	if meta == nil {
-		return targetChatFallback
-	}
-	switch meta.APIType {
-	case apitype.Anthropic, apitype.AwsClaude:
+	if responseFallbackLowersToClaude(meta) {
 		return targetClaudeFallback
-	case apitype.VertexAI:
-		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(meta.ActualModelName)), "claude") {
-			return targetClaudeFallback
-		}
 	}
 	return targetChatFallback
 }
@@ -145,7 +137,10 @@ func hydrateResponseAPIRequestForFallback(ctx context.Context, meta *metalib.Met
 		metrics.RecordStateEvent(metrics.StateCategoryPath, metrics.StateOutcomeStateless)
 	}
 
-	combined := make([]any, 0, len(priorItems)+len(req.Input))
+	// Capacity covers the prior items only; append grows it for the input.
+	// Summing both untrusted lengths into one make size is the overflow-prone
+	// shape, and the item-count bound below runs before any per-item work.
+	combined := make([]any, 0, len(priorItems))
 	combined = append(combined, priorItems...)
 	combined = append(combined, []any(req.Input)...)
 
@@ -298,9 +293,11 @@ func resolveItemReferences(ctx context.Context, store state.ResponseStateStore, 
 // thinking degrade to a display-only sidecar (dropped so they never become empty
 // messages — the B05 fix); hosted/built-in tool-call state and unknown item types
 // fail closed with state_not_portable, naming the blocking item kind without
-// exposing content (E05). The target only affects the error label; both fallback
-// families apply the same table because neither Chat nor Claude Messages can
-// faithfully carry OpenAI-hosted tool state or an unknown Responses item type.
+// exposing content (E05). Both fallback families apply the same table because
+// neither Chat nor Claude Messages can faithfully carry OpenAI-hosted tool state
+// or an unknown Responses item type. The single target-specific row is a Claude
+// target carrying reasoning items with a valid gateway Claude thinking envelope
+// (state.FallbackLoweringForClaude); the target also labels portability errors.
 func lowerItemsForTarget(items []any, target hydrationTarget) ([]any, *relaymodel.ErrorWithStatusCode) {
 	out := make([]any, 0, len(items))
 	for _, item := range items {
@@ -318,6 +315,11 @@ func lowerItemsForTarget(items []any, target hydrationTarget) ([]any, *relaymode
 			continue
 		}
 		action, kind := state.FallbackLowering(raw)
+		if target == targetClaudeFallback {
+			// Gateway Claude thinking envelopes replay onto the Claude family that
+			// issued them; every other provider-bound item keeps the shared table.
+			action, kind = state.FallbackLoweringForClaude(raw)
+		}
 		switch action {
 		case state.FallbackActionCarry:
 			metrics.RecordStateEvent(metrics.StateCategoryPortability, metrics.StateOutcomePortable)
@@ -347,6 +349,8 @@ func envelopesToItems(envelopes []state.ItemEnvelope) []any {
 	return out
 }
 
+// rawToAny decodes a raw canonical item into the generic value the Responses
+// input carries. It returns the value or the wrapped decode error.
 func rawToAny(raw json.RawMessage) (any, error) {
 	if len(raw) == 0 {
 		return nil, nil

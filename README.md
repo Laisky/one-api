@@ -1285,6 +1285,8 @@ export ANTHROPIC_AUTH_TOKEN="sk-xxxxxxx"
 
 You can use any model you like for Claude Code, even if the model doesn’t natively support the Claude Messages API.
 
+`POST /v1/messages/count_tokens` (which Claude Code uses for `/context`) is free: it never reserves or charges quota. On a native Anthropic channel it forwards to the upstream token counter; on every other channel, or when that upstream cannot answer, it returns a local estimate in the same `{"input_tokens": N}` shape.
+
 #### Support Azure AI Foundry Claude models
 
 [Azure AI Foundry](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude) serves Anthropic Claude through the native Anthropic Messages API — there is no OpenAI-compatible route for Claude on Foundry. one-api's existing **Azure** channel handles this automatically: on an Azure channel, `claude-*` models are routed to the resource's `/anthropic/v1/messages` surface (with the `x-api-key` and `anthropic-version` headers and Anthropic pricing), while `gpt-*` deployments continue to use the Azure OpenAI surface. No separate channel type is required.

@@ -73,6 +73,9 @@ func TestSecurityClaudeStreamPartialReceipt(t *testing.T) {
 			}
 		}
 	}
-	require.EqualValues(t, 7, last["input_tokens"])
+	// Anthropic semantics: input_tokens excludes the cached prefix, and the
+	// buckets sum to the measured prompt.
+	require.EqualValues(t, 4, last["input_tokens"])
+	require.EqualValues(t, 3, last["cache_read_input_tokens"])
 	require.EqualValues(t, 8, last["output_tokens"])
 }

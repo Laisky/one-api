@@ -13,7 +13,7 @@ import (
 func TestClaude431VertexPreparedWire(t *testing.T) {
 	t.Parallel()
 	raw := `{"model":"claude-sonnet-5-5","stream":true,"max_tokens":64,"thinking":{"type":"between_tools"},"output_config":{"effort":"low","id":9007199254740993},"system":[{"type":"text","text":"<policy>&"}],"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"","signature":"<signed>&opaque"}]},{"role":"user","content":"Continue"}],"tools":[{"name":"lookup","input_schema":{"type":"object","additionalProperties":false,"properties":{}}}],"future_field":{"exact":9007199254740993}}`
-	prepared, err := PrepareRequestBody(strings.NewReader(raw))
+	prepared, err := PrepareRequestBody(strings.NewReader(raw), false)
 	require.NoError(t, err)
 	body, err := io.ReadAll(prepared)
 	require.NoError(t, err)
@@ -24,12 +24,22 @@ func TestClaude431VertexPreparedWire(t *testing.T) {
 		require.Equal(t, before[key], after[key], key)
 	}
 	require.NotContains(t, after, "model")
-	require.NotContains(t, after, "stream")
+	require.NotContains(t, after, "stream", "rawPredict bodies carry no stream field")
 	require.Equal(t, `"vertex-2023-10-16"`, string(after["anthropic_version"]))
+	// A streaming request targets streamRawPredict, which requires stream:true
+	// in the body; a stray client value never leaks into a non-stream call.
+	streamed, err := PrepareRequestBody(strings.NewReader(raw), true)
+	require.NoError(t, err)
+	streamedBody, err := io.ReadAll(streamed)
+	require.NoError(t, err)
+	var streamedFields map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(streamedBody, &streamedFields))
+	require.Equal(t, "true", string(streamedFields["stream"]))
+	require.Equal(t, before["messages"], streamedFields["messages"])
 	for _, bad := range []string{"null", "[]", "invalid"} {
-		_, err := PrepareRequestBody(strings.NewReader(bad))
+		_, err := PrepareRequestBody(strings.NewReader(bad), false)
 		require.Error(t, err)
 	}
-	_, err = PrepareRequestBody(nil)
+	_, err = PrepareRequestBody(nil, false)
 	require.Error(t, err)
 }

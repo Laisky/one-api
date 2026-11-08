@@ -78,6 +78,9 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 // handleClaudeHTTPStream validates receipts and framing, retaining usage when reading or writing fails.
 func handleClaudeHTTPStream(c *gin.Context, resp *http.Response, native bool) (result *model.ErrorWithStatusCode, usage *model.Usage) {
 	state := &httpStreamState{native: native, blocks: map[int]*httpContentBlock{}, id: tracing.GenerateChatCompletionID(c), created: helper.GetTimestamp()}
+	if !native {
+		state.thinking = NewThinkingBlockTracker(c)
+	}
 	defer func() {
 		if usage == nil {
 			usage = retainedHTTPUsage(&state.receipt)

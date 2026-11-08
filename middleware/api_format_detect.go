@@ -43,7 +43,9 @@ func APIFormatAutoDetect(engine *gin.Engine) gin.HandlerFunc {
 		lg := gmw.GetLogger(c)
 		path := c.Request.URL.Path
 
-		// Only apply to chat-style API endpoints
+		// Only apply to the generation endpoints themselves. FormatFromPath
+		// matches them exactly, so sub-resources (count_tokens, response
+		// retrieval and cancel, ...) are never rerouted onto a billed generation.
 		expectedFormat := format.FormatFromPath(path)
 		if expectedFormat == format.Unknown {
 			c.Next()

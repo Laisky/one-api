@@ -108,7 +108,7 @@ func TestResponseStateBilling_NotPortableChargesNoQuota(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	// A provider-hosted tool-call item that has no faithful Chat/Claude
 	// representation must fail closed BEFORE billing.
-	payload := `{"model":"gpt-4o-mini","stream":false,"input":[{"type":"web_search_call","id":"ws_1","status":"completed"}]}`
+	payload := `{"model":"gpt-4o-mini","stream":false,"input":[{"type":"code_interpreter_call","id":"ci_1","status":"completed"}]}`
 	c := setupResponseStateBillingContext(t, recorder, payload)
 	c.Set(ctxkey.BaseURL, upstreamURL)
 

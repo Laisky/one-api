@@ -48,16 +48,105 @@ func clientCompatibilityCodexNoSideEffects(t *testing.T, c *gin.Context, request
 	require.Zero(t, logs)
 }
 
-// TestClientCompatibilityCodexFallbackAdmission traverses direct and hydrated admission without paid calls.
+// clientCompatibilityCodexSeedParent stores a completed parent response whose
+// output items are parent, so a request can hydrate it by previous_response_id.
+// Parameters: t owns assertions, store is the enabled state store and parent
+// is the comma-joined output item JSON. Returns the parent response ID.
+func clientCompatibilityCodexSeedParent(t *testing.T, store *state.MemoryStore, parent string) string {
+	t.Helper()
+	id, err := state.NewResponseID()
+	require.NoError(t, err)
+	var items []json.RawMessage
+	require.NoError(t, json.Unmarshal([]byte("["+parent+"]"), &items))
+	outputs := make([]state.ItemEnvelope, 0, len(items))
+	for _, raw := range items {
+		outputs = append(outputs, mustEnv(t, string(raw)))
+	}
+	seedResponse(t, store, &state.ResponseStateRecord{
+		GatewayResponseID: id,
+		Owner:             state.OwnerScope{UserID: fallbackUserID, TokenID: fallbackTokenID},
+		Status:            state.StatusCompleted,
+		InputItems:        []state.ItemEnvelope{mustEnv(t, `{"type":"message","role":"user","content":"lookup both namespaces"}`)},
+		OutputItems:       outputs,
+	})
+	return id
+}
+
+// TestClientCompatibilityCodexFallbackNamespaceHistory proves same-leaf calls
+// in different namespaces, sent directly or hydrated from a stored parent,
+// reach the Chat fallback as distinct flattened calls (alpha__lookup and
+// beta__lookup) paired with their tool results and settle token billing, while
+// an unresolvable parent still fails before any provider, state, quota or
+// ledger effect.
+func TestClientCompatibilityCodexFallbackNamespaceHistory(t *testing.T) {
+	const balance = int64(1_000_000)
+	cases := []struct {
+		name, input, parent string
+		missingParent       bool
+	}{
+		{name: "direct", input: clientCompatibilityCodexCalls + "," + clientCompatibilityCodexOutputs},
+		{name: "missing_parent", input: clientCompatibilityCodexCalls + "," + clientCompatibilityCodexOutputs, missingParent: true},
+		{name: "hydrated", input: clientCompatibilityCodexOutputs, parent: clientCompatibilityCodexCalls},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			xaiVideoSetup(t, balance, false)
+			store := enableStateForTest(t)
+			provider, observed, calls := responseNamespaceFallbackProvider(t, channeltype.OpenAICompatible)
+			selector := ""
+			if tc.missingParent {
+				selector = `,"previous_response_id":"resp_ffffffffffffffffffffffffffffffff"`
+			}
+			if tc.parent != "" {
+				selector = fmt.Sprintf(`,"previous_response_id":%q`, clientCompatibilityCodexSeedParent(t, store, tc.parent))
+			}
+			payload := `{"model":"alias","max_output_tokens":32,"input":[` + tc.input + `]` + selector + `}`
+			c, recorder, requestID := protocolContext(t, channeltype.OpenAICompatible, "codex-fidelity-fixture", "/v1/responses", payload, provider.URL, balance, 1, false, &model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2})
+			clientCompatibilityCodexCleanLedger(t, requestID)
+			require.False(t, supportsNativeResponseAPI(metalib.GetByContext(c)))
+			apiErr := RelayResponseAPIHelper(c)
+			drainCriticalTasks(t)
+			if tc.missingParent {
+				require.NotNil(t, apiErr)
+				require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
+				require.Equal(t, "previous_response_not_found", apiErr.Code)
+				clientCompatibilityCodexNoSideEffects(t, c, requestID, calls.Load(), balance)
+				return
+			}
+			require.Nil(t, apiErr, "namespaced history is representable on fallback")
+			require.Equal(t, http.StatusOK, recorder.Code)
+			require.EqualValues(t, 1, calls.Load())
+			got := <-observed
+			require.NoError(t, got.Err)
+			require.Equal(t, "/v1/chat/completions", got.Path)
+			wire := decodeFallbackWire(t, channeltype.OpenAICompatible, got.Body)
+			require.Empty(t, wire.Tools, "history alone declares no tools")
+			want := []fallbackWireTurn{
+				{Role: "assistant", Calls: []fallbackWireCall{
+					{ID: "alpha", Name: "alpha__lookup", Arguments: `{}`},
+					{ID: "beta", Name: "beta__lookup", Arguments: `{}`},
+				}},
+				{Role: "tool", Results: []fallbackWireResult{{ID: "alpha", Content: "alpha-result"}}},
+				{Role: "tool", Results: []fallbackWireResult{{ID: "beta", Content: "beta-result"}}},
+			}
+			if tc.parent != "" {
+				want = append([]fallbackWireTurn{{Role: "user", Text: "lookup both namespaces"}}, want...)
+			}
+			requireFallbackWireTurns(t, want, wire.Turns)
+			requireFallbackTokenSettlement(t, c, requestID, balance, got.User, got.Token)
+		})
+	}
+}
+
+// TestClientCompatibilityCodexFallbackAdmission traverses direct and hydrated
+// admission of provider-bound or unknown state that has no faithful fallback
+// representation, and proves it fails before any paid call or state effect.
 func TestClientCompatibilityCodexFallbackAdmission(t *testing.T) {
 	const balance = int64(1_000_000)
 	cases := []struct {
-		name, input, parent                   string
-		namespace, missingParent, notPortable bool
+		name, input, parent string
+		notPortable         bool
 	}{
-		{name: "namespace_direct", input: clientCompatibilityCodexCalls + "," + clientCompatibilityCodexOutputs, namespace: true},
-		{name: "namespace_before_missing_parent", input: clientCompatibilityCodexCalls + "," + clientCompatibilityCodexOutputs, namespace: true, missingParent: true},
-		{name: "namespace_hydrated", input: clientCompatibilityCodexOutputs, parent: clientCompatibilityCodexCalls, namespace: true},
 		{name: "compaction_direct", input: `{"type":"compaction","id":"cmp_fixture","encrypted_content":"opaque-compaction-canary"},{"type":"message","role":"user","content":"continue"}`, notPortable: true},
 		{name: "compaction_hydrated", input: `{"type":"message","role":"user","content":"continue"}`, parent: `{"type":"compaction","id":"cmp_fixture","encrypted_content":"opaque-compaction-canary"}`, notPortable: true},
 		{name: "unknown_canonical_root", input: `{"type":"future_provider_state","id":"opaque_fixture","payload":"synthetic-state"},{"type":"message","role":"user","content":"continue"}`, notPortable: true},
@@ -78,26 +167,8 @@ func TestClientCompatibilityCodexFallbackAdmission(t *testing.T) {
 			client.HTTPClient = provider.Client()
 			t.Cleanup(func() { client.HTTPClient = previous })
 			selector := ""
-			if tc.missingParent {
-				selector = `,"previous_response_id":"resp_ffffffffffffffffffffffffffffffff"`
-			}
 			if tc.parent != "" {
-				id, err := state.NewResponseID()
-				require.NoError(t, err)
-				var items []json.RawMessage
-				require.NoError(t, json.Unmarshal([]byte("["+tc.parent+"]"), &items))
-				outputs := make([]state.ItemEnvelope, 0, len(items))
-				for _, raw := range items {
-					outputs = append(outputs, mustEnv(t, string(raw)))
-				}
-				seedResponse(t, store, &state.ResponseStateRecord{
-					GatewayResponseID: id,
-					Owner:             state.OwnerScope{UserID: fallbackUserID, TokenID: fallbackTokenID},
-					Status:            state.StatusCompleted,
-					InputItems:        []state.ItemEnvelope{mustEnv(t, `{"type":"message","role":"user","content":"lookup both namespaces"}`)},
-					OutputItems:       outputs,
-				})
-				selector = fmt.Sprintf(`,"previous_response_id":%q`, id)
+				selector = fmt.Sprintf(`,"previous_response_id":%q`, clientCompatibilityCodexSeedParent(t, store, tc.parent))
 			}
 			payload := `{"model":"alias","max_output_tokens":32,"input":[` + tc.input + `]` + selector + `}`
 			c, _, requestID := protocolContext(t, channeltype.OpenAICompatible, "codex-fidelity-fixture", "/v1/responses", payload, provider.URL, balance, 1, false, &model.ModelConfigLocal{Ratio: 1, CompletionRatio: 2})
@@ -106,10 +177,7 @@ func TestClientCompatibilityCodexFallbackAdmission(t *testing.T) {
 			apiErr := RelayResponseAPIHelper(c)
 			drainCriticalTasks(t)
 			require.NotNil(t, apiErr, "lossy fallback must fail explicitly")
-			if tc.namespace {
-				require.Equal(t, http.StatusBadRequest, apiErr.StatusCode)
-				require.Equal(t, "tool_namespace_not_supported", apiErr.Code)
-			} else if tc.notPortable {
+			if tc.notPortable {
 				require.Equal(t, http.StatusConflict, apiErr.StatusCode)
 				require.Equal(t, "state_not_portable", apiErr.Code)
 			} else {

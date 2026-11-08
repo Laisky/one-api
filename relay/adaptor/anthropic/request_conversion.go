@@ -1,6 +1,7 @@
 package anthropic
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
-	"github.com/Laisky/one-api/common/image"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -217,6 +217,11 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		return nil, controlsErr
 	}
 	compatibilityModel := CompatibilityModel(c, textRequest.Model)
+	var requestCtx context.Context
+	if c != nil && c.Request != nil {
+		requestCtx = c.Request.Context()
+	}
+	mediaBudget := newRequestMediaBudget(requestCtx, maxRequestMediaBytes)
 
 	claudeTools := make([]Tool, 0, len(textRequest.Tools))
 
@@ -237,6 +242,7 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 			InputSchema: schema,
 		})
 	}
+	claudeTools = appendConvertedWebSearchTool(c, claudeTools)
 
 	claudeRequest := Request{
 		Model:        textRequest.Model,
@@ -304,7 +310,21 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 	emptySystemMessageCount := 0
 	systemPrompts := make([]string, 0)
 
+	// toolRunCarriedMedia records that the current run of tool messages placed
+	// images inside its tool_result blocks, so the synthetic user message that
+	// re-delivers those images for Chat upstreams must not be sent again.
+	toolRunCarriedMedia := false
 	for _, message := range textRequest.Messages {
+		if message.ToolResultMediaCarrier && toolRunCarriedMedia {
+			logger.Debug("skip tool result media carrier already folded into tool_result blocks",
+				zap.Int("message_index", len(claudeRequest.Messages)),
+			)
+			toolRunCarriedMedia = false
+			continue
+		}
+		if message.Role != "tool" {
+			toolRunCarriedMedia = false
+		}
 		if message.Role == "system" {
 			systemMessageCount++
 
@@ -331,11 +351,17 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 				}
 			}
 
+			mediaBlocks, mediaErr := convertToolResultMediaBlocks(mediaBudget, message.ToolResultParts)
+			if mediaErr != nil {
+				return nil, errors.Wrap(mediaErr, "convert tool result media")
+			}
+
 			logger.Debug("convert OpenAI tool role to Anthropic tool_result",
 				zap.Int("message_index", len(claudeRequest.Messages)),
 				zap.Bool("has_tool_call_id", message.ToolCallId != ""),
 				zap.Bool("string_content", message.IsStringContent()),
 				zap.Int("tool_calls_count", len(message.ToolCalls)),
+				zap.Int("media_blocks", len(mediaBlocks)),
 			)
 			if message.ToolCallId == "" {
 				logger.Debug("tool role message missing tool_call_id during Anthropic conversion",
@@ -343,13 +369,20 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 				)
 			}
 
+			toolResult := Content{
+				Type:      "tool_result",
+				Content:   toolResultContent,
+				ToolUseId: message.ToolCallId,
+			}
+			if len(mediaBlocks) > 0 {
+				// Ordered text and image blocks replace the text-only content.
+				toolResult.Content = ""
+				toolResult.ContentBlocks = mediaBlocks
+				toolRunCarriedMedia = true
+			}
 			claudeRequest.Messages = append(claudeRequest.Messages, Message{
-				Role: "user",
-				Content: []Content{{
-					Type:      "tool_result",
-					Content:   toolResultContent,
-					ToolUseId: message.ToolCallId,
-				}},
+				Role:    "user",
+				Content: []Content{toolResult},
 			})
 			continue
 		}
@@ -357,13 +390,23 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		claudeMessage := Message{
 			Role: message.Role,
 		}
+		// Blocks decoded from gateway envelopes are exact provider state and take
+		// precedence over the signature cache and the <think> text fallback.
+		replayBlocks := claudeReplayThinkingBlocks(message, textRequest.Model, claudeRequest.Thinking)
+		if len(message.ClaudeThinkingBlocks) > 0 {
+			logger.Debug("replay Claude thinking blocks from Responses envelopes",
+				zap.Int("message_index", len(claudeRequest.Messages)),
+				zap.Int("thinking_blocks", len(message.ClaudeThinkingBlocks)),
+				zap.Int("replayed_blocks", len(replayBlocks)),
+			)
+		}
 		var content Content
 		if message.IsStringContent() {
 			stringContent := message.StringContent()
 
 			if stringContent != "" {
 				// For assistant messages with thinking enabled, check if we need to add thinking block
-				if message.Role == "assistant" && claudeRequest.Thinking != nil {
+				if message.Role == "assistant" && claudeRequest.Thinking != nil && len(replayBlocks) == 0 {
 					// Check if this message has reasoning content that should be converted to thinking block
 					var reasoningContent string
 					if message.Reasoning != nil {
@@ -456,6 +499,8 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 				})
 			}
 
+			claudeMessage.Content = insertClaudeThinkingBlocks(claudeMessage.Content, replayBlocks)
+
 			// Claude requires at least one content block per message
 			if len(claudeMessage.Content) == 0 {
 				return nil, errors.Wrap(errors.New("message must have at least one content block"), "validate message content")
@@ -469,7 +514,7 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 		// Store reasoning content for later processing
 		var reasoningContent string
 		var needsThinkingProcessing bool
-		if message.Role == "assistant" && claudeRequest.Thinking != nil {
+		if message.Role == "assistant" && claudeRequest.Thinking != nil && len(replayBlocks) == 0 {
 			// Check if this message has reasoning content that should be converted to thinking block
 			if message.Reasoning != nil {
 				reasoningContent = *message.Reasoning
@@ -495,13 +540,21 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 					contents = append(contents, content)
 				}
 			case model.ContentTypeImageURL:
+				if part.ImageURL == nil || part.ImageURL.Url == "" {
+					return nil, errors.New("validation failed: image_url part has no url")
+				}
+				// User images share the tool-result budget: both count toward
+				// Claude's request size limit, and cancellation stops either.
+				mimeType, data, err := mediaBudget.load(part.ImageURL.Url)
+				if err != nil {
+					return nil, errors.Wrapf(err, "load image in message %d", len(claudeRequest.Messages))
+				}
 				content.Type = "image"
 				content.Source = &ImageSource{
-					Type: "base64",
+					Type:      "base64",
+					MediaType: mimeType,
+					Data:      data,
 				}
-				mimeType, data, _ := image.GetImageFromUrl(part.ImageURL.Url)
-				content.Source.MediaType = mimeType
-				content.Source.Data = data
 				contents = append(contents, content)
 			}
 		}
@@ -594,7 +647,7 @@ func ConvertRequest(c *gin.Context, textRequest model.GeneralOpenAIRequest) (*Re
 			}
 		}
 
-		claudeMessage.Content = contents
+		claudeMessage.Content = insertClaudeThinkingBlocks(contents, replayBlocks)
 
 		// Claude requires at least one content block per message
 		if len(claudeMessage.Content) == 0 {

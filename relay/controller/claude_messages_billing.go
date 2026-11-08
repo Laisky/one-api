@@ -168,9 +168,14 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 	if requestId == "" {
 		requestId = billingID.requestID
 	}
-	// For Claude models, upstream reports non-cached input tokens as PromptTokens
-	// and cached tokens separately. Sum them so the log shows the total prompt tokens.
-	logPromptTokens := computeResult.PromptTokens + computeResult.CachedPromptTokens
+	// Claude-semantics usage reports non-cached input as PromptTokens and cached
+	// tokens separately, so they are summed for the total prompt. OpenAI-style
+	// usage from converted upstreams already includes the cached prefix in
+	// PromptTokens and must not count it twice.
+	logPromptTokens := computeResult.PromptTokens
+	if !usage.PromptIncludesCacheBuckets(request.Model) {
+		logPromptTokens += computeResult.CachedPromptTokens
+	}
 
 	billing.PostConsumeQuotaDetailed(billing.QuotaConsumeDetail{
 		Ctx:                ctx,

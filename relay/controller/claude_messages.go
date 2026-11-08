@@ -10,6 +10,7 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
@@ -82,6 +83,7 @@ func readAndRestoreResponseBody(resp *http.Response) ([]byte, error) {
 func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// Delivery receipts belong to one attempt, even when retries reuse the context.
 	c.Set(ctxkey.ClaudeGeminiImageReceipt, nil)
+	c.Set(ctxkey.ConvertedResponseUsage, nil)
 	c.Set(ctxkey.GeminiOutputIncomplete, false)
 	lg := gmw.GetLogger(c)
 	// Passthrough is current-attempt authority. A retry reuses this gin context,
@@ -598,69 +600,25 @@ handleResponse:
 					c.Data(resp.StatusCode, resp.Header.Get("Content-Type"), body)
 				}
 
-				// Extract usage information from the response body for billing
-				// 1) Try Claude JSON body with usage
-				var claudeResp relaymodel.ClaudeResponse
-				if parseErr := json.Unmarshal(body, &claudeResp); parseErr == nil {
-					if claudeResp.Usage.InputTokens > 0 || claudeResp.Usage.OutputTokens > 0 {
-						usage = &relaymodel.Usage{
-							PromptTokens:     claudeResp.Usage.InputTokens,
-							CompletionTokens: claudeResp.Usage.OutputTokens,
-							TotalTokens:      claudeResp.Usage.InputTokens + claudeResp.Usage.OutputTokens,
-							CacheWrite5mTokens: func() int {
-								if claudeResp.Usage.CacheCreation != nil {
-									return claudeResp.Usage.CacheCreation.Ephemeral5mInputTokens
-								}
-								return claudeResp.Usage.CacheCreationInputTokens
-							}(),
-							CacheWrite1hTokens: func() int {
-								if claudeResp.Usage.CacheCreation != nil {
-									return claudeResp.Usage.CacheCreation.Ephemeral1hInputTokens
-								}
-								return 0
-							}(),
-						}
-						if claudeResp.Usage.CacheReadInputTokens > 0 {
-							usage.PromptTokensDetails = &relaymodel.UsagePromptTokensDetails{CachedTokens: claudeResp.Usage.CacheReadInputTokens}
-						}
-						lg.Debug("using converted Claude usage for billing",
-							zap.Int("input_tokens", usage.PromptTokens),
-							zap.Int("output_tokens", usage.CompletionTokens),
-							zap.Int("cache_read_input_tokens", claudeResp.Usage.CacheReadInputTokens),
-							zap.Int("cache_write_5m_tokens", usage.CacheWrite5mTokens),
-							zap.Int("cache_write_1h_tokens", usage.CacheWrite1hTokens),
-						)
-					} else {
-						// No receipt provided: preserve the prepared admission quote and
-						// mark inferred completion usage so settlement cannot refund uncertain work.
-						accumulated := ""
-						for _, part := range claudeResp.Content {
-							if part.Type == "text" && part.Text != "" {
-								accumulated += part.Text
-							}
-						}
-						completion := openai.CountTokenText(accumulated, meta.ActualModelName)
-						usage = &relaymodel.Usage{
-							PromptTokens:          promptTokens,
-							CompletionTokens:      completion,
-							TotalTokens:           promptTokens + completion,
-							BillingEstimateReason: "converted_claude_usage_missing_counters",
-						}
+				// Settle on the adaptor's authoritative OpenAI-semantics receipt: the
+				// converted body presents Anthropic semantics (input_tokens excludes
+				// the cache buckets), so re-deriving billing from it would undercount.
+				// Converters that record no receipt keep the body-parsing fallback.
+				if receipt := convertedResponseBillingUsage(c); receipt != nil {
+					usage = receipt
+					cachedTokens := 0
+					if receipt.PromptTokensDetails != nil {
+						cachedTokens = receipt.PromptTokensDetails.CachedTokens
 					}
+					lg.Debug("using converted response usage receipt for billing",
+						zap.Int("prompt_tokens", usage.PromptTokens),
+						zap.Int("completion_tokens", usage.CompletionTokens),
+						zap.Int("cached_tokens", cachedTokens),
+						zap.Int("cache_write_5m_tokens", usage.CacheWrite5mTokens),
+						zap.Int("cache_write_1h_tokens", usage.CacheWrite1hTokens),
+					)
 				} else {
-					// 2) If not Claude JSON, it may be SSE (OpenAI-compatible). Detect and compute from stream text.
-					ct := resp.Header.Get("Content-Type")
-					if strings.Contains(strings.ToLower(ct), "text/event-stream") || bytes.HasPrefix(body, []byte("data:")) || bytes.Contains(body, []byte("\ndata:")) {
-						usage = extractConvertedClaudeSSEUsage(body, promptTokens, meta.ActualModelName)
-					} else {
-						// 3) Fallback: estimate prompt only
-						usage = &relaymodel.Usage{
-							PromptTokens:          promptTokens,
-							CompletionTokens:      0,
-							TotalTokens:           promptTokens,
-							BillingEstimateReason: "converted_claude_usage_unknown_payload",
-						}
-					}
+					usage = convertedClaudeBodyUsage(lg, body, resp.Header.Get("Content-Type"), promptTokens, meta.ActualModelName)
 				}
 			}
 		} else {
@@ -731,4 +689,85 @@ postConsume:
 
 	markResponseSettlement(c, usage, respErr)
 	return respErr
+}
+
+// convertedResponseBillingUsage returns the authoritative OpenAI-semantics
+// usage receipt a converting adaptor recorded for this attempt's converted
+// Claude response (ctxkey.ConvertedResponseUsage). Parameters: c is the request
+// context. Returns: a copy of the receipt, or nil when none was recorded.
+func convertedResponseBillingUsage(c *gin.Context) *relaymodel.Usage {
+	raw, ok := c.Get(ctxkey.ConvertedResponseUsage)
+	if !ok {
+		return nil
+	}
+	receipt, valid := raw.(*relaymodel.Usage)
+	if !valid || receipt == nil {
+		return nil
+	}
+	settled := *receipt
+	return &settled
+}
+
+// convertedClaudeBodyUsage derives billing usage from a converted Claude body
+// for converters that record no receipt: a Claude JSON usage object (read with
+// the OpenAI-semantics counters those converters emit), an SSE stream, or a
+// prompt-only estimate. Missing counters keep the prepared admission quote and
+// mark the usage as estimated. Parameters: lg is the request logger, body the
+// converted payload, contentType its media type, promptTokens the admission
+// estimate, and modelName the upstream model. Returns: the usage to settle.
+func convertedClaudeBodyUsage(lg glog.Logger, body []byte, contentType string, promptTokens int, modelName string) *relaymodel.Usage {
+	// 1) Try Claude JSON body with usage
+	var claudeResp relaymodel.ClaudeResponse
+	if parseErr := json.Unmarshal(body, &claudeResp); parseErr != nil {
+		// 2) If not Claude JSON, it may be SSE (OpenAI-compatible). Detect and compute from stream text.
+		if strings.Contains(strings.ToLower(contentType), "text/event-stream") || bytes.HasPrefix(body, []byte("data:")) || bytes.Contains(body, []byte("\ndata:")) {
+			return extractConvertedClaudeSSEUsage(body, promptTokens, modelName)
+		}
+		// 3) Fallback: estimate prompt only
+		return &relaymodel.Usage{
+			PromptTokens:          promptTokens,
+			CompletionTokens:      0,
+			TotalTokens:           promptTokens,
+			BillingEstimateReason: "converted_claude_usage_unknown_payload",
+		}
+	}
+	if claudeResp.Usage.InputTokens <= 0 && claudeResp.Usage.OutputTokens <= 0 {
+		// No receipt provided: preserve the prepared admission quote and
+		// mark inferred completion usage so settlement cannot refund uncertain work.
+		accumulated := ""
+		for _, part := range claudeResp.Content {
+			if part.Type == "text" && part.Text != "" {
+				accumulated += part.Text
+			}
+		}
+		completion := openai.CountTokenText(accumulated, modelName)
+		return &relaymodel.Usage{
+			PromptTokens:          promptTokens,
+			CompletionTokens:      completion,
+			TotalTokens:           promptTokens + completion,
+			BillingEstimateReason: "converted_claude_usage_missing_counters",
+		}
+	}
+	usage := &relaymodel.Usage{
+		PromptTokens:     claudeResp.Usage.InputTokens,
+		CompletionTokens: claudeResp.Usage.OutputTokens,
+		TotalTokens:      claudeResp.Usage.InputTokens + claudeResp.Usage.OutputTokens,
+	}
+	if creation := claudeResp.Usage.CacheCreation; creation != nil {
+		usage.CacheWrite5mTokens = creation.Ephemeral5mInputTokens
+		usage.CacheWrite1hTokens = creation.Ephemeral1hInputTokens
+	} else {
+		usage.CacheWrite5mTokens = claudeResp.Usage.CacheCreationInputTokens
+	}
+	if claudeResp.Usage.CacheReadInputTokens > 0 {
+		usage.PromptTokensDetails = &relaymodel.UsagePromptTokensDetails{CachedTokens: claudeResp.Usage.CacheReadInputTokens}
+	}
+	lg.Debug("using converted Claude body usage for billing",
+		zap.Int("input_tokens", usage.PromptTokens),
+		zap.Int("output_tokens", usage.CompletionTokens),
+		zap.Int("cache_read_input_tokens", claudeResp.Usage.CacheReadInputTokens),
+		zap.Int("cache_write_5m_tokens", usage.CacheWrite5mTokens),
+		zap.Int("cache_write_1h_tokens", usage.CacheWrite1hTokens),
+	)
+	return usage
 }

@@ -38,11 +38,13 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 
 	// Bound input before the pending snapshot and again after hydration, even
 	// when persistence is disabled, before any fallback normalization/conversion.
-	hydrated, stateErr := prepareResponseFallbackInput(ctx, c, meta, responseAPIRequest)
+	hydrated, toolCatalog, stateErr := prepareResponseFallbackInput(ctx, c, meta, responseAPIRequest)
 	if stateErr != nil {
 		return stateErr
 	}
 	responseAPIRequest = hydrated
+	// Conversion and both renderers share the catalog admission validated.
+	c.Set(ctxkey.ResponseFallbackToolCatalog, toolCatalog)
 
 	inputStats, inputChanged := openai.NormalizeResponseAPIInputContentTypes(&responseAPIRequest.Input)
 	dataURLStats, dataURLChanged := openai.NormalizeResponseAPIInputEmbeddedImageDataURLs(&responseAPIRequest.Input)
@@ -55,7 +57,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		)
 	}
 
-	chatRequest, err := openai.ConvertResponseAPIToChatCompletionRequest(responseAPIRequest, isNativeGoogleChannel(meta))
+	chatRequest, err := openai.ConvertResponseAPIToChatCompletionRequestWithCatalog(responseAPIRequest, toolCatalog, isNativeGoogleChannel(meta))
 	if err != nil {
 		if errors.Is(err, openai.ErrResponseBackgroundUnsupported) {
 			return openai.ErrorWrapper(err, "background_not_supported", http.StatusBadRequest)
@@ -84,6 +86,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	if shouldRouteResponseFallbackThroughDeepSeek(meta) {
 		meta.APIType = apitype.DeepSeek
 	}
+	// Gateway Claude thinking blocks reach only the Claude converter; strip them
+	// once the upstream is final so no other Chat upstream receives them.
+	applyClaudeThinkingReplayPolicy(c, meta, responseAPIRequest.Input, chatRequest)
 	applyThinkingQueryToChatRequest(c, chatRequest, meta)
 	meta.RequestURLPath = "/v1/chat/completions"
 	meta.ResponseAPIFallback = true
@@ -173,6 +178,11 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	if err := tooling.ValidateChatBuiltinTools(c, chatRequest, meta, channelRecord, requestAdaptor); err != nil {
 		return openai.ErrorWrapper(err, builtinToolAdmissionErrorCode(err), http.StatusBadRequest)
 	}
+	// Forward the admitted hosted web search as a Claude server tool where the
+	// platform runs and meters it; its allowance joins the reservation below.
+	if searchErr := planResponseFallbackClaudeWebSearch(c, meta, channelRecord, requestAdaptor, responseAPIRequest, chatRequest, registry != nil, mcpToolNames); searchErr != nil {
+		return searchErr
+	}
 
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
 	channelModelConfigs := getChannelModelConfigs(c)
@@ -222,6 +232,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		defer cancelUpstream()
 
 	}
+	// After the reservation: the hold keeps its current basis and only the
+	// upstream request gains the model's maximum output.
+	applyResponseFallbackClaudeMaxOutput(c, meta, responseAPIRequest, chatRequest, channelModelConfigs, pricingAdaptor, promptTokens)
 	requestAdaptor.Init(meta)
 	if registry != nil {
 		c.Set(ctxkey.ResponseRewriteHandler, nil)
@@ -450,6 +463,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 						goto settleResponseUsage
 					}
 				} else {
+					// The captured body is forwarded as is, so its own headers
+					// (e.g. Content-Type) go with it.
+					capture.copyHeadersTo(c.Writer.Header())
 					if statusCode > 0 {
 						c.Writer.WriteHeader(statusCode)
 					}
@@ -462,6 +478,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 					c.Set(ctxkey.ResponseRewriteApplied, true)
 				}
 			} else if capture.HeaderWritten() {
+				capture.copyHeadersTo(c.Writer.Header())
 				if statusCode > 0 {
 					c.Writer.WriteHeader(statusCode)
 				}

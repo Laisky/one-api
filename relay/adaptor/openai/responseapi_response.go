@@ -31,12 +31,15 @@ type ResponseAPIResponse struct {
 	Text               *ResponseTextConfig            `json:"text,omitempty"`                 // Configuration options for text response
 	ToolChoice         any                            `json:"tool_choice,omitempty"`          // How the model selected tools
 	Tools              []model.Tool                   `json:"tools,omitempty"`                // Array of tools the model may call
-	RequiredAction     *ResponseAPIRequiredAction     `json:"required_action,omitempty"`      // Information about next actions required by the client
-	TopP               *float64                       `json:"top_p,omitempty"`                // Alternative to sampling with temperature
-	Truncation         *string                        `json:"truncation,omitempty"`           // Truncation strategy
-	User               *string                        `json:"user,omitempty"`                 // Stable identifier for end-users
-	Error              *model.Error                   `json:"error,omitempty"`                // Error object if the response failed
-	IncompleteDetails  *IncompleteDetails             `json:"incomplete_details,omitempty"`   // Details about why the response is incomplete
+	// ToolsEcho, when Tools is empty, is the encoded tools array to echo: the
+	// request's own Responses tool definitions (see ResponseToolsEcho).
+	ToolsEcho         json.RawMessage            `json:"-"`
+	RequiredAction    *ResponseAPIRequiredAction `json:"required_action,omitempty"`    // Information about next actions required by the client
+	TopP              *float64                   `json:"top_p,omitempty"`              // Alternative to sampling with temperature
+	Truncation        *string                    `json:"truncation,omitempty"`         // Truncation strategy
+	User              *string                    `json:"user,omitempty"`               // Stable identifier for end-users
+	Error             *model.Error               `json:"error,omitempty"`              // Error object if the response failed
+	IncompleteDetails *IncompleteDetails         `json:"incomplete_details,omitempty"` // Details about why the response is incomplete
 }
 
 // OutputItem represents an item in the response output array
@@ -59,6 +62,9 @@ type OutputItem struct {
 	Namespace string `json:"namespace,omitempty"` // Namespace stays separate from the local tool name.
 	Input     string `json:"input,omitempty"`     // Client-side custom-tool input.
 	Arguments string `json:"arguments,omitempty"` // Function arguments for function calls
+	// EncryptedFunctionArgs, when non-nil, is serialized even when empty: Codex
+	// treats an empty list as the provider's statement that arguments are plaintext.
+	EncryptedFunctionArgs *[]string `json:"encrypted_function_args,omitempty"`
 
 	// Tool search uses structured arguments and Responses definitions, while
 	// ordinary function Arguments and MCP Tools retain their existing Go types.
@@ -79,36 +85,43 @@ type OutputItem struct {
 	Output            string       `json:"output,omitempty"`              // Output from MCP tool call (for mcp_call)
 }
 
-// MarshalJSON serializes the output item and always includes the required content array for message items.
-// It accepts the receiver as the item to serialize and returns its JSON representation or a wrapped error.
+// MarshalJSON serializes the output item with the fields its type requires
+// even when they hold zero values: content on message items, summary on
+// reasoning items, arguments on function_call items and input on
+// custom_tool_call items. Tool search items use their dedicated encoder. It
+// returns the JSON representation or a wrapped error.
 func (o OutputItem) MarshalJSON() ([]byte, error) {
 	if o.Type == "tool_search_call" || o.Type == "tool_search_output" {
 		return marshalToolSearchOutputItem(o)
 	}
 	type outputItemAlias OutputItem
-	if o.Type != "message" {
-		data, err := json.Marshal(outputItemAlias(o))
-		if err != nil {
-			return nil, errors.Wrap(err, "marshal response API output item")
-		}
-		return data, nil
-	}
-
-	content := o.Content
-	if content == nil {
-		content = make([]OutputContent, 0)
-	}
-	data, err := json.Marshal(struct {
-		outputItemAlias
-		Content []OutputContent `json:"content"`
-	}{
-		outputItemAlias: outputItemAlias(o),
-		Content:         content,
-	})
+	data, err := json.Marshal(outputItemAlias(o))
 	if err != nil {
-		return nil, errors.Wrap(err, "marshal response API message output item")
+		return nil, errors.Wrap(err, "marshal response API output item")
 	}
-	return data, nil
+	var extras []wireField
+	switch o.Type {
+	case "message":
+		if len(o.Content) == 0 {
+			extras = append(extras, wireField{"content", "[]"})
+		}
+	case "reasoning":
+		// A Claude block with omitted display has no summary text but must
+		// still parse for clients (Codex) that replay reasoning items verbatim.
+		if len(o.Summary) == 0 {
+			extras = append(extras, wireField{"summary", "[]"})
+		}
+	case "function_call":
+		if o.Arguments == "" {
+			extras = append(extras, wireField{"arguments", `""`})
+		}
+	case "custom_tool_call":
+		// Clients such as Codex fail to parse a custom call without input.
+		if o.Input == "" {
+			extras = append(extras, wireField{"input", `""`})
+		}
+	}
+	return appendWireFields(data, extras), nil
 }
 
 // OutputContent represents content within an output item
@@ -117,6 +130,7 @@ type OutputContent struct {
 	Text        string          `json:"text,omitempty"`        // Text content
 	JSON        json.RawMessage `json:"json,omitempty"`        // Structured JSON content for structured outputs
 	Annotations []any           `json:"annotations,omitempty"` // Annotations for the content
+	Logprobs    json.RawMessage `json:"logprobs,omitempty"`    // Token log probabilities, retained verbatim from upstream output_text
 }
 
 // IncompleteDetails provides details about why a response is incomplete

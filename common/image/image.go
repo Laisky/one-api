@@ -33,13 +33,24 @@ import (
 var dataURLPattern = regexp.MustCompile(`data:image/([^;]+);base64,(.*)`)
 
 // IsImageUrl performs a lightweight check to confirm the URL points to a fetchable image within the configured size limit.
+// It is IsImageUrlWithContext bound to context.Background; prefer the context-aware form on request paths.
 func IsImageUrl(url string) (bool, error) {
+	return IsImageUrlWithContext(context.Background(), url)
+}
+
+// IsImageUrlWithContext performs a lightweight check to confirm the URL points to a fetchable image within the
+// configured size limit. Parameters: ctx bounds DNS validation and the HTTP round trips, so cancelling it interrupts
+// a check in flight; url is the candidate image URL. Returns true when the URL serves an image, or an error.
+func IsImageUrlWithContext(ctx context.Context, url string) (bool, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// Enforce public-only URLs to prevent SSRF against internal hosts.
-	if _, err := netutil.ValidateExternalURL(context.Background(), url); err != nil {
+	if _, err := netutil.ValidateExternalURL(ctx, url); err != nil {
 		return false, errors.Wrap(err, "image URL is not allowed")
 	}
 
-	resp, err := client.UserContentRequestHTTPClient.Head(url)
+	resp, err := userContentRequest(ctx, http.MethodHead, url)
 	if err != nil {
 		return false, errors.Wrapf(err, "failed to fetch image URL: %s", url)
 	}
@@ -47,7 +58,7 @@ func IsImageUrl(url string) (bool, error) {
 
 	if resp.StatusCode == http.StatusNotFound {
 		// this file may not support HEAD method
-		resp, err = client.UserContentRequestHTTPClient.Get(url)
+		resp, err = userContentRequest(ctx, http.MethodGet, url)
 		if err != nil {
 			return false, errors.Wrapf(err, "failed to fetch image URL: %s", url)
 		}
@@ -74,16 +85,42 @@ func IsImageUrl(url string) (bool, error) {
 	return true, nil
 }
 
+// userContentRequest sends one bodiless request for user-supplied content through the shared
+// SSRF-guarded user-content client. Parameters: ctx cancels the round trip, method is the HTTP
+// method and url the target. Returns the response, whose body the caller must close, or an error.
+func userContentRequest(ctx context.Context, method, url string) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
+	if err != nil {
+		return nil, errors.Wrap(err, "build user content request")
+	}
+	resp, err := client.UserContentRequestHTTPClient.Do(req)
+	if err != nil {
+		return nil, errors.Wrap(err, "send user content request")
+	}
+	return resp, nil
+}
+
 // GetImageSizeFromUrl downloads the image metadata and returns its width and height in pixels.
+// It is GetImageSizeFromUrlWithContext bound to context.Background.
 func GetImageSizeFromUrl(url string) (width int, height int, err error) {
-	isImage, err := IsImageUrl(url)
+	return GetImageSizeFromUrlWithContext(context.Background(), url)
+}
+
+// GetImageSizeFromUrlWithContext downloads the image metadata and returns its width and height in
+// pixels. Parameters: ctx cancels validation and download, url is the image URL. Returns the
+// dimensions or an error.
+func GetImageSizeFromUrlWithContext(ctx context.Context, url string) (width int, height int, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	isImage, err := IsImageUrlWithContext(ctx, url)
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "failed to fetch image URL")
 	}
 	if !isImage {
 		return 0, 0, errors.New("not an image URL")
 	}
-	resp, err := client.UserContentRequestHTTPClient.Get(url)
+	resp, err := userContentRequest(ctx, http.MethodGet, url)
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "failed to get image from URL")
 	}
@@ -99,7 +136,19 @@ func GetImageSizeFromUrl(url string) (width int, height int, err error) {
 }
 
 // GetImageFromUrl retrieves the image bytes or data URL content, returning the MIME type and base64-encoded payload.
+// It is GetImageFromUrlWithContext bound to context.Background; prefer the context-aware form on request paths.
 func GetImageFromUrl(url string) (mimeType string, data string, err error) {
+	return GetImageFromUrlWithContext(context.Background(), url)
+}
+
+// GetImageFromUrlWithContext retrieves the image bytes or data URL content. Parameters: ctx bounds
+// DNS validation and every HTTP round trip, so cancelling the request interrupts a remote download
+// in flight; url is a data URL or a public http(s) URL. Returns the MIME type and base64 payload, or
+// an error when the URL is not allowed, is not an image, exceeds the inline size limit, or ctx ends.
+func GetImageFromUrlWithContext(ctx context.Context, url string) (mimeType string, data string, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	// Check if the URL is a data URL
 	matches := dataURLPattern.FindStringSubmatch(url)
 	if len(matches) == 3 {
@@ -110,7 +159,7 @@ func GetImageFromUrl(url string) (mimeType string, data string, err error) {
 		return "image/" + matches[1], matches[2], nil
 	}
 
-	isImage, err := IsImageUrl(url)
+	isImage, err := IsImageUrlWithContext(ctx, url)
 	if err != nil {
 		return mimeType, data, errors.Wrap(err, "failed to fetch image URL")
 	}
@@ -118,7 +167,7 @@ func GetImageFromUrl(url string) (mimeType string, data string, err error) {
 		return mimeType, data, errors.New("not an image URL")
 	}
 
-	resp, err := client.UserContentRequestHTTPClient.Get(url)
+	resp, err := userContentRequest(ctx, http.MethodGet, url)
 	if err != nil {
 		return mimeType, data, errors.Wrap(err, "failed to get image from URL")
 	}

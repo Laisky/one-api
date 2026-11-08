@@ -51,6 +51,8 @@ type ResponseAPIOutputTokensDetails struct {
 	additional               map[string]any
 }
 
+// UnmarshalJSON decodes input token details, projecting the known counters and
+// keeping unknown members for a lossless re-encode. It returns a wrapped decode error.
 func (d *ResponseAPIInputTokensDetails) UnmarshalJSON(data []byte) error {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -97,7 +99,7 @@ func (d *ResponseAPIInputTokensDetails) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// MarshalJSON serializes input token details and always includes the required cached token count.
+// MarshalJSON serializes input token details and always includes the required cached and cache-write token counts.
 // It accepts the receiver as input details and returns JSON bytes or a serialization error.
 func (d ResponseAPIInputTokensDetails) MarshalJSON() ([]byte, error) {
 	raw := make(map[string]any, len(d.additional)+6)
@@ -115,9 +117,9 @@ func (d ResponseAPIInputTokensDetails) MarshalJSON() ([]byte, error) {
 	if d.WebSearch != nil {
 		raw["web_search"] = d.WebSearch
 	}
-	if d.CacheWriteTokens != 0 {
-		raw["cache_write_tokens"] = d.CacheWriteTokens
-	}
+	// cache_write_tokens is a required counter in current SDK typings, so it
+	// is always written (0 when the provider reported no cache writes).
+	raw["cache_write_tokens"] = d.CacheWriteTokens
 	if d.CacheWriteTokensDetails != nil {
 		raw["cache_write_tokens_details"] = d.CacheWriteTokensDetails
 	}
@@ -140,6 +142,8 @@ func (d *ResponseAPIInputTokensDetails) WebSearchInvocationCount() int {
 	return extractWebSearchInvocationCount(d.WebSearch)
 }
 
+// UnmarshalJSON decodes output token details, projecting the known counters and
+// keeping unknown members for a lossless re-encode. It returns a wrapped decode error.
 func (d *ResponseAPIOutputTokensDetails) UnmarshalJSON(data []byte) error {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -281,6 +285,8 @@ func extractWebSearchInvocationCount(raw any) int {
 	return 0
 }
 
+// toModel converts input token details to the canonical prompt details, or nil
+// for nil details.
 func (d *ResponseAPIInputTokensDetails) toModel() *model.UsagePromptTokensDetails {
 	if d == nil {
 		return nil
@@ -297,6 +303,8 @@ func (d *ResponseAPIInputTokensDetails) toModel() *model.UsagePromptTokensDetail
 	return details
 }
 
+// toModel converts output token details to the canonical completion details,
+// or nil for nil details.
 func (d *ResponseAPIOutputTokensDetails) toModel() *model.UsageCompletionTokensDetails {
 	if d == nil {
 		return nil
@@ -312,6 +320,8 @@ func (d *ResponseAPIOutputTokensDetails) toModel() *model.UsageCompletionTokensD
 	}
 }
 
+// newResponseAPIInputTokensDetailsFromModel converts canonical prompt details to
+// Responses input token details without aliasing them, or returns nil for nil.
 func newResponseAPIInputTokensDetailsFromModel(details *model.UsagePromptTokensDetails) *ResponseAPIInputTokensDetails {
 	if details == nil {
 		return nil
@@ -332,6 +342,8 @@ func newResponseAPIInputTokensDetailsFromModel(details *model.UsagePromptTokensD
 	return converted
 }
 
+// newResponseAPIOutputTokensDetailsFromModel converts canonical completion
+// details to Responses output token details, or returns nil for nil.
 func newResponseAPIOutputTokensDetailsFromModel(details *model.UsageCompletionTokensDetails) *ResponseAPIOutputTokensDetails {
 	if details == nil {
 		return nil
@@ -347,6 +359,8 @@ func newResponseAPIOutputTokensDetailsFromModel(details *model.UsageCompletionTo
 	}
 }
 
+// coerceNonNegativeInt reads a JSON-decoded counter as a non-negative int,
+// returning 0 for missing, negative or non-numeric values.
 func coerceNonNegativeInt(value any) int {
 	const maxInt = int(^uint(0) >> 1)
 
