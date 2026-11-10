@@ -401,10 +401,11 @@ const LogsTable = () => {
       if (sort.sortBy) {
         sortParams = `&sort_by=${sort.sortBy}&sort_order=${sort.sortOrder}`;
       }
+      // Both Go listing handlers read `size`; `page_size` is silently ignored.
       if (isAdminUser) {
-        url = `/api/log/?p=${startIdx}&page_size=${pageSize}&type=${localLogType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}${sortParams}`;
+        url = `/api/log/?p=${startIdx}&size=${pageSize}&type=${localLogType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}${sortParams}`;
       } else {
-        url = `/api/log/self?p=${startIdx}&page_size=${pageSize}&type=${localLogType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}${sortParams}`;
+        url = `/api/log/self?p=${startIdx}&size=${pageSize}&type=${localLogType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}${sortParams}`;
       }
       const res = await API.get(url);
       if (!isCurrent()) return;

@@ -150,6 +150,30 @@ for (const admin of [false, true]) {
 }
 
 if (theme === 'air') {
+  for (const [admin, route] of [
+    [false, '/api/log/self'],
+    [true, '/api/log/'],
+  ]) {
+    test(`air: ${admin ? 'admin' : 'self'} listing uses the backend-supported size parameter`, async () => {
+      const page = await mountPage({ admin });
+      try {
+        assert.equal(page.last().path, route);
+        assert.equal(page.last().params.size, '10', 'Initial listing sends its requested page size');
+        assert.equal(page.last().params.page_size, undefined);
+        const before = page.requests.length;
+        await page.choose('.semi-page-switch .semi-select-selection', '每页条数：20');
+        assert.equal(page.requests.length, before + 1, 'Changing page size reloads exactly once');
+        assert.equal(page.last().path, route);
+        assert.equal(page.last().params.p, '0', 'Page-size changes restart from page zero');
+        assert.equal(page.last().params.size, '20', 'The listing endpoint accepts size, not page_size');
+        assert.equal(page.last().params.page_size, undefined, 'Do not send the unsupported page_size parameter');
+        assert.deepEqual(page.failures, []);
+      } finally {
+        await page.unmount();
+      }
+    });
+  }
+
   test('air: the admin log filters render the username search field', async () => {
     const page = await mountPage({ admin: true });
     try {
@@ -178,7 +202,8 @@ if (theme === 'air') {
       assert.equal(page.last().params.type, '2', 'Sorting keeps the selected type');
 
       await page.choose('.semi-page-switch .semi-select-selection', '每页条数：20');
-      assert.equal(page.last().params.page_size, '20');
+      assert.equal(page.last().params.size, '20', 'The listing endpoint accepts size, not page_size');
+      assert.equal(page.last().params.page_size, undefined, 'Do not send the unsupported page_size parameter');
       assert.equal(page.last().params.type, '2', 'Changing the page size keeps the selected type');
       assert.deepEqual(sortParams(page.last()), { sort_by: 'elapsed_time', sort_order: 'desc' }, 'Changing the page size keeps the sort');
       assert.deepEqual(page.failures, []);

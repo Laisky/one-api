@@ -139,6 +139,7 @@ not covered by this guarantee or allowed to supersede table/chart requests.
 | --- | --- |
 | Air/Berry log sorting | The first sort sent no sort, toggles sent the previous direction, and keyword-search sorting sent the previous column. |
 | Air log type filter | Paging and page-size changes sent `type=0`; Query sent the click event (`type=[object Object]`). |
+| Air log listing size | Admin/self listing requests used the unsupported `page_size` parameter and therefore silently retained the backend default. Both now use the existing supported `size` parameter, with mounted-page regressions for both routes. |
 | Berry log refresh | Mount and refresh sent two requests; the first still carried the cleared keyword. Timestamps were fractional, which the server parses as `0`. |
 | Air dashboard presets | Today/7/30-day buttons requested the previous range. |
 | Air/Berry concurrent log requests | An older listing/search could replace newer rows, restore an obsolete endpoint mode/count, clear current busy state, or report an obsolete component error. Berry late page requests could also move the pager after a refresh. |
@@ -176,9 +177,11 @@ head to reproduce the confirmed races without changing the regression code:
 (cd web/berry && LEGACY_UI_BASELINE=abbabd17 node --test ../../.github/scripts/legacy-log-requests.test.cjs)
 ```
 
-No endpoint, query-parameter dialect, role routing, stored data, dependency, or
-normal sequential-request behavior changes. Previously issued requests still
-finish; only the latest operation owns component state. A current failed request
+No endpoint, backend query-parameter contract, role routing, stored data,
+dependency, or normal sequential-request behavior changes. Air listing requests
+now use the existing supported `size` parameter instead of the previously
+ignored `page_size`. Previously issued requests still finish; only the latest
+operation owns component state. A current failed request
 keeps the prior successful rows while reporting its error.
 
 Run the complete frontend suites and builds from the repository root:
