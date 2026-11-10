@@ -13,7 +13,8 @@ import (
 // Unknown models keep their original reader, and no retry or second inference is introduced.
 func PrepareRequestBody(c *gin.Context, name string, reader io.Reader) (io.Reader, error) {
 	name = CompatibilityModel(c, name)
-	if !IsClaudeSonnet55(name) && !IsClaudeHaiku55(name) {
+	isStandard52 := IsClaude52(name)
+	if !isStandard52 && !IsClaudeSonnet55(name) && !IsClaudeHaiku55(name) {
 		return reader, nil
 	}
 	if reader == nil {
@@ -29,6 +30,19 @@ func PrepareRequestBody(c *gin.Context, name string, reader io.Reader) (io.Reade
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &fields); err != nil {
 		return nil, errors.Wrap(err, "validation failed: invalid Claude JSON")
+	}
+	if isStandard52 {
+		if fields == nil {
+			return nil, errors.New("validation failed: Claude request must be an object")
+		}
+		if speed, exists := fields["speed"]; exists {
+			var value string
+			if err := json.Unmarshal(speed, &value); err != nil || value != "standard" {
+				return nil, errors.New("validation failed: Claude 5.2 only supports standard speed billing; fast mode is not supported")
+			}
+		}
+		// Preserve opaque signed thinking and all extensions byte-for-byte.
+		return bytes.NewReader(raw), nil
 	}
 	if err := NormalizeSonnet55Controls(name, fields); err != nil {
 		return nil, err

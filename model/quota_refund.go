@@ -27,63 +27,84 @@ const (
 // request-context recycling and are retried by the lifecycle-managed worker.
 // Completed rows must not be deleted while their IDs can still be replayed.
 type QuotaRefund struct {
-	ID          string `gorm:"type:varchar(36);primaryKey"`
-	TokenID     int
-	UserID      int
-	Amount      int64
-	RequestID   string `gorm:"size:128"`
-	Reason      string `gorm:"size:128"`
-	Status      string `gorm:"size:16;index:idx_quota_refund_pending,priority:1"`
-	RetryAt     int64  `gorm:"index:idx_quota_refund_pending,priority:2"`
-	Attempts    int64
-	CompletedAt int64
-	CreatedAt   int64 `gorm:"autoCreateTime"`
+	LogMetadataCompleted    bool
+	CostSnapshotUnavailable bool
+	CostRecoveryEligible    bool
+	CostMetadataCompleted   bool
+	MetadataRequested       bool `gorm:"index:idx_quota_refund_metadata,priority:2"`
+	MetadataCompleted       bool `gorm:"index:idx_quota_refund_metadata,priority:3"`
+	ProvisionalLogID        int
+	CostRecordID            int
+	CostRevision            int64
+	ID                      string `gorm:"type:varchar(36);primaryKey"`
+	TokenID                 int
+	UserID                  int
+	Amount                  int64
+	RequestID               string `gorm:"size:128"`
+	Reason                  string `gorm:"size:128"`
+	Status                  string `gorm:"size:16;index:idx_quota_refund_pending,priority:1;index:idx_quota_refund_metadata,priority:1"`
+	RetryAt                 int64  `gorm:"index:idx_quota_refund_pending,priority:2;index:idx_quota_refund_metadata,priority:4"`
+	Attempts                int64
+	CompletedAt             int64
+	CreatedAt               int64 `gorm:"autoCreateTime"`
 }
 
 // EnsureQuotaRefund persists intent before any balance credit. It validates the
 // token owner and positive amount, and accepts replay only with identical
 // immutable fields. A failed enqueue never falls back to an untracked credit.
 func EnsureQuotaRefund(ctx context.Context, intent QuotaRefund) error {
+	_, err := ensureQuotaRefund(ctx, intent)
+	return err
+}
+
+// ensureQuotaRefund reports whether this call created the immutable intent.
+// Only a newly created intent can carry original-attempt settlement authority.
+func ensureQuotaRefund(ctx context.Context, intent QuotaRefund) (bool, error) {
 	if _, err := uuid.Parse(intent.ID); err != nil {
-		return errors.Wrap(err, "invalid internal refund ID")
+		return false, errors.Wrap(err, "invalid internal refund ID")
 	}
-	if intent.TokenID <= 0 || intent.Amount <= 0 || len(intent.RequestID) > 128 || len(intent.Reason) > 128 {
-		return errors.New("invalid quota refund intent")
+	if intent.TokenID <= 0 || (intent.Amount < 0 || (intent.Amount == 0 && !intent.MetadataRequested)) || len(intent.RequestID) > 128 || len(intent.Reason) > 128 {
+		return false, errors.New("invalid quota refund intent")
 	}
 	var token Token
 	if err := DB.WithContext(ctx).Where("id = ?", intent.TokenID).Take(&token).Error; err != nil {
-		return errors.Wrap(err, "read refund owner")
+		return false, errors.Wrap(err, "read refund owner")
 	}
 	if intent.UserID != 0 && intent.UserID != token.UserId {
-		return errors.New("quota refund token owner mismatch")
+		return false, errors.New("quota refund token owner mismatch")
 	}
 	intent.UserID = token.UserId
+	intent.MetadataCompleted = false
+	intent.LogMetadataCompleted = false
+	intent.CostMetadataCompleted = false
 	intent.Status, intent.RetryAt, intent.Attempts, intent.CompletedAt, intent.CreatedAt = QuotaRefundPending, 0, 0, 0, 0
 
 	var existing QuotaRefund
 	lookup := DB.WithContext(ctx).Where("id = ?", intent.ID).Take(&existing).Error
 	if lookup == nil {
-		return sameQuotaRefund(existing, intent)
+		return false, sameQuotaRefund(existing, intent)
 	}
 	if !errors.Is(lookup, gorm.ErrRecordNotFound) {
-		return errors.Wrap(lookup, "read existing refund intent")
+		return false, errors.Wrap(lookup, "read existing refund intent")
 	}
 	if err := DB.WithContext(ctx).Create(&intent).Error; err != nil {
 		// An overlapping enqueue or a lost INSERT acknowledgement may have
 		// persisted this ID. Re-read outside the failed insert transaction.
 		if lookupErr := DB.WithContext(ctx).Where("id = ?", intent.ID).Take(&existing).Error; lookupErr == nil {
-			return sameQuotaRefund(existing, intent)
+			return false, sameQuotaRefund(existing, intent)
 		}
-		return errors.Wrap(err, "persist quota refund intent")
+		return false, errors.Wrap(err, "persist quota refund intent")
 	}
-	return nil
+	return true, nil
 }
 
 // sameQuotaRefund rejects an ID reused for a different reservation. Mutable
 // recovery fields are deliberately excluded; replay cannot reset a completion.
 func sameQuotaRefund(stored, proposed QuotaRefund) error {
 	if stored.TokenID != proposed.TokenID || stored.UserID != proposed.UserID || stored.Amount != proposed.Amount ||
-		stored.RequestID != proposed.RequestID || stored.Reason != proposed.Reason {
+		stored.RequestID != proposed.RequestID || stored.Reason != proposed.Reason ||
+		stored.MetadataRequested != proposed.MetadataRequested || stored.ProvisionalLogID != proposed.ProvisionalLogID ||
+		stored.CostRecordID != proposed.CostRecordID || stored.CostRevision != proposed.CostRevision || stored.CostRecoveryEligible != proposed.CostRecoveryEligible || stored.CostSnapshotUnavailable != proposed.CostSnapshotUnavailable {
 		return errors.New("quota refund ID already belongs to another intent")
 	}
 	return nil
@@ -94,6 +115,11 @@ func sameQuotaRefund(stored, proposed QuotaRefund) error {
 // succeeded, in which case another call observes completed and makes no credit.
 // Cache failures cannot trigger a second financial movement.
 func ApplyQuotaRefund(ctx context.Context, id string) error {
+	return applyQuotaRefund(ctx, id, false)
+}
+
+// applyQuotaRefund distinguishes the original blocked attempt from delayed recovery.
+func applyQuotaRefund(ctx context.Context, id string, currentAttempt bool) error {
 	var intent QuotaRefund
 	var token Token
 	err := runWithSQLiteBusyRetry(ctx, func() error {
@@ -107,7 +133,7 @@ func ApplyQuotaRefund(ctx context.Context, id string) error {
 			if intent.Status == QuotaRefundCompleted {
 				return nil
 			}
-			if intent.Status != QuotaRefundPending || intent.Amount <= 0 {
+			if intent.Status != QuotaRefundPending || intent.Amount < 0 || (intent.Amount == 0 && !intent.MetadataRequested) {
 				return errors.New("invalid persisted quota refund state")
 			}
 			claim := tx.Model(&QuotaRefund{}).Where("id = ? AND status = ?", id, QuotaRefundPending).
@@ -117,6 +143,9 @@ func ApplyQuotaRefund(ctx context.Context, id string) error {
 			}
 			if claim.RowsAffected == 0 {
 				return nil // Another transaction has already credited this ID.
+			}
+			if intent.Amount == 0 {
+				return nil
 			}
 			// Guard the upper bound as well as transaction atomicity; refunding
 			// after an unrelated large top-up must not overflow a balance.
@@ -151,7 +180,7 @@ func ApplyQuotaRefund(ctx context.Context, id string) error {
 	if err := CacheUpdateUserQuota(ctx, intent.UserID); err != nil {
 		logger.FromContext(ctx).Warn("quota refund committed but cache refresh failed", zap.String("refund_id", id), zap.Error(err))
 	}
-	return nil
+	return reconcileQuotaRefundMetadata(ctx, intent, currentAttempt)
 }
 
 // RefundQuotaWithRecovery first persists the intent, then retries the idempotent
@@ -160,13 +189,27 @@ func ApplyQuotaRefund(ctx context.Context, id string) error {
 // The returned persisted flag distinguishes a queued refund from an enqueue
 // outage that still requires the caller's critical audit record.
 func RefundQuotaWithRecovery(ctx context.Context, intent QuotaRefund) (persisted bool, err error) {
+	return refundQuotaWithRecovery(ctx, intent, false)
+}
+
+// RefundCurrentAttemptWithRecovery settles an original attempt while its caller
+// prevents replay. This authority must never be used by delayed/restarted workers.
+func RefundCurrentAttemptWithRecovery(ctx context.Context, intent QuotaRefund) (bool, error) {
+	return refundQuotaWithRecovery(ctx, intent, true)
+}
+
+// refundQuotaWithRecovery retries persisted work with explicit attempt authority.
+func refundQuotaWithRecovery(ctx context.Context, intent QuotaRefund, currentAttempt bool) (persisted bool, err error) {
+	currentAuthority := false
 	for attempt := 0; attempt < 5; attempt++ {
 		if !persisted {
-			err = EnsureQuotaRefund(ctx, intent)
+			var created bool
+			created, err = ensureQuotaRefund(ctx, intent)
+			currentAuthority = currentAttempt && created
 			persisted = err == nil
 		}
 		if persisted {
-			err = ApplyQuotaRefund(ctx, intent.ID)
+			err = applyQuotaRefund(ctx, intent.ID, currentAuthority)
 		}
 		if err == nil {
 			return persisted, nil

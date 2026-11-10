@@ -19,6 +19,7 @@ import (
 const RequestIDMaxLen = 32
 
 type UserRequestCost struct {
+	Revision    int64   `json:"-" gorm:"not null;default:0"`
 	Id          int     `json:"-"`
 	UUID        string  `json:"uuid" gorm:"type:char(36);column:uuid"`
 	CreatedTime int64   `json:"created_time" gorm:"bigint"`
@@ -77,6 +78,7 @@ func UpdateUserRequestCostQuotaByRequestID(userID int, requestID string, quota i
 		Where("request_id = ?", requestID).
 		Updates(map[string]any{
 			"quota":     quota,
+			"revision":  gorm.Expr("revision + 1"),
 			"user_uuid": userUUID,
 		})
 	if tx.Error != nil {
@@ -100,7 +102,7 @@ func UpdateUserRequestCostQuotaByRequestID(userID int, requestID string, quota i
 	// If create failed (possibly due to unique race), retry update once
 	if err2 := DB.Model(&UserRequestCost{}).
 		Where("request_id = ?", requestID).
-		Update("quota", quota).Error; err2 != nil {
+		Updates(map[string]any{"quota": quota, "revision": gorm.Expr("revision + 1")}).Error; err2 != nil {
 		return errors.Wrap(err2, "failed to update UserRequestCost quota after create race")
 	}
 	return nil

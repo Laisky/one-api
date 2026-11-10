@@ -34,6 +34,7 @@ type Adaptor struct {
 	AwsClient  *bedrockruntime.Client
 }
 
+// Init builds the Bedrock runtime client with a single-attempt paid invocation policy.
 func (a *Adaptor) Init(meta *meta.Meta) {
 	a.Meta = meta
 	defaultConfig, err := config.LoadDefaultConfig(context.Background(),
@@ -44,7 +45,7 @@ func (a *Adaptor) Init(meta *meta.Meta) {
 		return
 	}
 	a.Config = defaultConfig
-	a.AwsClient = bedrockruntime.NewFromConfig(defaultConfig, utils.PreserveRequestBodyEOF)
+	a.AwsClient = bedrockruntime.NewFromConfig(defaultConfig, utils.PreserveRequestBodyEOF, utils.NoInferenceRetry)
 }
 
 // DefaultToolingConfig returns Bedrock AgentCore tooling defaults (search, tool invocation, identity, memory fees).
@@ -166,6 +167,9 @@ type invokeBodyPreparer interface {
 // the Claude controller's sanitized body and returns preparation errors before
 // any upstream invocation, while leaving other AWS providers unchanged.
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
+	if err := a.ValidateRequestPricing(c, meta); err != nil {
+		return nil, err
+	}
 	if a.awsAdapter == nil {
 		return nil, errors.New("AWS sub-adapter not initialized")
 	}
@@ -267,12 +271,14 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 	var baseCapabilities ProviderCapabilities
 	switch adaptorType {
 	case AwsClaude:
+		// Keep advertised 5.2 effort support aligned with the tested shared converter.
+		effortConfig := awsFable52ModelPricing[modelName]
 		baseCapabilities = ProviderCapabilities{
 			SupportsTools:               true,  // Claude supports tools via Anthropic format
 			SupportsFunctions:           false, // Claude doesn't support OpenAI functions
 			SupportsLogprobs:            false,
 			SupportsResponseFormat:      true, // Claude supports some response formats
-			SupportsReasoningEffort:     false,
+			SupportsReasoningEffort:     len(effortConfig.SupportedReasoningEfforts) > 0,
 			SupportsModalities:          false,
 			SupportsAudio:               false,
 			SupportsWebSearch:           false,

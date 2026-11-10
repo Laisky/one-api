@@ -145,5 +145,9 @@ func resolveClaudeInvokeModel(c *gin.Context, client *bedrockruntime.Client) (st
 	if err != nil {
 		return "", errors.Wrap(err, "resolve Claude model")
 	}
-	return utils.ConvertModelID2CrossRegionProfile(gmw.Ctx(c), modelID, client.Options().Region), nil
+	target := utils.ConvertModelID2CrossRegionProfile(gmw.Ctx(c), modelID, client.Options().Region)
+	if target == modelID && utils.RequiresInferenceProfile(modelID) {
+		return "", errors.Errorf("model %s has no supported inference profile in region %s; configure an explicit inference profile ARN", modelID, client.Options().Region)
+	}
+	return target, nil
 }
