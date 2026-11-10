@@ -165,7 +165,7 @@ func writeAsyncTaskRequestCost(ctx context.Context, task *AsyncTask) error {
 			if existing.UserID != current.UserID || (existing.UserUUID != nil && *existing.UserUUID != current.UserUUID) {
 				return errors.New("async request cost owner mismatch")
 			}
-			return errors.Wrap(tx.Model(&UserRequestCost{}).Where("id = ? AND user_id = ?", existing.Id, current.UserID).Update("quota", asyncTaskFinancialQuota(&current)).Error, "update async request cost")
+			return errors.Wrap(tx.Model(&UserRequestCost{}).Where("id = ? AND user_id = ?", existing.Id, current.UserID).Updates(map[string]any{"quota": asyncTaskFinancialQuota(&current), "revision": gorm.Expr("revision + 1")}).Error, "update async request cost")
 		})
 	})
 }

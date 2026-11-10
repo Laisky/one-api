@@ -69,7 +69,8 @@ func TestClaude52ProfileAdmission(t *testing.T) {
 			h := newClaudeInvokeHarness(t, false, []byte(claudeInvokeReceipt), "us-gov-east-1")
 			h.meta.ActualModelName = name
 			mapping := "{\"" + name + "\":\"arn:aws-us-gov:bedrock:us-gov-east-1:123456789012:application-inference-profile/test\"}"
-			h.context.Set(ctxkey.ChannelModel, &channelmodel.Channel{InferenceProfileArnMap: &mapping})
+			prices := "{\"" + name + "\":{\"ratio\":4.4,\"completion_ratio\":5,\"cached_input_ratio\":0.11,\"cache_write_5m_ratio\":5.5,\"cache_write_1h_ratio\":8.8}}"
+			h.context.Set(ctxkey.ChannelModel, &channelmodel.Channel{InferenceProfileArnMap: &mapping, ModelConfigs: &prices})
 			h.prepareChat(t)
 			_, failure := h.adaptor.DoResponse(h.context, nil, h.meta)
 			require.Nil(t, failure)

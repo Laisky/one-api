@@ -10,6 +10,7 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/pricing"
 )
@@ -18,7 +19,7 @@ var _ adaptor.RequestPricingValidator = (*Adaptor)(nil)
 
 // requiresClaude52Pricing identifies newly listed models without verified Google tariffs.
 func requiresClaude52Pricing(name string) bool {
-	return name == "claude-fable-5-2" || name == "claude-mythos-5-2"
+	return anthropic.IsClaude52(name)
 }
 
 // ValidateRequestPricing requires complete channel-owned tariffs for Claude 5.2.

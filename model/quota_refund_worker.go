@@ -8,6 +8,7 @@ import (
 	"github.com/Laisky/zap"
 	"gorm.io/gorm"
 
+	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/logger"
 )
 
@@ -18,8 +19,9 @@ import (
 // with the unique intent's completion. It returns the joined processing errors.
 func RecoverQuotaRefunds(ctx context.Context) error {
 	var pending []QuotaRefund
-	if err := DB.WithContext(ctx).Where("status = ? AND retry_at <= ?", QuotaRefundPending, time.Now().UTC().Unix()).
-		Order("retry_at, created_at, id").Limit(32).Find(&pending).Error; err != nil {
+	if err := DB.WithContext(ctx).Where("(status = ? OR (status = ? AND metadata_requested = ? AND metadata_completed = ? AND (log_metadata_completed = ? OR cost_metadata_completed = ? OR (cost_recovery_eligible = ? AND cost_snapshot_unavailable = ? AND ?)))) AND retry_at <= ?",
+		QuotaRefundPending, QuotaRefundCompleted, true, false, false, true, true, false, config.RefundCostRecoveryEnabled, time.Now().UTC().Unix()).
+		Order("CASE WHEN status = 'pending' THEN 0 ELSE 1 END, retry_at, created_at, id").Limit(32).Find(&pending).Error; err != nil {
 		return errors.Wrap(err, "list pending quota refunds")
 	}
 	var failures []error
@@ -36,7 +38,7 @@ func RecoverQuotaRefunds(ctx context.Context) error {
 			// deferral after the sweep deadline or worker cancellation.
 			deferCtx, cancelDefer := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 			updateErr := DB.WithContext(deferCtx).Model(&QuotaRefund{}).
-				Where("id = ? AND status = ?", intent.ID, QuotaRefundPending).
+				Where("id = ? AND (status = ? OR (metadata_requested = ? AND metadata_completed = ?))", intent.ID, QuotaRefundPending, true, false).
 				Updates(map[string]any{"retry_at": time.Now().UTC().Add(30 * time.Second).Unix(),
 					"attempts": gorm.Expr("attempts + 1")}).Error
 			cancelDefer()

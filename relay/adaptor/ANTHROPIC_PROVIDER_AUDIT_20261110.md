@@ -180,3 +180,52 @@ throttling, timeout or malformed payload responses never authorize an automatic
 switch to a different profile, model or geography. Explicit overrides and
 legacy-model routes are covered by behavioral regression tests; provider-side
 geographic guarantees remain an operator/provider qualification responsibility.
+
+## GovCloud and routing-price follow-up — November 10
+
+AWS announced Fable 5.2 availability in GovCloud on November 9. The Fable and
+Mythos model cards each list us-gov-east-1 and us-gov-west-1 Geo support, but not
+Global or in-region invocation. Therefore the current automatic-route rejection
+means **this gateway's GovCloud profile mapping is not yet qualified**, not that
+the provider model is unavailable.
+
+The retrieved detailed profile tables did not establish GovCloud profile IDs
+and destination sets; they direct the operator to GetInferenceProfile in the
+source region. No actual GovCloud profile API receipt has been obtained in this
+task. A bounded dev SDK check found boto3/botocore 1.34.46, no default
+credential identity or configured profiles, and no inference-profile operations
+in that SDK. Calls failed locally before any AWS request; this is not evidence
+of a provider permission denial or model unavailability. Do not guess a commercial us.* profile is valid in GovCloud, invent a
+partition-specific ID, or reuse a commercial Global profile. An authorized
+operator must verify the exact profile ARN/ID, source region, destination
+models/regions and entitlement before configuring the existing explicit override.
+Mythos must be qualified independently rather than inheriting Fable's receipt.
+
+AWS documents differences between Global and Geo routing prices. Exact example
+Geo prices of USD8.80/USD44 were not verified from an official retrieved table
+and are not introduced as defaults. Explicit non-Global/custom routing requires
+operator-verified tariffs; neither an ARN nor successful profile lookup proves
+price parity. Stored administrator rates must not be rewritten automatically.
+
+Sources:
+- https://aws.amazon.com/about-aws/whats-new/2026/11/claude-fable-5-2-aws-govcloud/
+- https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-fable-5-2.html
+- https://docs.aws.amazon.com/us_en/bedrock/latest/userguide/model-card-anthropic-claude-mythos-5-2.html
+- https://docs.aws.amazon.com/bedrock/latest/userguide/models-region-compatibility.html
+- https://aws.amazon.com/bedrock/pricing/
+
+## Separate acceptance claims
+
+1. Catalog support: exact published identities, feature/effort metadata and
+   legacy entries must pass catalog/identity regressions. This proves discovery
+   and matching, not provider entitlement or price contracts.
+2. Provider admission and dispatch: fixtures must exercise production client
+   construction, one physical attempt per generation, forwarding evidence,
+   explicit routing/pricing admission and terminal provider errors. A test-only
+   retryer is not evidence about the production default.
+3. Accounting: finite-balance controller tests must reconcile balances,
+   provisional logs and request cost exactly once. Recovery tests must inject
+   separate accounting-store failures and protect later successful retries.
+4. Live enablement: the operator checklist above remains separate. Local
+   transport fixtures and database tests do not establish live provider access,
+   residency, negotiated prices or real usage receipts.

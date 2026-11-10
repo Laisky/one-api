@@ -59,12 +59,13 @@ func Handler(c *gin.Context, client *bedrockruntime.Client, modelName string) (r
 		return invokeError(err), nil
 	}
 	started := time.Now()
+	utils.MarkInvocation(c)
 	response, err := client.InvokeModel(gmw.Ctx(c), &bedrockruntime.InvokeModelInput{
 		ModelId: aws.String(target), Accept: aws.String("application/json"), ContentType: aws.String("application/json"), Body: body,
 	})
 	utils.UpdateRegionHealthMetrics(client.Options().Region, err == nil, time.Since(started), err)
 	if err != nil {
-		return invokeError(err), nil
+		return utils.InvocationError(c, err), nil
 	}
 	// HTTP success proves AWS accepted the invocation, not that zero tokens
 	// were billed. Preserve the existing estimated-settlement path when a

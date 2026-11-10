@@ -46,33 +46,20 @@ func refundAdmissionReservation(c *gin.Context, amount int64, tokenID int, reaso
 	timeout := time.Duration(config.BillingTimeoutSec) * time.Second
 	ctx, cancel := context.WithTimeout(relayctx.Detach(c), timeout)
 	defer cancel()
-	if amount > 0 {
-		intent := model.QuotaRefund{
-			ID: uuid.NewString(), UserID: c.GetInt(ctxkey.Id), TokenID: tokenID,
-			Amount: amount, RequestID: c.GetString(ctxkey.RequestId), Reason: reason,
-		}
-		if persisted, err := model.RefundQuotaWithRecovery(ctx, intent); err != nil {
-			c.Set(responseSettlementKey, true)
-			logger.Error("CRITICAL BILLING AUDIT: admission refund requires recovery",
-				zap.String("refund_id", intent.ID), zap.Bool("intent_persisted", persisted),
-				zap.Int("user_id", intent.UserID), zap.Int("token_id", tokenID),
-				zap.Int64("quota", amount), zap.String("request_id", intent.RequestID), zap.Error(err))
-			return true
-		}
+	intent := model.QuotaRefund{
+		ID: uuid.NewString(), UserID: c.GetInt(ctxkey.Id), TokenID: tokenID,
+		Amount: amount, RequestID: c.GetString(ctxkey.RequestId), Reason: reason,
 	}
-	// Reconcile metadata synchronously too: a delayed cost=0 write must never
-	// overwrite a later successful attempt's receipt.
-	if id := c.GetInt(ctxkey.ProvisionalLogId); id > 0 {
-		if err := model.ReconcileConsumeLog(ctx, id, 0, "refunded: "+reason, 0, 0, 0, nil); err != nil {
-			c.Set(responseSettlementKey, true)
-			logger.Error("reconcile admission refund log failed", zap.Int("log_id", id), zap.Error(err))
-		}
+	if err := model.PrepareQuotaRefundMetadata(ctx, &intent, c.GetInt(ctxkey.ProvisionalLogId)); err != nil {
+		logger.Warn("admission refund cost target unavailable; balance refund remains durable",
+			zap.String("refund_id", intent.ID), zap.String("request_id", intent.RequestID), zap.Error(err))
 	}
-	if id := c.GetString(ctxkey.RequestId); id != "" {
-		if err := model.UpdateUserRequestCostQuotaByRequestID(c.GetInt(ctxkey.Id), id, 0); err != nil {
-			c.Set(responseSettlementKey, true)
-			logger.Error("record admission refund cost failed", zap.String("request_id", id), zap.Error(err))
-		}
+	if persisted, err := model.RefundCurrentAttemptWithRecovery(ctx, intent); err != nil {
+		c.Set(responseSettlementKey, true)
+		logger.Error("CRITICAL BILLING AUDIT: admission refund requires recovery",
+			zap.String("refund_id", intent.ID), zap.Bool("intent_persisted", persisted),
+			zap.Int("user_id", intent.UserID), zap.Int("token_id", tokenID),
+			zap.Int64("quota", amount), zap.String("request_id", intent.RequestID), zap.Error(err))
 	}
 	return true
 }

@@ -26,6 +26,10 @@ import (
 // TestClaude431ReviewRefundOwnership verifies cancellation, failure, and duplicate-call safety.
 // A failed durable refund blocks replay, leaves a recoverable intent, and never fabricates zero cost.
 func TestClaude431ReviewRefundOwnership(t *testing.T) {
+	// This recovery qualification fixture represents a fully upgraded writer fleet.
+	oldRecovery := config.RefundCostRecoveryEnabled
+	config.RefundCostRecoveryEnabled = true
+	t.Cleanup(func() { config.RefundCostRecoveryEnabled = oldRecovery })
 	ensureResponseFallbackFixtures(t)
 	oldRedis := common.IsRedisEnabled()
 	common.SetRedisEnabled(false)

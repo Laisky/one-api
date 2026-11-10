@@ -13,7 +13,7 @@ import (
 // Unknown models keep their original reader, and no retry or second inference is introduced.
 func PrepareRequestBody(c *gin.Context, name string, reader io.Reader) (io.Reader, error) {
 	name = CompatibilityModel(c, name)
-	isStandard52 := name == "claude-fable-5-2" || name == "claude-mythos-5-2"
+	isStandard52 := IsClaude52(name)
 	if !isStandard52 && !IsClaudeSonnet55(name) && !IsClaudeHaiku55(name) {
 		return reader, nil
 	}

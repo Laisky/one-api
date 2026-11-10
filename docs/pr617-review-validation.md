@@ -64,3 +64,59 @@ live provider qualification.
 
 Targeted race qualification also passed (3.409s):
 go test -race ./relay/controller -run 'TestClaude52Local|TestClaude431Review|TestBillingAuditSafetyNet_DBAccounting' -count=1.
+
+## Maintainer follow-up on b52e8480 — 2026-11-10
+
+- Production Bedrock client construction was exercised, rather than replacing
+  its retryer in the fixture. Before the fix, 503 and transport EOF produced
+  three SDK HTTP attempts in both unary and streaming paths. Forwarding
+  evidence was absent at the transport boundary. Existing single-invocation
+  and typed admission-rejection helpers now govern production dispatch.
+- Explicit 5.2 inference-profile overrides previously accepted absent tariffs.
+  Opaque/custom ARNs cannot establish Global tariff eligibility. The admission
+  gate requires complete operator prices for explicit overrides, preserves
+  stored values and leaves legacy models/automatic Global defaults unchanged.
+- Independent log-store and request-cost write outages were injected after
+  successful quota credit. Both left 38 fixture quota units stale after two
+  recovery runs. Recovery is qualified separately from balance credit,
+  with attempt scoping and mixed-version rollout safety.
+- A small exact-canonical Claude 5.2 identity predicate replaces repeated native,
+  Vertex and Foundry checks. Its positive/negative alias and legacy-boundary
+  tests passed; it does not introduce a generalized provider schema.
+- Official sources confirm GovCloud Geo availability; actual profile API
+  receipts were not obtained. No AWS CLI was available on dev; a bounded SDK check found no existing
+  credential identity/profiles and an old SDK lacking profile API operations.
+  No AWS request was sent. Automatic GovCloud routing remains unqualified,
+  not assumed unsupported by AWS.
+
+Native FileIO tools were again unavailable before substantive work. No history
+retrieval or save/readback is claimed.
+
+### Final follow-up acceptance
+
+- The complete model package passed with the repository-required budget:
+  `go test ./model -timeout 20m -count=1` (129.265s).
+- The complete controller package and Anthropic, AWS (all subpackages), Vertex
+  (all subpackages), and Foundry adaptor packages passed (controller 42.663s).
+- After adding the metadata recovery composite index, scoped race tests passed:
+  `go test -race ./model ./relay/controller -run 'Test(QuotaRefund|Refund|ClaudeRefund|ClaudeAdmission|Claude431)' -count=1`
+  (model 6.765s; controller 4.369s). This includes schema upgrade preservation,
+  metadata outage/restart, stale revision fencing, async cost writer revision,
+  mixed-version gating, credit queue fairness, and admission refund cases.
+- Scoped `go vet`, `git diff --check`, and `make test-quick` passed; quick
+  selection executed 28 tests. No full-repository race/database qualification
+  or live provider inference is claimed.
+- An initial model run with Go's default 10-minute timeout exposed an existing
+  compact-UUID test-fixture skip/nil-pool panic. It reproduced in isolation;
+  the unchanged test passed with the prescribed 20-minute budget. That first
+  run is not reported as a pass.
+- Existing refund records and cost amounts survive additive migration. The
+  new metadata queue index is checked alongside the existing credit index.
+  Cost revision fencing covers normal and asynchronous cost writers.
+- `REFUND_COST_RECOVERY_ENABLED` remains disabled by default. Enable delayed
+  cost recovery only after every cost writer is upgraded. Eligibility is
+  captured at intent creation, so later enabling cannot retroactively make
+  unsafe mixed-version intents eligible. Manual-only metadata is excluded
+  from recurring queue work, and pending balance credits receive priority.
+- FileIO tools remain unavailable: no history search, evidence save/readback,
+  or complete FileIO task closeout is claimed.
