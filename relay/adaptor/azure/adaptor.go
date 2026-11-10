@@ -124,6 +124,10 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 		merged[k] = v
 	}
 	for k, v := range a.claude.GetDefaultModelPricing() {
+		// Foundry 5.2 supports xhigh but not the native max effort level.
+		if k == "claude-fable-5-2" || k == "claude-mythos-5-2" {
+			v.SupportedReasoningEfforts = []string{"low", "medium", "high", "xhigh"}
+		}
 		merged[k] = v
 	}
 	return merged
