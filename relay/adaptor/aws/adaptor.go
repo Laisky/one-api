@@ -267,12 +267,14 @@ func GetModelCapabilities(modelName string) ProviderCapabilities {
 	var baseCapabilities ProviderCapabilities
 	switch adaptorType {
 	case AwsClaude:
+		// Keep advertised 5.2 effort support aligned with the tested shared converter.
+		effortConfig := awsFable52ModelPricing[modelName]
 		baseCapabilities = ProviderCapabilities{
 			SupportsTools:               true,  // Claude supports tools via Anthropic format
 			SupportsFunctions:           false, // Claude doesn't support OpenAI functions
 			SupportsLogprobs:            false,
 			SupportsResponseFormat:      true, // Claude supports some response formats
-			SupportsReasoningEffort:     false,
+			SupportsReasoningEffort:     len(effortConfig.SupportedReasoningEfforts) > 0,
 			SupportsModalities:          false,
 			SupportsAudio:               false,
 			SupportsWebSearch:           false,

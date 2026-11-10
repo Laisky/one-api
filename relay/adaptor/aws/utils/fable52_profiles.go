@@ -23,3 +23,14 @@ func init() {
 		CrossRegionInferences = append(CrossRegionInferences, "global."+id, "us."+id)
 	}
 }
+
+// RequiresInferenceProfile reports whether a verified model catalog forbids raw
+// on-demand invocation. Older models keep their historical routing behavior.
+func RequiresInferenceProfile(modelID string) bool {
+	switch modelID {
+	case "anthropic.claude-fable-5-2", "anthropic.claude-mythos-5-2":
+		return true
+	default:
+		return false
+	}
+}

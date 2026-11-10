@@ -272,7 +272,11 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	pricing := make(map[string]adaptor.ModelConfig)
 
 	// Import Claude models from claude subadaptor
-	maps.Copy(pricing, vertexaiClaude.ModelRatios)
+	for name, cfg := range vertexaiClaude.ModelRatios {
+		if !requiresClaude52Pricing(name) {
+			pricing[name] = cfg
+		}
+	}
 
 	// Import Imagen models from imagen subadaptor
 	maps.Copy(pricing, imagen.ModelRatios)
@@ -648,6 +652,9 @@ func (a *Adaptor) DoRequest(c *gin.Context, m *meta.Meta, requestBody io.Reader)
 			return nil, err
 		}
 		requestBody = prepared
+	}
+	if err := a.ValidateRequestPricing(c, m); err != nil {
+		return nil, err
 	}
 	return channelhelper.DoRequestHelper(a, c, m, requestBody)
 }

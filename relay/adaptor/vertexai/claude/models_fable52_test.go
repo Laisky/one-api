@@ -8,7 +8,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 )
 
-// TestClaudeFable52VertexCatalog checks discovery, standard-price parity,
+// TestClaudeFable52VertexCatalog checks discovery, reference metadata parity,
 // output limits and the Vertex-specific feature subset.
 func TestClaudeFable52VertexCatalog(t *testing.T) {
 	t.Parallel()
