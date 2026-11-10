@@ -111,9 +111,29 @@ The standard applied everywhere is the one Modern's log page already used:
 - A handler computes the next query (sort, type, range, page size) and passes it
   to the loader explicitly; loaders default only to committed state.
 - Exactly one code path owns each reload, so one user action sends one request.
-- A superseded request commits nothing. Modern's keyset hook accepts
+- The log row loaders and Air dashboard quota loader commit only the current
+  request's results. Modern's keyset hook accepts
   `fetchPage(navigation, { pageSize, isCurrent })` and ignores a stale response
-  instead of moving the cursor under newer rows.
+  instead of moving the cursor under newer rows. Air/Berry use one
+  `createLatestRequest` gate per mounted resource, shared across the listing and
+  search endpoints for the same table. A new request owns rows, search mode,
+  counts, component errors and loading cleanup. Berry commits uncached page
+  navigation inside that boundary, preserving its previous page while loading.
+  Handlers that select a page immediately never repeat navigation after awaiting
+  the request, so an old completion cannot move the pager. Selecting a cached
+  Berry page explicitly invalidates pending navigation even though it sends no
+  new request. Paging is temporarily disabled during a new Air/Berry search, refresh
+  or sort because cached pages still belong to the previous query; page fetches
+  continue to allow navigation back to an already cached page.
+- Unmounting deactivates the gate. Effect setup reactivates it without restoring
+  superseded requests; this preserves React StrictMode's setup/cleanup replay,
+  including the dashboard's already-initialized chart request.
+
+This is not an application-wide cancellation mechanism. Requests are not aborted,
+and API interceptors retain their existing global transport-error reporting and
+authentication behavior. The gate suppresses obsolete component-owned results
+and errors only. Independent statistics, autocomplete and tracing requests are
+not covered by this guarantee or allowed to supersede table/chart requests.
 
 | Surface | Behavior reproduced before fixing |
 | --- | --- |
@@ -121,6 +141,8 @@ The standard applied everywhere is the one Modern's log page already used:
 | Air log type filter | Paging and page-size changes sent `type=0`; Query sent the click event (`type=[object Object]`). |
 | Berry log refresh | Mount and refresh sent two requests; the first still carried the cleared keyword. Timestamps were fractional, which the server parses as `0`. |
 | Air dashboard presets | Today/7/30-day buttons requested the previous range. |
+| Air/Berry concurrent log requests | An older listing/search could replace newer rows, restore an obsolete endpoint mode/count, clear current busy state, or report an obsolete component error. Berry late page requests could also move the pager after a refresh. |
+| Air concurrent dashboard ranges | An older range could redraw both charts after a newer range or after unmount, and clear current loading. |
 | Air LobeChat link | The token menu opened LobeChat with `sk-undefined`. |
 | Modern log page size | Cursor mode sent a stale-size request whose late response moved Next to the wrong cursor; offset mode sent three requests. |
 
@@ -132,9 +154,32 @@ define, so the admin log page crashed) and Air's models page (`Collapsible.Panel
 so every channel card rendered empty).
 
 Legacy behavior tests mount the real page modules with the theme's own React and
-UI library through `.github/scripts/legacy-react-harness.cjs`; only transport,
-toast and unrelated modal modules are replaced, and assertions read the actual
-request parameters and rendered text.
+UI library through `.github/scripts/legacy-react-harness.cjs`. The suites replace
+transport, toast notifications, authentication predicates, copy behavior, selected
+timestamp/number/quota/color formatting helpers, unrelated modals, and reference
+tooltip wrappers. Air dashboard tests also replace `@visactor/vchart` with
+`FakeChart`. Assertions read actual request parameters and rendered page text;
+the deferred dashboard tests inspect the specifications delivered to both chart
+instances. These doubles do not qualify authentication integration, the replaced
+formatting/copy/tooltip helpers, or real chart/canvas rendering. The jsdom harness
+also supplies inert layout, media-query and canvas APIs.
+
+The concurrency regressions settle real page requests in deliberately reversed
+orders. They cover admin/self routes, listing/search transitions, pagination,
+success and both application/transport failures, loading, unmount and effect
+replay. Current errors remain visible and existing request-count, sort, filter
+and timestamp assertions remain negative controls. Rerun against the prior PR
+head to reproduce the confirmed races without changing the regression code:
+
+```sh
+(cd web/air && LEGACY_UI_BASELINE=abbabd17 node --test ../../.github/scripts/legacy-log-requests.test.cjs ../../.github/scripts/legacy-air-pages.test.cjs)
+(cd web/berry && LEGACY_UI_BASELINE=abbabd17 node --test ../../.github/scripts/legacy-log-requests.test.cjs)
+```
+
+No endpoint, query-parameter dialect, role routing, stored data, dependency, or
+normal sequential-request behavior changes. Previously issued requests still
+finish; only the latest operation owns component state. A current failed request
+keeps the prior successful rows while reporting its error.
 
 Run the complete frontend suites and builds from the repository root:
 
@@ -147,6 +192,25 @@ make build-frontend-air
 yarn --cwd web/berry test
 make build-frontend-berry
 ```
+
+### Latest-request follow-up validation
+
+On the follow-up to `abbabd17`, the same regression source against that revision
+fails 17 Air cases (including 5 dashboard cases) and 14 Berry cases. Passing
+negative controls include sequential filters/sorts, current errors and effect
+replay. These are failing behavioral cases, not 31 distinct defects.
+
+- Air full frontend suite: 209 passed, 2 existing React19-only skips.
+- Berry full frontend suite: 186 passed, 2 existing React19-only skips.
+- Air and Berry lint and production builds passed. Builds run sequentially;
+  running both builds concurrently in the cloud executor was killed with exit
+  137. Existing dependency/chunk-size and Berry lint warnings remain.
+- Release-input guard: 7 tests passed; frontend CI policy contracts: 4 passed.
+  The new shared helper is explicitly declared for both importing themes.
+- `make test-quick` passed all 28 selected tests and `go vet ./...` passed with
+  Go 1.27.3 after using the available toolchain. Full Go race/database qualification, the unchanged Modern
+  frontend and real-browser/production qualification were not rerun here.
+  Exact-commit CI remains a separate publication check.
 
 These tests simulate the relevant DOM mutation; they do not qualify every browser
 translator or extension. Extensions that replace entire owned elements, arbitrary

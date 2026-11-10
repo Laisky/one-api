@@ -1,23 +1,25 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { React, createTransport, defaultExport, loadModule, mount, theme } = require('./legacy-react-harness.cjs');
+const { React, createTransport, defaultExport, loadModule, mount, settle, theme } = require('./legacy-react-harness.cjs');
 
 // This suite mounts the real Air and Berry log pages with their real UI
-// libraries and records the requests they send. Only the transport, toast and
-// unrelated modal/tooltip modules are replaced, so the asserted URLs come from
-// the pages' actual event handlers and request builders.
+// libraries and records the requests they send. Transport, toast, authentication,
+// selected formatting/copy helpers and unrelated modal/tooltip modules are
+// replaced. The asserted URLs come from real event handlers and request builders;
+// error counts qualify component notifications, not Axios interceptor behavior.
 
 /** logRows returns a full page of rows so pagination offers a following page. */
 function logRows(prefix) {
   return Array.from({ length: 10 }, (_, index) => ({
-    id: index + 1, uuid: `${prefix}-${index}`, type: 2, created_at: 1700000000 + index, model_name: 'model',
+    id: index + 1, uuid: `${prefix}-${index}`, type: 2, created_at: 1700000000 + index, model_name: prefix,
     token_name: 'token', prompt_tokens: index, completion_tokens: index, quota: index, elapsed_time: index, content: 'detail',
   }));
 }
 
 /** mountPage renders the real theme log page and returns helpers for user interactions and request inspection. */
-async function mountPage({ admin }) {
-  const { API, requests } = createTransport((request, count) => ({ success: true, message: '', data: logRows(`row-${count}`), total: 25 }));
+async function mountPage({ admin, respond, strict = false }) {
+  localStorage.removeItem('page-size');
+  const { API, requests } = createTransport(respond || ((request, count) => ({ success: true, message: '', data: logRows(`row-${count}`), total: 25 })));
   const failures = [];
   /** recordFailure keeps UI-reported failures for the absence assertion. */
   const recordFailure = error => { failures.push(error); };
@@ -38,7 +40,8 @@ async function mountPage({ admin }) {
       'web/berry/src/views/Log/component/TracingModal.js': defaultExport(() => null),
       'web/berry/src/ui-component/ResourceRefTooltip.js': passthrough,
     }).default;
-  const view = await mount(React.createElement(Page));
+  const element = React.createElement(Page);
+  const view = await mount(strict ? React.createElement(React.StrictMode, null, element) : element);
   const { container, textElement, click, type } = view;
   return {
     ...view, requests, failures,
@@ -207,5 +210,211 @@ if (theme === 'berry') {
     } finally {
       await page.unmount();
     }
+  });
+}
+
+
+/** controlledPage mounts a log page whose post-mount requests settle only when the test chooses. */
+async function controlledPage(admin) {
+  const pending = [];
+  const page = await mountPage({ admin, respond: (request, count) => count === 1
+    ? { success: true, data: logRows('initial'), total: 25 }
+    : new Promise((resolve, reject) => pending.push({ request, resolve, reject })) });
+  return {
+    ...page, pending,
+    /** refresh submits the structured listing after clearing the search keyword. */
+    refresh: async () => {
+      if (theme === 'air') {
+        await page.type(page.container.querySelector('input[name="search_keyword"]'), '');
+        await page.click(page.button('查询'));
+      } else await page.click(page.button('刷新/清除搜索条件'));
+    },
+    /** busy returns whether the currently requested operation still displays its loading indicator. */
+    busy: () => Boolean(page.container.querySelector(theme === 'air' ? '.semi-button-loading' : '[role="progressbar"]')),
+  };
+}
+
+/** finish resolves a controlled request with identifiable rows and flushes its UI updates. */
+async function finish(request, label, extra = {}) {
+  request.resolve({ success: true, data: logRows(label), total: 25, ...extra });
+  await settle();
+}
+
+for (const admin of [false, true]) {
+  for (const latest of ['search', 'listing']) {
+    test(`${theme}: ${admin ? 'admin' : 'user'} superseded ${latest === 'search' ? 'listing' : 'search'} cannot replace newer ${latest} rows or mode`, async () => {
+      const page = await controlledPage(admin);
+      try {
+        if (latest === 'search') {
+          await page.sortBy(labels.latency);
+          await page.search('current');
+        } else {
+          await page.search('obsolete');
+          await page.refresh();
+        }
+        assert.equal(page.pending.length, 2, 'Two actual user actions issue two controlled requests');
+        assert.equal(page.busy(), true, 'The controlled request shows loading');
+        await finish(page.pending[1], 'current-result');
+        page.assertRendered();
+        assert.match(page.container.textContent, /current-result/);
+        await finish(page.pending[0], 'obsolete-result', { total: 1 });
+        assert.match(page.container.textContent, /current-result/, 'The latest result remains visible');
+        assert.doesNotMatch(page.container.textContent, /obsolete-result/);
+        if (theme === 'air') {
+          const total = latest === 'search' ? 25 : 20;
+          assert.match(page.container.textContent, new RegExp(`共\\s+${total}\\s+条`), 'The latest result owns the pager total');
+        }
+        assert.equal(page.busy(), false, 'The current request owns busy cleanup');
+        await page.sortBy(labels.quota);
+        assert.equal(page.pending.length, 3, 'An obsolete sort does not leave sorting blocked');
+        assert.equal(page.last().path.endsWith('/search'), latest === 'search', 'The current endpoint mode is retained');
+        await finish(page.pending[2], 'sorted-result');
+        assert.deepEqual(page.failures, []);
+      } finally { await page.unmount(); }
+    });
+  }
+}
+
+for (const outcome of ['success', 'server failure', 'rejection']) {
+  test(`${theme}: superseded ${outcome} cannot clear newer loading or report a component error`, async () => {
+    const page = await controlledPage(false);
+    try {
+      await page.search('obsolete');
+      await page.refresh();
+      assert.equal(page.pending.length, 2);
+      if (outcome === 'rejection') {
+        page.pending[0].reject(new Error('obsolete transport failure'));
+        await settle();
+      } else await finish(page.pending[0], 'obsolete-result', outcome === 'server failure' ? { success: false, message: 'obsolete server failure' } : {});
+      assert.equal(page.busy(), true, 'An older completion must not clear current busy state');
+      assert.deepEqual(page.failures, [], 'Obsolete component-level failures are ignored');
+      await finish(page.pending[1], 'current-result');
+      assert.equal(page.busy(), false);
+      assert.match(page.container.textContent, /current-result/);
+    } finally { await page.unmount(); }
+  });
+}
+
+for (const outcome of ['server failure', 'rejection']) {
+  test(`${theme}: current ${outcome} still reports a component error and clears loading`, async () => {
+    const page = await controlledPage(false);
+    try {
+      await page.search('current');
+      if (outcome === 'rejection') {
+        page.pending[0].reject(new Error('current transport failure'));
+        await settle();
+      } else await finish(page.pending[0], '', { success: false, message: 'current server failure' });
+      assert.equal(page.busy(), false);
+      assert.equal(page.failures.length, 1, 'A current failure is still surfaced');
+      assert.match(String(page.failures[0]), /current .* failure/);
+      assert.match(page.container.textContent, /initial/, 'A failed request preserves previously loaded rows');
+    } finally { await page.unmount(); }
+  });
+}
+
+test(`${theme}: a page request superseded by refresh cannot append rows or move the pager`, async () => {
+  const page = await controlledPage(false);
+  try {
+    if (theme === 'air') await page.goToPage(2);
+    else await page.click(page.container.querySelector('button[aria-label="Go to next page"]'));
+    await page.refresh();
+    assert.equal(page.pending.length, 2);
+    await finish(page.pending[1], 'current-result');
+    await finish(page.pending[0], 'obsolete-page');
+    assert.match(page.container.textContent, /current-result/, 'The refreshed first page remains selected');
+    assert.doesNotMatch(page.container.textContent, /obsolete-page/);
+    assert.deepEqual(page.failures, []);
+  } finally { await page.unmount(); }
+});
+
+test(`${theme}: unmount invalidates pending component error notifications`, async () => {
+  const page = await controlledPage(false);
+  await page.search('pending');
+  await page.unmount();
+  await finish(page.pending[0], '', { success: false, message: 'unmounted failure' });
+  assert.deepEqual(page.failures, []);
+});
+
+
+for (const outcome of ['success', 'server failure', 'rejection']) {
+  test(`${theme}: superseded same-kind ${outcome} cannot clear current loading`, async () => {
+    const page = await controlledPage(false);
+    try {
+      assert.equal(page.busy(), false, 'The initial request has settled');
+      if (theme === 'air') {
+        await page.sortBy(labels.latency);
+        await page.choose('.logs-select .semi-select-selection', '消费');
+      } else {
+        await page.refresh();
+        await page.refresh();
+      }
+      assert.equal(page.pending.length, 2);
+      assert.equal(page.busy(), true);
+      if (outcome === 'rejection') page.pending[0].reject(new Error('obsolete same-kind failure'));
+      else page.pending[0].resolve(outcome === 'success'
+        ? { success: true, data: logRows('obsolete-result'), total: 25 }
+        : { success: false, message: 'obsolete same-kind failure' });
+      await settle();
+      page.assertRendered();
+      assert.equal(page.busy(), true, 'Only the current request may clear loading');
+      assert.deepEqual(page.failures, []);
+      await finish(page.pending[1], 'current-result');
+      page.assertRendered();
+      assert.equal(page.busy(), false);
+      assert.match(page.container.textContent, /current-result/);
+    } finally { await page.unmount(); }
+  });
+}
+
+
+test(`${theme}: effect replay still commits the current initial listing`, async () => {
+  const page = await mountPage({ admin: false, strict: true });
+  try {
+    page.assertRendered();
+    assert.match(page.container.textContent, /row-/);
+    assert.deepEqual(page.failures, []);
+  } finally { await page.unmount(); }
+});
+
+if (theme === 'berry') {
+  test('berry: cached-page navigation supersedes an uncached page request', async () => {
+    const page = await controlledPage(false);
+    try {
+      await page.click(page.container.querySelector('button[aria-label="Go to next page"]'));
+      await finish(page.pending[0], 'second-page');
+      assert.match(page.container.textContent, /second-page/);
+      await page.click(page.container.querySelector('button[aria-label="Go to next page"]'));
+      assert.equal(page.pending.length, 2);
+      assert.equal(page.busy(), true);
+      await page.click(page.container.querySelector('button[aria-label="Go to previous page"]'));
+      assert.match(page.container.textContent, /initial/, 'Cached navigation displays the selected page immediately');
+      await finish(page.pending[1], 'obsolete-third-page');
+      page.assertRendered();
+      assert.match(page.container.textContent, /initial/, 'An older request cannot move away from the cached selection');
+      assert.doesNotMatch(page.container.textContent, /obsolete-third-page/);
+      assert.equal(page.busy(), false);
+      assert.deepEqual(page.failures, []);
+    } finally { await page.unmount(); }
+  });
+}
+
+{
+  test(`${theme}: old cached pages cannot cancel a pending new sort`, async () => {
+    const page = await controlledPage(false);
+    try {
+      if (theme === 'air') await page.goToPage(2);
+      else await page.click(page.container.querySelector('button[aria-label="Go to next page"]'));
+      await finish(page.pending[0], 'old-second-page');
+      await page.sortBy(labels.quota);
+      assert.equal(page.pending.length, 2);
+      if (theme === 'air') await page.goToPage(2);
+      else await page.click(page.container.querySelector('button[aria-label="Go to next page"]'));
+      await finish(page.pending[1], 'new-sorted-result');
+      page.assertRendered();
+      assert.match(page.container.textContent, /new-sorted-result/, 'Old-query cache cannot supersede a new query');
+      assert.doesNotMatch(page.container.textContent, /old-second-page/);
+      assert.equal(page.busy(), false);
+      assert.deepEqual(page.failures, []);
+    } finally { await page.unmount(); }
   });
 }

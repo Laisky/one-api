@@ -1,10 +1,11 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { React, createTransport, defaultExport, loadModule, mount, theme } = require('./legacy-react-harness.cjs');
+const { React, createTransport, defaultExport, loadModule, mount, settle, theme } = require('./legacy-react-harness.cjs');
 
 // These tests mount real Air pages with the real Semi UI library and assert
-// what a user sees or what the page sends. Only transport, toast and unrelated
-// child modules are replaced.
+// what a user sees or what the page sends. Transport, toast, auth/copy/timestamp
+// helpers, selected quota formatting, and unrelated child modules are replaced.
+// Dashboard FakeChart instances qualify data delivery, not canvas rendering.
 
 assert.equal(theme, 'air', 'This suite covers Air pages');
 
@@ -122,3 +123,102 @@ for (const [label, days] of [['今天', 0], ['最近7天', 6], ['最近30天', 2
     }
   });
 }
+
+
+/** controlledDashboard mounts the real dashboard with deferred quota requests and records chart specifications. */
+async function controlledDashboard(strict = false) {
+  const failures = [];
+  const pending = [];
+  const charts = [];
+  const { API } = createTransport((request, count) => count === 1
+    ? { success: true, data: [] }
+    : new Promise((resolve, reject) => pending.push({ resolve, reject })));
+  /** FakeChart records data delivered to the renderer without qualifying real canvas rendering. */
+  function FakeChart() {
+    const chart = {
+      specs: [],
+      /** renderAsync replaces canvas rendering with an already completed operation. */
+      renderAsync: async () => {},
+      /** updateSpec snapshots the supplied chart specification for ownership assertions. */
+      updateSpec: spec => chart.specs.push(JSON.parse(JSON.stringify(spec))),
+      /** reLayout replaces layout, which jsdom does not implement. */
+      reLayout: () => {},
+    };
+    charts.push(chart);
+    return chart;
+  }
+  const Detail = loadModule('web/air/src/pages/Detail/index.js', {
+    'web/air/src/helpers/index.js': helpers(API, failures),
+    'web/air/src/helpers/utils.js': { showError: error => failures.push(error) },
+    '@visactor/vchart': defaultExport(FakeChart),
+  }).default;
+  const element = React.createElement(Detail);
+  const view = await mount(strict ? React.createElement(React.StrictMode, null, element) : element);
+  assert.equal(charts.length, 2, 'The real dashboard initializes both charts');
+  assert.equal(view.container.querySelector('.semi-spin:not(.semi-spin-hidden)'), null, 'The initial request has settled');
+  return { ...view, pending, charts, failures };
+}
+
+/** quotaResult returns identifiable quota data for chart ownership assertions. */
+function quotaResult(model) {
+  return { success: true, data: [{ model_name: model, quota: 100, count: 1, created_at: 1700000000 }] };
+}
+
+test('air: superseded dashboard ranges cannot overwrite newer chart data', async () => {
+  const page = await controlledDashboard();
+  try {
+    await page.click(page.textElement('最近7天').closest('button'));
+    await page.click(page.textElement('今天').closest('button'));
+    assert.equal(page.pending.length, 2);
+    page.pending[1].resolve(quotaResult('current-model'));
+    await settle();
+    for (const chart of page.charts) assert.match(JSON.stringify(chart.specs.at(-1)), /current-model/);
+    const counts = page.charts.map(chart => chart.specs.length);
+    page.pending[0].resolve(quotaResult('obsolete-model'));
+    await settle();
+    assert.deepEqual(page.charts.map(chart => chart.specs.length), counts, 'An obsolete range must not redraw either chart');
+    assert.deepEqual(page.failures, []);
+  } finally { await page.unmount(); }
+});
+
+for (const outcome of ['success', 'server failure', 'rejection']) {
+  test(`air: superseded dashboard ${outcome} preserves current loading and component errors`, async () => {
+    const page = await controlledDashboard();
+    try {
+      await page.click(page.textElement('最近7天').closest('button'));
+      await page.click(page.textElement('今天').closest('button'));
+      assert.equal(page.pending.length, 2);
+      assert.ok(page.container.querySelector('.semi-spin:not(.semi-spin-hidden)'), 'The controlled current request displays loading');
+      if (outcome === 'rejection') page.pending[0].reject(new Error('obsolete dashboard failure'));
+      else page.pending[0].resolve(outcome === 'success' ? quotaResult('obsolete-model') : { success: false, message: 'obsolete dashboard failure' });
+      await settle();
+      page.assertRendered();
+      assert.ok(page.container.querySelector('.semi-spin:not(.semi-spin-hidden)'), 'The newer request remains loading');
+      assert.deepEqual(page.failures, []);
+      page.pending[1].resolve(quotaResult('current-model'));
+      await settle();
+      assert.equal(page.container.querySelector('.semi-spin:not(.semi-spin-hidden)'), null);
+    } finally { await page.unmount(); }
+  });
+}
+
+test('air: unmount invalidates pending dashboard chart updates', async () => {
+  const page = await controlledDashboard();
+  await page.click(page.textElement('今天').closest('button'));
+  await page.unmount();
+  const counts = page.charts.map(chart => chart.specs.length);
+  page.pending[0].resolve(quotaResult('unmounted-model'));
+  await settle();
+  assert.deepEqual(page.charts.map(chart => chart.specs.length), counts);
+  assert.deepEqual(page.failures, []);
+});
+
+
+test('air: effect replay preserves the initialized dashboard request', async () => {
+  const page = await controlledDashboard(true);
+  try {
+    page.assertRendered();
+    assert.ok(page.charts.every(chart => chart.specs.length === 1), 'Both initialized charts receive initial data exactly once');
+    assert.deepEqual(page.failures, []);
+  } finally { await page.unmount(); }
+});

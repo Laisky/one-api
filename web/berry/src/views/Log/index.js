@@ -1,3 +1,4 @@
+import { createLatestRequest } from '../../../../legacy/latest-request.mjs';
 import { showError as reportUIError } from '../../utils/common';
 import { useState, useEffect } from 'react';
 import { showError, renderQuota } from 'utils/common';
@@ -55,9 +56,12 @@ export default function Log() {
     type: 0,
     channel: ''
   };
+  const [logRequests] = useState(createLatestRequest);
+  useEffect(logRequests.mount, [logRequests]);
   const [logs, setLogs] = useState([]);
   const [activePage, setActivePage] = useState(0);
   const [searching, setSearching] = useState(false);
+  const [loadingPage, setLoadingPage] = useState(false);
   const [searchKeyword, setSearchKeyword] = useState(originalKeyword);
   const [initPage, setInitPage] = useState(true);
   const [stat, setStat] = useState({ quota: 0 });
@@ -82,14 +86,19 @@ export default function Log() {
   //     current form values.
   //   - options.sort: the { sortBy, sortOrder } to request; defaults to the
   //     committed sort.
+  //   - options.sorting: whether this request was initiated by a sort action.
+  //   - options.pagination: whether this request extends the current query cache.
   //
   // A handler that has just changed filters or sort must pass the new values,
   // because state set in the same event is not visible in this closure.
   //
   // Return values: none; errors are surfaced through showError.
-  const loadLogs = async (startIdx, { filters = searchKeyword, sort = { sortBy, sortOrder } } = {}) => {
+  const loadLogs = async (startIdx, { filters = searchKeyword, sort = { sortBy, sortOrder }, sorting = false, pagination = false } = {}) => {
+    const isCurrent = logRequests.begin();
+    setSearching(true);
+    setLoadingPage(pagination);
+    setSortLoading(sorting);
     try {
-      setSearching(true);
       const query = { ...filters };
 
       query.p = startIdx;
@@ -121,6 +130,8 @@ export default function Log() {
         params = query;
       }
       const res = await API.get(url, { params: params });
+      if (!isCurrent()) return;
+      setActivePage(startIdx);
       const { success, message, data } = res.data;
       if (success) {
         if (startIdx === 0) {
@@ -133,19 +144,30 @@ export default function Log() {
       } else {
         showError(message);
       }
+    } catch (error) {
+      if (isCurrent()) throw error;
     } finally {
-      setSearching(false);
+      if (isCurrent()) {
+        setSearching(false);
+        setLoadingPage(false);
+        setSortLoading(false);
+      }
     }
   };
 
+  /** onPaginationChange selects cached pages immediately and lets the current loader commit uncached navigation. */
   const onPaginationChange = (event, activePage) => {
-    (async () => {
-      if (activePage === Math.ceil(logs.length / ITEMS_PER_PAGE)) {
-        // In this case we have to load more data and then append them.
-        await loadLogs(activePage);
-      }
+    // Cached rows belong to the old query until a new search/sort finishes.
+    if (searching && !loadingPage) return;
+    if (activePage === Math.ceil(logs.length / ITEMS_PER_PAGE)) {
+      loadLogs(activePage, { pagination: true }).catch(reportUIError);
+    } else {
+      logRequests.invalidate();
+      setSearching(false);
+      setLoadingPage(false);
+      setSortLoading(false);
       setActivePage(activePage);
-    })();
+    }
   };
 
   /** handleSort applies the sort selected by clicking the supplied column and reloads the first page with that sort. */
@@ -158,19 +180,12 @@ export default function Log() {
     setSortBy(nextSort.sortBy);
     setSortOrder(nextSort.sortOrder);
     setActivePage(0);
-    setSortLoading(true);
-
-    try {
-      await loadLogs(0, { sort: nextSort });
-    } finally {
-      setSortLoading(false);
-    }
+    await loadLogs(0, { sort: nextSort, sorting: true });
   };
 
   const searchLogs = async (event) => {
     event.preventDefault();
     await loadLogs(0);
-    setActivePage(0);
     return;
   };
 
@@ -344,6 +359,7 @@ export default function Log() {
           </TableContainer>
         </PerfectScrollbar>
         <TablePagination
+          disabled={searching && !loadingPage}
           page={activePage}
           component="div"
           count={logs.length + (logs.length % ITEMS_PER_PAGE === 0 ? 1 : 0)}

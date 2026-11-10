@@ -1,3 +1,4 @@
+import { createLatestRequest } from '../../../../legacy/latest-request.mjs';
 import { showError as reportUIError } from '../../helpers/utils';
 import React, {useEffect, useRef, useState} from 'react';
 import {Button, Col, Form, Layout, Row, Spin, AutoComplete} from "@douyinfe/semi-ui";
@@ -13,6 +14,8 @@ import {
 
 const Detail = (props) => {
     const formRef = useRef();
+    const [quotaRequests] = useState(createLatestRequest);
+    useEffect(quotaRequests.mount, [quotaRequests]);
     let now = new Date();
     const [inputs, setInputs] = useState({
         username: '',
@@ -204,6 +207,7 @@ const Detail = (props) => {
     //
     // Return values: none; errors are surfaced through showError.
     const loadQuotaData = async (lineChart, pieChart, range = { start_timestamp, end_timestamp }) => {
+      const isCurrent = quotaRequests.begin();
       try {
           setLoading(true);
 
@@ -216,6 +220,7 @@ const Detail = (props) => {
               url = `/api/data/self/?start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
           }
           const res = await API.get(url);
+          if (!isCurrent()) return;
           const {success, message, data} = res.data;
           if (success) {
               setQuotaData(data);
@@ -241,8 +246,10 @@ const Detail = (props) => {
           } else {
               showError(message);
           }
+      } catch (error) {
+        if (isCurrent()) throw error;
       } finally {
-        setLoading(false);
+        if (isCurrent()) setLoading(false);
       }
     };
 

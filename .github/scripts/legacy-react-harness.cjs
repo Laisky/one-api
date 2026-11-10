@@ -6,8 +6,9 @@ const path = require('node:path');
 
 // legacy-react-harness mounts real Air or Berry application modules in jsdom
 // with the theme's own React and UI library. Tests replace only the modules
-// they name (transport, toasts, unrelated modals), so assertions exercise the
-// real event handlers, state transitions and request builders.
+// they name, including transport, toasts, auth/formatting helpers, unrelated
+// modals/tooltips and dashboard charts. Assertions exercise real page event
+// handlers, state transitions and request builders, not the replaced modules.
 
 const root = path.resolve(__dirname, '../..');
 const theme = process.env.LEGACY_THEME || path.basename(process.cwd());

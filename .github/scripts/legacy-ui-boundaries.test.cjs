@@ -280,6 +280,7 @@ if (theme === 'air') {
       if (name === '@douyinfe/semi-ui') return new Proxy({ Layout: { Header: 'header' } }, { get: (value, key) => value[key] || 'div' });
       if (name.startsWith('@douyinfe/semi-ui/')) return { default: 'div' };
       if (name === '@douyinfe/semi-icons') return { IconRefresh: 'svg' };
+      if (name.endsWith('/latest-request.mjs')) return compileJSX(readSource('web/legacy/latest-request.mjs'));
       if (name.startsWith('.')) return helpers;
       return themeRequire(name);
     }).default;
