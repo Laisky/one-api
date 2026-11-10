@@ -22,7 +22,7 @@ Both have a 1M-token context, 128K ordinary output limit, image/text input,
 text output, always-on adaptive thinking and high default effort. The published
 undated API IDs are `claude-fable-5-2` and `claude-mythos-5-2`.
 
-Standard USD per million tokens for both: **$8 input**, **$40 output**,
+Anthropic standard USD per million tokens for both: **$8 input**, **$40 output**,
 **$0.20 cache read**, **$10 five-minute cache write**, **$16 one-hour cache write**.
 Fast mode doubles input/output rates and Batch discounts them; this change
 does **not** enable special-mode billing. No made-up dated or latest aliases.
@@ -108,3 +108,75 @@ retention and selected endpoint; verify standard and cache rates against the
 current provider contract; replay unchanged tool-loop history; check both
 streaming and unary usage receipts and expected authorization failures. Live
 qualification remains pending and must not be inferred from local test results.
+
+## Release qualification checklist (review C)
+
+Every item below is **pending live operator qualification**. Local fixture tests
+establish gateway behavior only. For each provider/model combination, record the
+operator, UTC observation time, exact gateway commit, account/project/deployment
+identifier (redacted as needed), model ID, endpoint/source region, approved
+routing scope, and a link to access-controlled evidence. Never store credentials,
+full prompts, signed thinking content, or sensitive response payloads in this
+repository or task history.
+
+- [ ] Entitlement: confirm the selected account can invoke the exact model.
+  For Mythos, verify organization/account approval rather than inferring it from
+  model discovery. Check a denied-access control remains denied without a model
+  substitution, alternate endpoint, or automatic retry into another region.
+- [ ] Credentials and authorization: confirm the intended runtime identity,
+  provider-specific authentication and least-privilege invocation permissions.
+  Foundry Mythos requires Entra ID; Google-managed Vertex requires the selected
+  project's IAM/model enablement; Bedrock requires permissions on the selected
+  model/profile. Record identity metadata only, never key/token material.
+- [ ] Retention and consent: have the authorized operator verify current provider
+  terms, exemptions and required sharing/retention settings described above.
+  The gateway must not enable these settings or accept terms as a side effect.
+  Missing consent is a deployment blocker, not a reason to change providers.
+- [ ] Region and routing: verify the source region and actual permitted
+  destination scope of the configured endpoint/profile, including organization
+  policies. A successful global call does not prove single-region residency.
+- [ ] Price contract: verify standard input/output, cache reads, five-minute
+  writes, one-hour writes, tiers and time windows against the selected provider
+  contract. For Vertex, configure the complete verified tariff explicitly;
+  satisfying the configuration validator is not invoice verification.
+- [ ] Token receipts: run separately authorized minimal unary and streaming
+  calls, with ordinary input/output and applicable cache read/write cases.
+  Record redacted request/receipt IDs and numeric usage counters; reconcile
+  upstream counters, gateway token/quota charges, user/token balance changes
+  and cost/log records. Do not substitute text-length estimates for receipts.
+- [ ] Failure accounting: confirm admission rejection sends no upstream request
+  and no charge; after an upstream paid receipt exists, delivery failures retain
+  the receipt and settle exactly once. Test authorization failure, cancellation
+  and streaming termination without silently rerouting or losing accounting.
+- [ ] Conversation compatibility: replay an approved tool loop with unchanged
+  opaque/empty/redacted thinking blocks and model/history binding. A local JSON
+  preservation assertion does not establish provider acceptance of signatures.
+
+Any live calls incur provider usage and require separate authorization. This
+checklist does not authorize purchases, production traffic, credentials,
+consent changes or a release. Keep release readiness unconfirmed until the
+applicable evidence and rollback decision have been reviewed.
+
+## Cross-region routing and residency (review D)
+
+For these two Bedrock models, the default resolver chooses the documented
+**global** inference profile from supported commercial source regions, including
+Canadian and European source regions. The configured client/source region is
+not a promise that processing stays in that region or country. The registered
+US geo profile is not the automatic default. No EU profile, GovCloud-global
+profile or raw in-region invocation is fabricated by this change.
+
+An explicitly configured channel inference-profile ARN takes precedence over
+catalog mapping and the automatic global choice. Administrators with residency
+constraints must provision and verify a suitable supported profile/endpoint and
+its permitted destination set, IAM/SCP policies and model entitlement before
+traffic. An ARN override is routing authority, not evidence that its profile
+meets a residency requirement or is valid in every partition. If no supported
+choice meets the requirement, leave the model disabled; do not fall back to a
+global profile to make a request succeed.
+
+Unsupported raw 5.2 routing fails before SDK invocation. Authorization errors,
+throttling, timeout or malformed payload responses never authorize an automatic
+switch to a different profile, model or geography. Explicit overrides and
+legacy-model routes are covered by behavioral regression tests; provider-side
+geographic guarantees remain an operator/provider qualification responsibility.

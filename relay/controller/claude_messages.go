@@ -155,6 +155,9 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		return openai.ErrorWrapper(errors.New("invalid api type"), "invalid_api_type", http.StatusBadRequest)
 	}
 	adaptorInstance.Init(meta)
+	if pricingErr := validateClaudeRequestPricing(c, meta, adaptorInstance); pricingErr != nil {
+		return pricingErr
+	}
 	convertedRequest, err := adaptorInstance.ConvertClaudeRequest(c, claudeRequest)
 	if err != nil {
 		return wrapConvertRequestError(err)
@@ -230,6 +233,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 	markPreConsumed(c, preConsumedQuota)
 	defer billingAuditSafetyNet(c)
+	defer settleUnforwardedClaudeReservation(c, preConsumedQuota, meta.TokenId)
 
 	provisionalLogId := recordProvisionalLog(c, meta, claudeRequest.Model, preConsumedQuota)
 	c.Set(ctxkey.ProvisionalLogId, provisionalLogId)
