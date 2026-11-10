@@ -54,26 +54,6 @@ function renderStatus(status, model_limits_enabled = false) {
 
 const TokensTable = () => {
 
-  const link_menu = [
-    {
-      node: 'item', key: 'next', name: 'ChatGPT Next Web', onClick: () => {
-        onOpenLink('next').catch(reportUIError);
-      }
-    },
-    { node: 'item', key: 'ama', name: 'AMA 问天', value: 'ama' },
-    {
-      node: 'item', key: 'next-mj', name: 'ChatGPT Web & Midjourney', value: 'next-mj', onClick: () => {
-        onOpenLink('next-mj').catch(reportUIError);
-      }
-    },
-    { node: 'item', key: 'opencat', name: 'OpenCat', value: 'opencat' },
-    {
-      node: 'item', key: 'lobechat', name: 'LobeChat', onClick: () => {
-        onOpenLink('lobechat').catch(reportUIError);
-      }
-    }
-  ];
-
   const columns = [
     {
       title: '名称',
@@ -194,7 +174,7 @@ const TokensTable = () => {
                 },
                 {
                   node: 'item', key: 'lobechat', name: 'LobeChat', onClick: () => {
-                    onOpenLink('lobechat').catch(reportUIError);
+                    onOpenLink('lobechat', record.key).catch(reportUIError);
                   }
                 }
               ]

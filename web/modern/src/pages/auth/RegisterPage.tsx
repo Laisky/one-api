@@ -296,7 +296,7 @@ export function RegisterPage() {
               )}
 
               <div className="text-center text-sm">
-                {t('auth.register.already_have_account')}{' '}
+                <span>{t('auth.register.already_have_account')}</span>{' '}
                 <Link to="/login" className="text-primary hover:underline">
                   {t('auth.register.sign_in')}
                 </Link>

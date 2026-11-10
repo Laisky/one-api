@@ -2,11 +2,12 @@ import PropTypes from 'prop-types';
 import { TableCell, TableHead, TableRow } from '@mui/material';
 
 const LogTableHead = ({ userIsAdmin, sortBy, sortOrder, sortLoading, onSort }) => {
+  /** getSortIcon returns a stable element for the active column's direction, or null for an inactive column. */
   const getSortIcon = (columnKey) => {
     if (columnKey !== sortBy) {
       return null;
     }
-    return sortOrder === 'asc' ? ' ↑' : ' ↓';
+    return <span>{sortOrder === 'asc' ? ' ↑' : ' ↓'}</span>;
   };
 
   return (

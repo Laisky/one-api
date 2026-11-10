@@ -72,7 +72,7 @@ export function LogCursorPager({
         {notice && (
           <span className="flex items-center gap-1 text-xs text-warning-foreground">
             <AlertTriangle className="h-3 w-3" />
-            {t(notice === 'oversized_record' ? 'logs.pagination.oversized_record' : 'logs.pagination.bytes_capped')}
+            <span>{t(notice === 'oversized_record' ? 'logs.pagination.oversized_record' : 'logs.pagination.bytes_capped')}</span>
           </span>
         )}
       </div>

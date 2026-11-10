@@ -4,6 +4,7 @@ import { Command as CommandPrimitive } from 'cmdk';
 import { Search } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { withTextBoundaries } from './text-boundaries';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 
 const Command = React.forwardRef<React.ElementRef<typeof CommandPrimitive>, React.ComponentPropsWithoutRef<typeof CommandPrimitive>>(
@@ -86,10 +87,11 @@ const CommandSeparator = React.forwardRef<
 >(({ className, ...props }, ref) => <CommandPrimitive.Separator ref={ref} className={cn('-mx-1 h-px bg-border', className)} {...props} />);
 CommandSeparator.displayName = CommandPrimitive.Separator.displayName;
 
+/** CommandItem forwards command props and ref with stable boundaries around translatable text children. */
 const CommandItem = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive.Item>,
   React.ComponentPropsWithoutRef<typeof CommandPrimitive.Item>
->(({ className, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => (
   <CommandPrimitive.Item
     ref={ref}
     className={cn(
@@ -97,7 +99,9 @@ const CommandItem = React.forwardRef<
       className
     )}
     {...props}
-  />
+  >
+    {withTextBoundaries(children)}
+  </CommandPrimitive.Item>
 ));
 
 CommandItem.displayName = CommandPrimitive.Item.displayName;

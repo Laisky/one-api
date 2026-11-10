@@ -72,8 +72,8 @@ export function RegistrationPasswordFields() {
                   <li key={rule} className={`flex items-start gap-2 ${satisfied && hasPassword ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'}`}>
                     {satisfied && hasPassword ? <Check className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" /> : <Circle className="mt-0.5 h-3 w-3 shrink-0" aria-hidden="true" />}
                     <span>
-                      <span className="sr-only">{t(satisfied && hasPassword ? 'registration_password.met' : 'registration_password.pending')}: </span>
-                      {t(`registration_password.${rule}`)}
+                      <span className="sr-only">{`${t(satisfied && hasPassword ? 'registration_password.met' : 'registration_password.pending')}: `}</span>
+                      <span>{t(`registration_password.${rule}`)}</span>
                     </span>
                   </li>
                 ))}

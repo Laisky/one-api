@@ -211,7 +211,12 @@ export function LogsPage() {
       setLoading(true);
       try {
         if (navigation === 'first') cursor.reset();
-        const rows = await cursor.fetchPage(navigation);
+        // The explicit size and currency check keep a superseded response from
+        // moving the cursor under the rows a newer request displays.
+        const rows = await cursor.fetchPage(navigation, {
+          pageSize: size,
+          isCurrent: () => sequence === requestSequence.current && scopeRef.current === selectionScope,
+        });
         if (sequence !== requestSequence.current || scopeRef.current !== selectionScope) return;
         if (rows) {
           setLoadedScope(selectionScope);
@@ -325,21 +330,19 @@ export function LogsPage() {
     }
   };
 
+  // The initial load. Later page-size changes are loaded once by
+  // handlePageSizeChange with the explicitly selected size.
   useEffect(() => {
-    if (!mounted.current) {
-      mounted.current = true;
-      // A ?p= deep link is an offset address; it has no keyset equivalent, so
-      // it is honoured only by the route that understands it.
-      if (pageIndex > 0) {
-        load(pageIndex, pageSize);
-      } else {
-        loadPage('first');
-      }
-      return;
+    if (mounted.current) return;
+    mounted.current = true;
+    // A ?p= deep link is an offset address; it has no keyset equivalent, so
+    // it is honoured only by the route that understands it.
+    if (pageIndex > 0) {
+      load(pageIndex, pageSize);
+    } else {
+      loadPage('first');
     }
-    if (searchKeyword.trim()) performSearch();
-    else loadPage('first');
-  }, [pageSize]);
+  }, []);
 
   useEffect(() => {
     if (showStat) {
@@ -372,11 +375,15 @@ export function LogsPage() {
     renderLogTypeBadge,
   });
 
+  /** handlePageChange records the page in the URL and loads it; a page-size change's companion call only updates the URL. */
   const handlePageChange = (newPageIndex: number, newPageSize: number) => {
     setSearchParams((prev) => {
       prev.set('p', (newPageIndex + 1).toString());
       return prev;
     });
+    // The table reports a page-size change as onPageSizeChange followed by
+    // onPageChange(0, newSize); handlePageSizeChange already owns that reload.
+    if (newPageSize !== pageSize) return;
     if (searchKeyword.trim()) {
       performSearch(newPageIndex, newPageSize);
     } else {
@@ -384,6 +391,7 @@ export function LogsPage() {
     }
   };
 
+  /** handlePageSizeChange stores the new size and reloads the first page once with that explicit size. */
   const handlePageSizeChange = (newPageSize: number) => {
     setPageSize(newPageSize);
     if (searchKeyword.trim()) {

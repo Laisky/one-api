@@ -1,6 +1,6 @@
 import { showError as reportUIError } from '../../helpers/utils';
 import React, { useEffect, useState } from 'react';
-import { Card, Input, Table, Typography, Spin, Empty, Collapsible, Tag, Select, Row, Col, Button } from '@douyinfe/semi-ui';
+import { Card, Input, Table, Typography, Spin, Empty, Collapse, Tag, Select, Row, Col, Button } from '@douyinfe/semi-ui';
 import { API, showError } from '../../helpers';
 
 const { Title, Text } = Typography;
@@ -160,8 +160,9 @@ const Models = () => {
         style={{ marginBottom: '16px' }}
         bodyStyle={{ padding: 0 }}
       >
-        <Collapsible>
-          <Collapsible.Panel
+        {/* Each channel starts expanded so search results stay visible; users can collapse it. */}
+        <Collapse defaultActiveKey={channelName}>
+          <Collapse.Panel
             header={
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Title heading={6} style={{ margin: 0 }}>
@@ -181,8 +182,8 @@ const Models = () => {
               size="small"
               bordered
             />
-          </Collapsible.Panel>
-        </Collapsible>
+          </Collapse.Panel>
+        </Collapse>
       </Card>
     );
   };

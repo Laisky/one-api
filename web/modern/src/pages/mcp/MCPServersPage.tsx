@@ -105,16 +105,19 @@ export function MCPServersPage() {
       {
         accessorKey: 'status',
         header: t('mcp.list.columns.status', 'Status'),
+        // The label has its own element: React reuses the outer span when the
+        // status changes and swaps the icon beside it, which a translated bare
+        // text node would break.
         cell: ({ row }) =>
           row.original.status === 1 ? (
             <span className="inline-flex items-center gap-1 text-success">
               <CheckCircle className="h-4 w-4" />
-              {t('mcp.status.enabled', 'Enabled')}
+              <span>{t('mcp.status.enabled', 'Enabled')}</span>
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 text-destructive">
               <XCircle className="h-4 w-4" />
-              {t('mcp.status.disabled', 'Disabled')}
+              <span>{t('mcp.status.disabled', 'Disabled')}</span>
             </span>
           ),
       },

@@ -84,7 +84,7 @@ export const ChannelBasicInfo = ({ form, normalizedChannelType, tr, onTypeChange
                     {selectedType ? (
                       <span className="flex items-center gap-2">
                         <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: selectedColorValue }} />
-                        {selectedType.text}
+                        <span>{selectedType.text}</span>
                       </span>
                     ) : (
                       tr('type.placeholder', 'Select a channel type')

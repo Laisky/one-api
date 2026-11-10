@@ -166,9 +166,11 @@ const ChannelDebugPanel = ({ channelId, channelType, channelName }) => {
                     </Tag>
                     <span style={{ marginLeft: '8px' }}>
                       有模型配置（统一格式）
-                      {migrationStatus.model_configs_count && (
-                        <span> - {migrationStatus.model_configs_count} 个模型</span>
-                      )}
+                      <span>
+                        {migrationStatus.model_configs_count && (
+                          <span> - <span>{migrationStatus.model_configs_count}</span> 个模型</span>
+                        )}
+                      </span>
                     </span>
                   </List.Item>
                   <List.Item>
@@ -177,9 +179,11 @@ const ChannelDebugPanel = ({ channelId, channelType, channelName }) => {
                     </Tag>
                     <span style={{ marginLeft: '8px' }}>
                       有模型比率（遗留）
-                      {migrationStatus.model_ratio_count && (
-                        <span> - {migrationStatus.model_ratio_count} 个模型</span>
-                      )}
+                      <span>
+                        {migrationStatus.model_ratio_count && (
+                          <span> - <span>{migrationStatus.model_ratio_count}</span> 个模型</span>
+                        )}
+                      </span>
                     </span>
                   </List.Item>
                   <List.Item>

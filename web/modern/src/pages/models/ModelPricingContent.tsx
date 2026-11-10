@@ -553,9 +553,7 @@ function MultiplierMatrix({
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b text-muted-foreground">
-            <th className="text-left py-2 pr-3 font-medium">
-              {rowLabel} \ {colLabel}
-            </th>
+            <th className="text-left py-2 pr-3 font-medium">{`${rowLabel} \\ ${colLabel}`}</th>
             {sizes.map((s) => (
               <th key={s} className="text-center py-2 px-2 font-medium font-mono text-xs">
                 {s}

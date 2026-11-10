@@ -49,7 +49,7 @@ describe('LoginPage', () => {
     mockApiGet.mockResolvedValue({
       data: {
         success: true,
-        data: { turnstile_check: false },
+        data: { turnstile_check: false, system_name: 'Test API' },
       },
     } as any);
     mockGetOAuthState.mockReset();
@@ -69,7 +69,9 @@ describe('LoginPage', () => {
 
     // Wait for the brand name to be rendered (it comes from the status) to avoid act warning
     // We use a regex because of the potential space/newline in "Sign In to Test API"
-    expect(await screen.findByText(/Sign In\s+to Test API/i)).toBeInTheDocument();
+    const heading = await screen.findByRole('heading');
+    expect(heading).toHaveTextContent(/Sign In\s+to Test API/i);
+    expect(heading).toHaveAccessibleName(/Sign In\s+to Test API/i);
 
     expect(screen.getByLabelText(/username/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/password/i)).toBeInTheDocument();

@@ -3,12 +3,24 @@ import * as SelectPrimitive from '@radix-ui/react-select';
 import { Check, ChevronDown, ChevronUp } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
+import { withTextBoundaries } from './text-boundaries';
 
 const Select = SelectPrimitive.Root;
 
 const SelectGroup = SelectPrimitive.Group;
 
-const SelectValue = SelectPrimitive.Value;
+/** SelectValue forwards its props and ref while keeping translated placeholders removable as elements. */
+const SelectValue = React.forwardRef<
+  React.ElementRef<typeof SelectPrimitive.Value>,
+  React.ComponentPropsWithoutRef<typeof SelectPrimitive.Value>
+>(function SelectValue({ placeholder, children, ...props }, ref) {
+  return (
+    <SelectPrimitive.Value ref={ref} {...props} placeholder={withTextBoundaries(placeholder)}>
+      {withTextBoundaries(children)}
+    </SelectPrimitive.Value>
+  );
+});
+SelectValue.displayName = SelectPrimitive.Value.displayName;
 
 const SelectTrigger = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Trigger>,
@@ -107,7 +119,10 @@ const SelectItem = React.forwardRef<
         <Check className="h-4 w-4" />
       </SelectPrimitive.ItemIndicator>
     </span>
-    <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+    <SelectPrimitive.ItemText>
+      {/* Radix portals these children into SelectValue; keep a stable wrapper around text that translators may replace. */}
+      {withTextBoundaries(children)}
+    </SelectPrimitive.ItemText>
   </SelectPrimitive.Item>
 ));
 SelectItem.displayName = SelectPrimitive.Item.displayName;

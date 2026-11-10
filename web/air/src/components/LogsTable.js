@@ -1,3 +1,4 @@
+import { createLatestRequest } from '../../../legacy/latest-request.mjs';
 import { showError as reportUIError } from '../helpers/utils';
 import React, { useEffect, useState } from 'react';
 import { API, copy, isAdmin, showError, showSuccess, timestamp2string } from '../helpers';
@@ -33,6 +34,23 @@ function stableHash(value) {
     hash = (hash * 31 + str.charCodeAt(i)) | 0;
   }
   return Math.abs(hash);
+}
+
+/**
+ * nextLogSort returns the sort selected by clicking a sortable log column.
+ *
+ * Parameters:
+ *   - current: the committed sort, as { sortBy, sortOrder }.
+ *   - columnKey: the clicked column.
+ *
+ * Return value: the next { sortBy, sortOrder }. Clicking the active column
+ * toggles its direction; clicking another column sorts it descending.
+ */
+function nextLogSort(current, columnKey) {
+  if (current.sortBy === columnKey) {
+    return { sortBy: columnKey, sortOrder: current.sortOrder === 'asc' ? 'desc' : 'asc' };
+  }
+  return { sortBy: columnKey, sortOrder: 'desc' };
 }
 
 const colors = ['amber', 'blue', 'cyan', 'green', 'grey', 'indigo', 'light-blue', 'lime', 'orange', 'pink', 'purple', 'red', 'teal', 'violet', 'yellow'];
@@ -74,7 +92,8 @@ function renderUseTime(type) {
 }
 
 const LogsTable = () => {
-  const columns = [{
+  /** getColumns builds table columns after state and sort helpers have initialized and returns their definitions. */
+  const getColumns = () => [{
     title: '时间', dataIndex: 'timestamp2string'
   }, {
     title: '渠道',
@@ -190,9 +209,12 @@ const LogsTable = () => {
     }
   }];
 
+  const [logRequests] = useState(createLatestRequest);
+  useEffect(logRequests.mount, [logRequests]);
   const [logs, setLogs] = useState([]);
   const [showStat, setShowStat] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingPage, setLoadingPage] = useState(false);
   const [loadingStat, setLoadingStat] = useState(false);
   const [activePage, setActivePage] = useState(1);
   const [logCount, setLogCount] = useState(ITEMS_PER_PAGE);
@@ -351,23 +373,42 @@ const LogsTable = () => {
     // console.log(logCount);
   };
 
-  const loadLogs = async (startIdx, pageSize, logType = 0) => {
+  // loadLogs fetches one page from the structured log listing.
+  //
+  // Parameters:
+  //   - startIdx: zero-based page index.
+  //   - pageSize: page size.
+  //   - localLogType: the log type to list; defaults to the selected type.
+  //   - sort: the { sortBy, sortOrder } to request; defaults to the committed
+  //     sort. A handler that has just changed the sort must pass the new value,
+  //     because state set in the same event is not visible in this closure.
+  //   - options.sorting: whether this request was initiated by a sort action.
+  //   - options.pagination: whether this request extends the current query cache.
+  //
+  // Return values: none; errors are surfaced through showError.
+  const loadLogs = async (startIdx, pageSize, localLogType = logType, sort = { sortBy, sortOrder }, { sorting = false, pagination = false } = {}) => {
+    const isCurrent = logRequests.begin();
+    setLoading(true);
+    setSearching(false);
+    setSortLoading(sorting);
+    setLoadingPage(pagination);
     try {
-      setLoading(true);
 
       let url = '';
       let localStartTimestamp = Date.parse(start_timestamp) / 1000;
       let localEndTimestamp = Date.parse(end_timestamp) / 1000;
       let sortParams = '';
-      if (sortBy) {
-        sortParams = `&sort_by=${sortBy}&sort_order=${sortOrder}`;
+      if (sort.sortBy) {
+        sortParams = `&sort_by=${sort.sortBy}&sort_order=${sort.sortOrder}`;
       }
+      // Both Go listing handlers read `size`; `page_size` is silently ignored.
       if (isAdminUser) {
-        url = `/api/log/?p=${startIdx}&page_size=${pageSize}&type=${logType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}${sortParams}`;
+        url = `/api/log/?p=${startIdx}&size=${pageSize}&type=${localLogType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}${sortParams}`;
       } else {
-        url = `/api/log/self?p=${startIdx}&page_size=${pageSize}&type=${logType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}${sortParams}`;
+        url = `/api/log/self?p=${startIdx}&size=${pageSize}&type=${localLogType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}${sortParams}`;
       }
       const res = await API.get(url);
+      if (!isCurrent()) return;
       const { success, message, data } = res.data;
       if (success) {
         // Leaving search mode: the rows now come from the structured listing.
@@ -382,8 +423,14 @@ const LogsTable = () => {
       } else {
         showError(message);
       }
+    } catch (error) {
+      if (isCurrent()) throw error;
     } finally {
-      setLoading(false);
+      if (isCurrent()) {
+        setLoading(false);
+        setLoadingPage(false);
+        setSortLoading(false);
+      }
     }
   };
 
@@ -395,17 +442,25 @@ const LogsTable = () => {
   //   - keyword: the non-empty keyword to search with.
   //   - startIdx: zero-based page index.
   //   - size: page size.
+  //   - sort: the { sortBy, sortOrder } to request; defaults to the committed sort.
+  //   - options.sorting: whether this request was initiated by a sort action.
+  //   - options.pagination: whether this request extends the current query cache.
   //
   // Return values: none; errors are surfaced through showError.
-  const loadSearchPage = async (keyword, startIdx, size) => {
+  const loadSearchPage = async (keyword, startIdx, size, sort = { sortBy, sortOrder }, { sorting = false, pagination = false } = {}) => {
+    const isCurrent = logRequests.begin();
     setSearching(true);
+    setLoading(false);
+    setSortLoading(sorting);
+    setLoadingPage(pagination);
     try {
       const url = isAdminUser ? '/api/log/search' : '/api/log/self/search';
       let sortParams = '';
-      if (sortBy) {
-        sortParams = `&sort=${sortBy}&order=${sortOrder}`;
+      if (sort.sortBy) {
+        sortParams = `&sort=${sort.sortBy}&order=${sort.sortOrder}`;
       }
       const res = await API.get(`${url}?keyword=${encodeURIComponent(keyword)}&p=${startIdx}&size=${size}${sortParams}`);
+      if (!isCurrent()) return;
       const { success, message, data, total } = res.data;
       if (success) {
         setActiveSearch(keyword);
@@ -419,23 +474,30 @@ const LogsTable = () => {
       } else {
         showError(message);
       }
+    } catch (error) {
+      if (isCurrent()) throw error;
     } finally {
-      setSearching(false);
+      if (isCurrent()) {
+        setSearching(false);
+        setLoadingPage(false);
+        setSortLoading(false);
+      }
     }
   };
 
   const pageData = logs.slice((activePage - 1) * pageSize, activePage * pageSize);
 
   const handlePageChange = page => {
+    if ((loading || searching) && !loadingPage) return;
     setActivePage(page);
     if (page === Math.ceil(logs.length / pageSize) + 1) {
       // In this case we have to load more data and then append them.
       if (activeSearch !== '') {
-        loadSearchPage(activeSearch, page - 1, pageSize).then(r => {
+        loadSearchPage(activeSearch, page - 1, pageSize, undefined, { pagination: true }).then(r => {
         }).catch(reportUIError);
         return;
       }
-      loadLogs(page - 1, pageSize).then(r => {
+      loadLogs(page - 1, pageSize, logType, undefined, { pagination: true }).then(r => {
       }).catch(reportUIError);
     }
   };
@@ -452,39 +514,33 @@ const LogsTable = () => {
       });
   };
 
+  /** handleSort applies the sort selected by clicking the supplied column and reloads the first page with that sort. */
   const handleSort = async (columnKey) => {
     // Prevent multiple sort requests
     if (sortLoading) return;
 
-    if (sortBy === columnKey) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(columnKey);
-      setSortOrder('desc');
-    }
+    // The request must use the selected sort, not the previous render's sort.
+    const nextSort = nextLogSort({ sortBy, sortOrder }, columnKey);
+    setSortBy(nextSort.sortBy);
+    setSortOrder(nextSort.sortOrder);
     setActivePage(1);
-    setSortLoading(true);
-
-    try {
-      if (activeSearch !== '') {
-        await loadSearchPage(activeSearch, 0, pageSize);
-      } else {
-        await loadLogs(0, pageSize, logType);
-      }
-    } finally {
-      setSortLoading(false);
+    if (activeSearch !== '') {
+      await loadSearchPage(activeSearch, 0, pageSize, nextSort, { sorting: true });
+    } else {
+      await loadLogs(0, pageSize, logType, nextSort, { sorting: true });
     }
   };
 
+  /** getSortIcon returns a stable element for the active column's direction, or null for an inactive column. */
   const getSortIcon = (columnKey) => {
     if (columnKey !== sortBy) {
       return null;
     }
-    return sortOrder === 'asc' ? ' ↑' : ' ↓';
+    return <span>{sortOrder === 'asc' ? ' ↑' : ' ↓'}</span>;
   };
 
-  const refresh = async (localLogType) => {
-    // setLoading(true);
+  /** refresh reloads the first listing page for the supplied log type, defaulting to the selected type. */
+  const refresh = async (localLogType = logType) => {
     setActivePage(1);
     await loadLogs(0, pageSize, localLogType);
   };
@@ -524,13 +580,12 @@ const LogsTable = () => {
   // every log, regular users only their own.
   const searchLogs = async () => {
     const keyword = searchKeyword.trim();
+    setActivePage(1);
     if (keyword === '') {
       // if keyword is blank, load logs instead.
       await loadLogs(0, pageSize, logType);
-      setActivePage(1);
       return;
     }
-    setActivePage(1);
     await loadSearchPage(keyword, 0, pageSize);
   };
 
@@ -586,8 +641,9 @@ const LogsTable = () => {
             <Form.Input field="channel" label="渠道 UUID" style={{ width: 176 }} value={channel}
               placeholder="可选，渠道 UUID" name="channel" disabled={keywordActive}
               onChange={value => handleInputChange(value, 'channel')} />
-            <Form.Field field="username" label="用户名称" style={{ width: 176 }}>
+            <Form.Slot label="用户名称">
               <AutoComplete
+                style={{ width: 176 }}
                 data={userOptions}
                 value={username}
                 placeholder="搜索用户名称"
@@ -608,7 +664,7 @@ const LogsTable = () => {
                   </div>
                 )}
               />
-            </Form.Field>
+            </Form.Slot>
           </>}
           <Form.Input field="search_keyword" label="关键字" style={{ width: 272 }} value={searchKeyword}
             placeholder="按 UUID 或详情搜索 ..."
@@ -620,7 +676,7 @@ const LogsTable = () => {
             }} />
           <Form.Section>
             <Button label="查询" type="primary" htmlType="submit" className="btn-margin-right"
-              onClick={(...uiArgs) => refresh(...uiArgs).catch(reportUIError)} loading={loading} disabled={keywordActive}>查询</Button>
+              onClick={() => refresh().catch(reportUIError)} loading={loading} disabled={keywordActive}>查询</Button>
             <Button label="搜索" type="tertiary" className="btn-margin-right"
               onClick={() => {
                 searchLogs().then().catch(reportUIError);
@@ -631,13 +687,14 @@ const LogsTable = () => {
       <Table
         className="logs-table"
         style={{ marginTop: 5 }}
-        columns={columns}
+        columns={getColumns()}
         dataSource={pageData}
         onRow={(record) => ({
           onClick: () => handleRowClick(record),
           style: { cursor: 'pointer' }
         })}
         pagination={{
+          disabled: (loading || searching) && !loadingPage,
           currentPage: activePage,
           pageSize: pageSize,
           total: logCount,

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -216,5 +216,94 @@ describe('LogsPage keyset pagination', () => {
     // An unavailable count is stated as unavailable, never rendered as zero.
     expect(await screen.findByText(/showing 1–1; the total is not available/i)).toBeInTheDocument();
     expect(screen.queryByText(/of 0$/)).not.toBeInTheDocument();
+  });
+
+  it('changes the cursor page size with one request and continues from that page', async () => {
+    window.localStorage.clear();
+    const user = userEvent.setup();
+    const urls: string[] = [];
+    const pending: Array<{ url: string; resolve: (value: unknown) => void }> = [];
+    const count = { value: 120, quality: 'exact', as_of: 1767225540, cached: false };
+    (api.get as any).mockImplementation((url: string) => {
+      urls.push(url);
+      if (!url.startsWith('/api/log/cursor')) return Promise.resolve({ data: { success: true, data: [], total: 0 } });
+      if (url.includes('cursor=')) return Promise.resolve(cursorPage([90], '', count));
+      if (urls.filter((entry) => entry.startsWith('/api/log/cursor')).length === 1) return Promise.resolve(cursorPage([1, 2], 'lc1.initial', count));
+      return new Promise((resolve) => pending.push({ url, resolve }));
+    });
+
+    render(
+      <MemoryRouter>
+        <LogsPage />
+      </MemoryRouter>
+    );
+    expect(await screen.findByText(/showing 1–2 of 120/i)).toBeInTheDocument();
+    expect(urls.filter((url) => url.startsWith('/api/log/cursor'))).toHaveLength(1);
+    expect(urls[0]).toContain('size=10');
+
+    await user.click(screen.getByRole('combobox', { name: 'Rows per page' }));
+    await user.click(await screen.findByRole('option', { name: '50 / page' }));
+    await waitFor(() => expect(pending.length).toBeGreaterThan(0));
+    // Give any follow-up effect the chance to issue a duplicate request.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const sizeRequests = pending.map((entry) => entry.url);
+
+    // Resolve the newest request first so a superseded response arrives last.
+    await act(async () => {
+      for (let index = pending.length - 1; index >= 0; index--) {
+        const body = cursorPage([10 + index, 11 + index], `lc1.req${index}`, count);
+        body.data.data = body.data.data.map((row) => ({ ...row, token_name: `served-by-req${index}` }));
+        pending[index].resolve(body);
+      }
+    });
+    const newest = sizeRequests.length - 1;
+    expect((await screen.findAllByText(`served-by-req${newest}`)).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole('button', { name: /next/i }));
+    await waitFor(() => expect(urls.some((url) => url.includes('cursor='))).toBe(true));
+    const nextUrl = urls.find((url) => url.includes('cursor=')) ?? '';
+    expect(nextUrl).toContain(`cursor=lc1.req${newest}`);
+    expect(nextUrl).toContain('size=50');
+
+    // Exactly one request carries the page-size change, and it uses the new size.
+    expect(sizeRequests).toHaveLength(1);
+    expect(sizeRequests[0]).toContain('size=50');
+  });
+
+  it('changes the legacy page size with exactly one request', async () => {
+    window.localStorage.clear();
+    const user = userEvent.setup();
+    const urls: string[] = [];
+    (api.get as any).mockImplementation((url: string) => {
+      urls.push(url);
+      if (url.startsWith('/api/log/cursor')) {
+        return Promise.resolve({ data: { success: false, message: 'log cursor pagination is disabled', code: 'capability_disabled' } });
+      }
+      return Promise.resolve({ data: { success: true, data: [{ ...logRow(9, 1767225540), token_name: 'served-by-legacy' }], total: 120 } });
+    });
+
+    render(
+      <MemoryRouter>
+        <LogsPage />
+      </MemoryRouter>
+    );
+    await waitFor(() => expect(urls.some((url) => url.startsWith('/api/log/?'))).toBe(true));
+    expect(await screen.findByText('served-by-legacy')).toBeInTheDocument();
+    const before = urls.length;
+
+    await user.click(screen.getByRole('combobox', { name: 'Rows per page:' }));
+    await user.click(await screen.findByRole('option', { name: '50' }));
+    await waitFor(() => expect(urls.length).toBeGreaterThan(before));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const sizeRequests = urls.slice(before);
+    expect(sizeRequests).toHaveLength(1);
+    expect(sizeRequests[0]).toMatch(/^\/api\/log\/\?/);
+    expect(sizeRequests[0]).toContain('p=0');
+    expect(sizeRequests[0]).toContain('size=50');
   });
 });

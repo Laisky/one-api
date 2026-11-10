@@ -41,6 +41,19 @@ export interface UseLogCursorPaginationOptions {
   onRestart?: (code: string) => void;
 }
 
+/** LogCursorFetchOptions carries per-request values a caller knows before its state commits. */
+export interface LogCursorFetchOptions {
+  /** pageSize overrides the hook's page size, for a request issued before a new size commits. */
+  pageSize?: number;
+  /**
+   * isCurrent reports whether the caller still wants this request's result. A
+   * request that is no longer current commits no traversal state and resolves
+   * to null, so an out-of-order response cannot move the cursor under the rows
+   * the caller is displaying.
+   */
+  isCurrent?: () => boolean;
+}
+
 /** UseLogCursorPaginationResult is the hook's public surface. */
 export interface UseLogCursorPaginationResult<TRow> {
   /** supported is false once this server has proven it has no cursor capability. */
@@ -54,8 +67,12 @@ export interface UseLogCursorPaginationResult<TRow> {
   notice: LogCursorNotice;
   /** reset returns to the first page; call whenever the query changes. */
   reset: () => void;
-  /** fetchPage returns the rows for the requested move, or null to fall back. */
-  fetchPage: (navigation: LogCursorNavigation) => Promise<TRow[] | null>;
+  /**
+   * fetchPage returns the rows for the requested move, or null when the caller
+   * must fall back to the legacy route or the request was superseded (see
+   * LogCursorFetchOptions.isCurrent).
+   */
+  fetchPage: (navigation: LogCursorNavigation, options?: LogCursorFetchOptions) => Promise<TRow[] | null>;
 }
 
 /**
@@ -93,8 +110,11 @@ export function useLogCursorPagination<TRow>(options: UseLogCursorPaginationOpti
   }, []);
 
   const fetchPage = useCallback(
-    async (navigation: LogCursorNavigation): Promise<TRow[] | null> => {
+    async (navigation: LogCursorNavigation, fetchOptions: LogCursorFetchOptions = {}): Promise<TRow[] | null> => {
       if (!supported) return null;
+      const requestPageSize = fetchOptions.pageSize ?? pageSize;
+      /** superseded reports that the caller has issued a newer request, so this one must commit nothing. */
+      const superseded = () => fetchOptions.isCurrent?.() === false;
 
       let trail = trailRef.current;
       switch (navigation) {
@@ -117,7 +137,7 @@ export function useLogCursorPagination<TRow>(options: UseLogCursorPaginationOpti
       for (let attempt = 0; attempt < 2; attempt++) {
         const params = buildLogCursorQuery({
           filters,
-          pageSize,
+          pageSize: requestPageSize,
           cursor: currentLogCursor(trail),
           isAdminOrRoot,
           toUnixSeconds,
@@ -128,11 +148,13 @@ export function useLogCursorPagination<TRow>(options: UseLogCursorPaginationOpti
           const response = await get(`${logCursorPath(isAdminOrRoot)}?${params}`);
           body = response?.data;
         } catch {
+          if (superseded()) return null;
           // A transport or status failure is not proof the capability is
           // missing, but it is proof this page cannot be served by it now.
           setSupported(false);
           return null;
         }
+        if (superseded()) return null;
 
         const outcome = parseLogCursorResponse<TRow>(body);
         if (outcome.kind === 'unsupported') {

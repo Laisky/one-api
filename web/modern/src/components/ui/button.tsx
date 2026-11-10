@@ -1,6 +1,7 @@
 import * as React from 'react';
 import { Slot } from '@radix-ui/react-slot';
 import { cn } from '@/lib/utils';
+import { withTextBoundaries } from './text-boundaries';
 
 type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'default' | 'outline' | 'destructive' | 'ghost' | 'secondary';
@@ -8,8 +9,9 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   asChild?: boolean;
 };
 
+/** Button renders the supplied action props and ref with stable boundaries around translatable text children. */
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant = 'default', size = 'md', asChild = false, ...props }, ref) => {
+  ({ className, children, variant = 'default', size = 'md', asChild = false, ...props }, ref) => {
     const base =
       'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
     const variants: Record<string, string> = {
@@ -29,7 +31,11 @@ export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 
     const Comp = asChild ? Slot : 'button';
 
-    return <Comp ref={ref} className={cn(base, variants[variant], sizes[size], className)} {...props} />;
+    return (
+      <Comp ref={ref} className={cn(base, variants[variant], sizes[size], className)} {...props}>
+        {withTextBoundaries(children)}
+      </Comp>
+    );
   }
 );
 Button.displayName = 'Button';

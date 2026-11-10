@@ -3,10 +3,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { withTextBoundaries } from '@/components/ui/text-boundaries';
 import { Edit2, Image as ImageIcon, X } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { Trans, useTranslation } from 'react-i18next';
 
+/** EditMessageDialogProps describes editable message content, attachments, role and save or close callbacks. */
 interface EditMessageDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -16,6 +18,7 @@ interface EditMessageDialogProps {
   messageRole: 'user' | 'assistant' | 'system' | 'error';
 }
 
+/** EditMessageDialog renders the supplied message editor and saves edited text and attachments through its callbacks. */
 export function EditMessageDialog({ isOpen, onClose, onSave, currentContent, originalContent, messageRole }: EditMessageDialogProps) {
   const { t } = useTranslation();
   const [editedContent, setEditedContent] = useState(currentContent);
@@ -162,11 +165,11 @@ export function EditMessageDialog({ isOpen, onClose, onSave, currentContent, ori
               </Label>
               <div className="flex items-center gap-1 sm:gap-2 text-xs flex-shrink-0 flex-wrap">
                 <span className="text-muted-foreground">
-                  {editedContent.length} {t('playground.edit.stats.chars')}
+                  {withTextBoundaries([editedContent.length, ' ', t('playground.edit.stats.chars')])}
                 </span>
                 <span className="text-muted-foreground">•</span>
                 <span className="text-muted-foreground">
-                  {editedContent.trim() ? editedContent.trim().split(/\s+/).length : 0} {t('playground.edit.stats.words')}
+                  {withTextBoundaries([editedContent.trim() ? editedContent.trim().split(/\s+/).length : 0, ' ', t('playground.edit.stats.words')])}
                 </span>
                 {hasChanges && (
                   <span className="flex items-center gap-1 text-warning">
