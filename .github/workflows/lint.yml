@@ -56,6 +56,9 @@ jobs:
           persist-credentials: false
       - name: Validate workflow contracts and test orchestration
         run: |
+          # Execute remote-deployment behavioral tests with the target's actual shell.
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends zsh
           python3 -m pip install --disable-pip-version-check 'PyYAML==6.0.3'
           python3 .github/scripts/test_workflows.py
           python3 scripts/test_qualify_native_arm64.py
