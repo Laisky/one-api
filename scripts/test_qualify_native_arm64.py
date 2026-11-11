@@ -28,12 +28,13 @@ class NativeQualificationTests(unittest.TestCase):
     def test_native_architecture_and_compiler(self):
         """test_native_architecture_and_compiler rejects foreign hosts, daemons or compilers."""
         go = {"GOARCH": "arm64", "GOHOSTARCH": "arm64", "GOOS": "linux",
-              "GOHOSTOS": "linux", "GOVERSION": "go1.27.3"}
+              "GOHOSTOS": "linux", "GOVERSION": "go1.27.4"}
         native.assert_native("aarch64", "arm64", go)
         for host, docker, compiler in (("x86_64", "arm64", go), ("arm64", "amd64", go),
                 ("arm64", "arm64", dict(go, GOHOSTARCH="amd64")),
                 ("arm64", "arm64", dict(go, GOVERSION="go1.26.0")),
-                ("arm64", "arm64", dict(go, GOVERSION="go1.27.2"))):
+                ("arm64", "arm64", dict(go, GOVERSION="go1.27.2")),
+                ("arm64", "arm64", dict(go, GOVERSION="go1.27.3"))):
             with self.subTest(host=host, docker=docker), self.assertRaises(RuntimeError):
                 native.assert_native(host, docker, compiler)
 
@@ -331,9 +332,9 @@ class NativeQualificationTests(unittest.TestCase):
 
     def test_application_compiler_is_bound_to_actual_extracted_metadata(self):
         """test_application_compiler_is_bound_to_actual_extracted_metadata rejects stale or missing build data."""
-        native.assert_application_compiler("/fixture/one-api: go1.27.3\n\tpath github.com/Laisky/one-api\n")
-        for metadata in ("/fixture/one-api: go1.27.2\n", "not a Go executable\n",
-                         "/fixture/one-api: go1.27.30\n", "stale\n/fixture/one-api: go1.27.3\n"):
+        native.assert_application_compiler("/fixture/one-api: go1.27.4\n\tpath github.com/Laisky/one-api\n")
+        for metadata in ("/fixture/one-api: go1.27.3\n", "/fixture/one-api: go1.27.2\n", "not a Go executable\n",
+                         "/fixture/one-api: go1.27.40\n", "stale\n/fixture/one-api: go1.27.4\n"):
             with self.subTest(metadata=metadata), self.assertRaises(RuntimeError):
                 native.assert_application_compiler(metadata)
 
@@ -428,7 +429,7 @@ class NativeQualificationTests(unittest.TestCase):
     def test_explicit_amd64_native_profile(self):
         """test_explicit_amd64_native_profile rejects each mixed host, daemon and compiler field."""
         go = {"GOARCH": "amd64", "GOHOSTARCH": "amd64", "GOOS": "linux",
-              "GOHOSTOS": "linux", "GOVERSION": "go1.27.3"}
+              "GOHOSTOS": "linux", "GOVERSION": "go1.27.4"}
         native.assert_native("x86_64", "amd64", go, "amd64")
         native.assert_native("amd64", "x86_64", go, "amd64")
         with self.assertRaises(RuntimeError):
@@ -517,7 +518,7 @@ class NativeQualificationTests(unittest.TestCase):
                     calls.append(argv)
                     if argv[0] == "go":
                         return json.dumps(dict(GOARCH="amd64", GOHOSTARCH="amd64", GOOS="linux",
-                                               GOHOSTOS="linux", GOVERSION="go1.27.3"))
+                                               GOHOSTOS="linux", GOVERSION="go1.27.4"))
                     if argv[1] == "info":
                         return json.dumps(dict(Architecture=daemon, DockerRootDir=temporary, NCPU=2, MemTotal=4*native.GIB))
                     return "Driver: docker\n"

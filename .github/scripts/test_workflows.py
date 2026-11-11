@@ -97,12 +97,12 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual({name for name, steps in setups.items() if steps}, expected)
         for name in expected:
             self.assertEqual(len(setups[name]), 1, name)
-            wanted = {"go-version": "1.27.3"}
+            wanted = {"go-version": "1.27.4"}
             if name in {"native_arm64_images", "native_amd64_images"}:
                 wanted["cache"] = "false"
             self.assertEqual(setups[name][0]["with"], wanted, name)
-        self.assertRegex((ROOT / "go.mod").read_text(), r"(?m)^go 1\.27\.3$")
-        self.assertIn("ARG GO_IMAGE=golang:1.27.3-bookworm", (ROOT / "Dockerfile").read_text())
+        self.assertRegex((ROOT / "go.mod").read_text(), r"(?m)^go 1\.27\.4$")
+        self.assertIn("ARG GO_IMAGE=golang:1.27.4-bookworm", (ROOT / "Dockerfile").read_text())
 
     def test_go_shards_preserve_fresh_race_coverage_and_complete_inventory(self) -> None:
         """test_go_shards_preserve_fresh_race_coverage_and_complete_inventory protects selection."""
@@ -246,7 +246,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_delivery_uses_the_qualified_dockerfile_inputs(self) -> None:
         """test_delivery_uses_the_qualified_dockerfile_inputs rejects source or image overrides in both builds."""
-        defaults = read_image_inputs((ROOT/"Dockerfile").read_text(), "1.27.3")
+        defaults = read_image_inputs((ROOT/"Dockerfile").read_text(), "1.27.4")
         def effective(arguments):
             """effective applies Docker build arguments to the real canonical defaults."""
             result = dict(defaults)

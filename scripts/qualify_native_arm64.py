@@ -24,7 +24,7 @@ ORIGINAL = "f4f26683404611c2313594e98e70ff5b36647dfd"
 OWNERSHIP = "ec72e68fc2c30363402e974d267674339159f0c2"
 # Historical measurement provenance stays immutable; live guards derive the target merge base.
 PRODUCTION_BASELINE = "d316af5675f1363ec8d06ed3e92c15ed0d9fa0a4"
-GO_VERSION = "1.27.3"
+GO_VERSION = "1.27.4"
 GIB, LIMIT = 1024**3, 4*1024**2
 TOKENS = {
     "cl100k_base": (1681126, "223921b76ee99bde995b7ff738513eef100fb51d18c93597a113bcffe865b2a7"),

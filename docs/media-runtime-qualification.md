@@ -134,7 +134,7 @@ merged into the candidate without freezing all future checks to one historical
 commit. Combining production changes with packaging requires separate review;
 this check does not approve arbitrary application or compiler modifications.
 The mandatory builder contract checks current instructions and mutation controls,
-rather than comparing every future builder to an old commit. Go 1.27.3 remains
+rather than comparing every future builder to an old commit. Go 1.27.4 remains
 an explicit compiler pin; future compiler updates must change its coordinated
 contracts and repeat native qualification.
 
@@ -159,7 +159,7 @@ manual input.
 The AMD64 job invokes `scripts/qualify_native_arm64.py --architecture amd64`
 against the selected ref’s `github.sha`. Verify that `source-receipt.json` in
 the uploaded evidence has a `head` matching the intended candidate commit. It
-uses native Docker and Go 1.27.3,
+uses native Docker and Go 1.27.4,
 checks actual AMD64 image and ELF identities, and runs the same full production
 build, historical runtime controls, default/custom UID tests, media/billing/
 cancellation comparisons, retained-file checks, and isolated TLS fixtures.
@@ -175,7 +175,7 @@ changes ARM64 selection.
 
 Historical ARM64 evidence remains bound to its recorded source head, toolchain,
 input digests, and image IDs. The earlier successful Go 1.27.2 run at
-`dfd8ff0131a2b1fc284c9b7b926f9337e4013664` does not qualify the current Go 1.27.3
+`dfd8ff0131a2b1fc284c9b7b926f9337e4013664` does not qualify the current Go 1.27.4
 security baseline. Reuse those receipts as historical evidence only; changes to
 production source, dependencies, compiler, or runtime packaging require fresh
 qualification for each architecture. An AMD64 pass cannot supply ARM64 acceptance.
