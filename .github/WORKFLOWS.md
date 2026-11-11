@@ -81,22 +81,39 @@ PR/manual CI cannot publish or deploy. CI completion
 is **not** a deployment gate under this existing policy. The native amd64 build
 exports its own non-blocking cache; amd64/arm64 caches have separate scopes.
 
-The amd64 build exposes its pushed digest, full source-revision label and BuildKit
-provenance. Deployment passes that digest and the full release SHA to
-`python3 /opt/configs/observability/deploy_oneapi.py` on the existing SSH target.
-The configs entrypoint owns the approved local manifest, Compose input ordering,
-secret injection, immutable image selection, configuration-preservation preflight,
-host lock and bounded readiness checks. Install and qualify that entrypoint and
-its private manifest before enabling this workflow on production. A missing or
-unqualified entrypoint must fail closed; there is no legacy deployment fallback.
+The amd64 build publishes `latest` and a short-SHA tag with source-revision labels
+and BuildKit provenance. Deployment runs two ordinary commands on b1: pull
+`ppcelery/one-api:latest`, then use the existing `op run` injection to recreate
+only `oneapi` with Docker Compose. A failed pull or injection stops the job before
+recreation. No host Python deployment helper or private deployment manifest is
+required. The deliberate policy is latest-image deployment, not binding the
+container to the commit that started this particular Actions run.
 
-All delivery branches share `deploy-oneapi-b1` with `cancel-in-progress: false`.
-Builds may still cancel superseded builds; a running remote deployment is not
-cancelled by a newer commit. Pending runs can be superseded and dispatch order is
-not guaranteed, so the entrypoint's host lock remains required.
-SSH has a 20-minute command budget inside the 30-minute job budget. Operators
-must inspect the entrypoint's private deployment receipt after a timeout or lost
-connection before retrying; a failed SSH job alone cannot prove rollback.
+The caller preserves project `vps`, compatibility mode, the existing business
+secret env file and observability interpolation env file. It merges the canonical
+VPS `b1-docker-compose.yml` with `observability/one-api.override.yml`. The latter is
+the relocated, unchanged TLS/logging overlay: do not omit it or use the removed
+`/opt/configs/observability/one-api.override.yml` path. No configuration is dumped
+and no secret values are included in the workflow.
+
+Compose recreates only `oneapi`, without dependencies or orphan removal. Its
+420-second stop allowance covers the application's default 360-second graceful
+shutdown budget. Like the other services, delivery is pull then recreate,
+without a separate health-wait or rollback framework. A successful command
+means Compose started the container, not that live application acceptance ran.
+There is no automatic rollback or image deletion.
+
+Delivery uses `deploy-oneapi-b1` with `cancel-in-progress: false`. Builds may
+cancel superseded builds, but a newer Actions deployment does not interrupt a
+running rollout. The 20-minute SSH command budget remains inside a 30-minute job
+budget. After an SSH timeout or lost connection, inspect the container before
+retrying because the remote command may have already recreated it.
+
+Before enabling the simplified caller, ensure both canonical VPS Compose files
+and the existing `op` bootstrap/env inputs are present on the target. Updating
+this workflow does not sync configuration or repair the retired Python scripts.
+Rollback uses the retained prior image with the same Compose inputs; it requires
+an explicit operator action. PR validation never executes Docker deployment.
 
 The retired provider-specific workflows and temporary frontend security patch
 generators stay removed. No Windows/release job is silently re-enabled.

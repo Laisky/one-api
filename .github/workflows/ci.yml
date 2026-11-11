@@ -42,8 +42,6 @@ jobs:
     if: needs.check_skip.outputs.should_skip != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    outputs:
-      image_digest: ${{ steps.build.outputs.digest }}
     concurrency:
       group: build_latest-${{ github.ref }}
       cancel-in-progress: true
@@ -94,24 +92,27 @@ jobs:
       group: deploy-oneapi-b1
       cancel-in-progress: false
     steps:
-      - name: Deploy immutable release through configs preservation gates
+      - name: Pull and recreate oneapi with Docker Compose
         uses: appleboy/ssh-action@v1.2.5
-        env:
-          RELEASE_SHA: ${{ github.sha }}
-          IMAGE_DIGEST: ${{ needs.build_latest.outputs.image_digest }}
         with:
           host: ${{ secrets.TARGET_HOST }}
           username: ${{ secrets.TARGET_HOST_USERNAME }}
           key: ${{ secrets.TARGET_HOST_SSH_KEY }}
           fingerprint: ${{ secrets.TARGET_HOST_FINGERPRINT }}
           port: ${{ secrets.TARGET_HOST_SSH_PORT }}
-          envs: RELEASE_SHA,IMAGE_DIGEST
           command_timeout: 20m
           script: |
-            set -eu
-            : "${RELEASE_SHA:?Missing release SHA}" "${IMAGE_DIGEST:?Missing pushed image digest}"
-            python3 /opt/configs/observability/deploy_oneapi.py \
-              --release-sha "$RELEASE_SHA" --image-digest "$IMAGE_DIGEST"
+            /usr/bin/zsh -c '
+              source /home/laisky/.zshrc >/dev/null 2>&1 || exit $?
+              set -eu
+              cd /home/laisky/repo/VPS
+              docker pull ppcelery/one-api:latest
+              op run --env-file=one-api/b1.env -- \
+                docker compose --compatibility \
+                  --env-file /opt/configs/observability/.env \
+                  -f b1-docker-compose.yml -f observability/one-api.override.yml \
+                  up -d --no-deps --force-recreate --timeout 420 oneapi
+            '
 
   build_arm64_hash:
     needs: check_skip
