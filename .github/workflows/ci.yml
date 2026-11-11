@@ -106,14 +106,12 @@ jobs:
               source /home/laisky/.zshrc >/dev/null 2>&1 || exit $?
               set -eu
               cd /home/laisky/repo/VPS
-              docker --host unix:///var/run/docker.sock pull ppcelery/one-api:latest
+              docker pull ppcelery/one-api:latest
               op run --env-file=one-api/b1.env -- \
-                docker --host unix:///var/run/docker.sock compose --compatibility \
-                  -p vps --project-directory /home/laisky/repo/VPS \
+                docker compose --compatibility \
                   --env-file /opt/configs/observability/.env \
                   -f b1-docker-compose.yml -f observability/one-api.override.yml \
-                  up -d --no-deps --force-recreate --pull never \
-                  --timeout 420 --wait --wait-timeout 180 oneapi
+                  up -d --no-deps --force-recreate --timeout 420 oneapi
             '
 
   build_arm64_hash:

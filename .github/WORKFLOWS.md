@@ -98,9 +98,10 @@ and no secret values are included in the workflow.
 
 Compose recreates only `oneapi`, without dependencies or orphan removal. Its
 420-second stop allowance covers the application's default 360-second graceful
-shutdown budget. Native `--wait --wait-timeout 180` verifies readiness and returns
-a failure when the service does not become healthy. There is no automatic
-rollback or image deletion; a failed health check needs operator inspection.
+shutdown budget. Like the other services, delivery is pull then recreate,
+without a separate health-wait or rollback framework. A successful command
+means Compose started the container, not that live application acceptance ran.
+There is no automatic rollback or image deletion.
 
 Delivery uses `deploy-oneapi-b1` with `cancel-in-progress: false`. Builds may
 cancel superseded builds, but a newer Actions deployment does not interrupt a

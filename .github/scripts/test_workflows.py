@@ -413,14 +413,11 @@ class WorkflowTests(unittest.TestCase):
                                             })
                     self.assertEqual(result.returncode, status, result.stderr)
                     actual = [json.loads(line) for line in calls.read_text().splitlines()]
-                    expected = [["docker", "--host", "unix:///var/run/docker.sock",
-                                 "pull", "ppcelery/one-api:latest"]]
-                    compose = ["docker", "--host", "unix:///var/run/docker.sock", "compose",
-                               "--compatibility", "-p", "vps", "--project-directory", directory,
+                    expected = [["docker", "pull", "ppcelery/one-api:latest"]]
+                    compose = ["docker", "compose", "--compatibility",
                                "--env-file", "/opt/configs/observability/.env",
                                "-f", "b1-docker-compose.yml", "-f", "observability/one-api.override.yml",
-                               "up", "-d", "--no-deps", "--force-recreate", "--pull", "never",
-                               "--timeout", "420", "--wait", "--wait-timeout", "180", "oneapi"]
+                               "up", "-d", "--no-deps", "--force-recreate", "--timeout", "420", "oneapi"]
                     if failure != "pull":
                         expected.append(["op", "run", "--env-file=one-api/b1.env", "--", *compose])
                     if failure not in ("pull", "op"):
