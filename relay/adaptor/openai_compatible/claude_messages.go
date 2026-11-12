@@ -42,6 +42,11 @@ func convertClaudeRequest(c *gin.Context, request *model.ClaudeRequest, nativeMe
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
+	if nativeMedia {
+		if err := validateClaudeNativeMetadata(request); err != nil {
+			return nil, err
+		}
+	}
 
 	// Convert Claude Messages API request to OpenAI format first
 	openaiRequest := &model.GeneralOpenAIRequest{
@@ -294,6 +299,7 @@ func convertClaudeBlocks(role string, blocks []any, nativeMedia ...bool) []model
 		if len(nativeMedia) > 0 && nativeMedia[0] {
 			if part, recognized, err := model.DecodeClaudeMediaPart(blockMap); recognized && err == nil {
 				msg := ensurePending()
+				recordClaudeNativePart(msg, false, nativeMedia...)
 				msg.contentParts = append(msg.contentParts, part)
 				continue
 			}
@@ -303,7 +309,8 @@ func convertClaudeBlocks(role string, blocks []any, nativeMedia ...bool) []model
 			if text, ok := blockMap["text"].(string); ok {
 				msg := ensurePending()
 				textCopy := text
-				msg.contentParts = append(msg.contentParts, model.MessageContent{Type: model.ContentTypeText, Text: &textCopy})
+				recordClaudeNativePart(msg, false, nativeMedia...)
+				msg.contentParts = append(msg.contentParts, model.MessageContent{Type: model.ContentTypeText, Text: &textCopy, ExtraContent: claudeNativePartMetadata(blockMap, len(nativeMedia) > 0 && nativeMedia[0])})
 			}
 		case "image":
 			if source, exists := blockMap["source"].(map[string]any); exists {
@@ -318,6 +325,7 @@ func convertClaudeBlocks(role string, blocks []any, nativeMedia ...bool) []model
 							if detail, ok := source["detail"].(string); ok {
 								imageURL.Detail = detail
 							}
+							recordClaudeNativePart(msg, false, nativeMedia...)
 							msg.contentParts = append(msg.contentParts, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &imageURL})
 						}
 					}
@@ -327,6 +335,7 @@ func convertClaudeBlocks(role string, blocks []any, nativeMedia ...bool) []model
 						if detail, ok := source["detail"].(string); ok {
 							imageURL.Detail = detail
 						}
+						recordClaudeNativePart(msg, false, nativeMedia...)
 						msg.contentParts = append(msg.contentParts, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &imageURL})
 					}
 				case "file":
@@ -334,6 +343,7 @@ func convertClaudeBlocks(role string, blocks []any, nativeMedia ...bool) []model
 					fileData, _ := source["file_data"].(string)
 					filename, _ := source["filename"].(string)
 					if fileID != "" || fileData != "" {
+						recordClaudeNativePart(msg, false, nativeMedia...)
 						msg.contentParts = append(msg.contentParts, model.MessageContent{
 							Type:     model.ContentTypeFile,
 							FileID:   fileID,
@@ -353,9 +363,11 @@ func convertClaudeBlocks(role string, blocks []any, nativeMedia ...bool) []model
 					argsStr = string(inputBytes)
 				}
 			}
+			recordClaudeNativePart(msg, true, nativeMedia...)
 			msg.message.ToolCalls = append(msg.message.ToolCalls, model.Tool{
-				Id:   id,
-				Type: "function",
+				Id:           id,
+				Type:         "function",
+				ExtraContent: claudeNativePartMetadata(blockMap, len(nativeMedia) > 0 && nativeMedia[0]),
 				Function: &model.Function{
 					Name:      name,
 					Arguments: argsStr,
@@ -371,6 +383,7 @@ func convertClaudeBlocks(role string, blocks []any, nativeMedia ...bool) []model
 					argsStr = string(inputBytes)
 				}
 			}
+			recordClaudeNativePart(msg, true, nativeMedia...)
 			msg.message.ToolCalls = append(msg.message.ToolCalls, model.Tool{
 				Id:   id,
 				Type: "function",
@@ -399,6 +412,7 @@ func convertClaudeBlocks(role string, blocks []any, nativeMedia ...bool) []model
 				msg := ensurePending()
 				if encoded, err := json.Marshal(blockMap); err == nil {
 					text := string(encoded)
+					recordClaudeNativePart(msg, false, nativeMedia...)
 					msg.contentParts = append(msg.contentParts, model.MessageContent{Type: model.ContentTypeText, Text: &text})
 				}
 			}
@@ -429,8 +443,9 @@ func convertClaudeToolResultBlock(block map[string]any) *model.Message {
 	}
 
 	toolMsg := model.Message{
-		Role:       "tool",
-		ToolCallId: toolCallID,
+		Role:              "tool",
+		ToolCallId:        toolCallID,
+		ToolResultIsError: block["is_error"] == true,
 	}
 	if contentStr != "" {
 		toolMsg.Content = contentStr

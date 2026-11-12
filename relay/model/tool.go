@@ -12,10 +12,11 @@ import (
 // It contains metadata about the tool and its associated function or MCP server configuration.
 // This struct supports both function-based tools and Remote MCP server tools.
 type Tool struct {
-	Id       string    `json:"id,omitempty"`       // Unique identifier for the tool
-	Type     string    `json:"type,omitempty"`     // Tool type (e.g., "function", "mcp"), may be empty when splicing claude tools stream messages
-	Function *Function `json:"function,omitempty"` // Function definition (for type="function")
-	Index    *int      `json:"index,omitempty"`    // Index identifies which function call the delta is for in streaming responses
+	ExtraContent *ToolExtraContent `json:"extra_content,omitempty"`
+	Id           string            `json:"id,omitempty"`       // Unique identifier for the tool
+	Type         string            `json:"type,omitempty"`     // Tool type (e.g., "function", "mcp"), may be empty when splicing claude tools stream messages
+	Function     *Function         `json:"function,omitempty"` // Function definition (for type="function")
+	Index        *int              `json:"index,omitempty"`    // Index identifies which function call the delta is for in streaming responses
 	// Web-search specific configuration (type="web_search")
 	SearchContextSize *string           `json:"search_context_size,omitempty"`
 	Filters           *WebSearchFilters `json:"filters,omitempty"`

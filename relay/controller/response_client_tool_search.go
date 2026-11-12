@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
@@ -99,8 +100,8 @@ func validateResponseDiscoveredTools(tools []openai.ResponseAPITool, allowSearch
 // flattened faithfully for a Chat/Claude fallback route.
 // Parameters: request is the Responses request before or after hydration.
 // Returns the catalog, or a 400 error for an unrepresentable catalog.
-func buildResponseFallbackToolCatalog(request *openai.ResponseAPIRequest) (*openai.ResponseFallbackToolCatalog, *relaymodel.ErrorWithStatusCode) {
-	catalog, err := openai.BuildResponseFallbackToolCatalog(request)
+func buildResponseFallbackToolCatalog(request *openai.ResponseAPIRequest, preserveJSONSchema ...bool) (*openai.ResponseFallbackToolCatalog, *relaymodel.ErrorWithStatusCode) {
+	catalog, err := openai.BuildResponseFallbackToolCatalog(request, preserveJSONSchema...)
 	if err != nil {
 		return nil, openai.ErrorWrapper(err, "response_fallback_not_supported", http.StatusBadRequest)
 	}

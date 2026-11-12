@@ -57,6 +57,7 @@ func (h *chatToResponseStreamBridge) toolItem(state *streamToolCallState, status
 		arguments = state.arguments.String()
 	}
 	item := h.toolCatalog.ResponseFallbackToolCallItem(state.id, state.name, arguments)
+	item.ExtraContent = state.extraContent
 	item.Status = status
 	if !final {
 		item.Input = ""

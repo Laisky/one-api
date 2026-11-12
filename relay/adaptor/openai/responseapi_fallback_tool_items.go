@@ -608,7 +608,10 @@ func mergeAssistantTurnText(target *model.Message, msg *model.Message, pendingRe
 	if target == nil || msg == nil {
 		return
 	}
-	if text := msg.StringContent(); text != "" {
+	if responseHasGoogleTextMetadata(target) || responseHasGoogleTextMetadata(msg) {
+		target.Content = append(responseGoogleMessageParts(target), responseGoogleMessageParts(msg)...)
+		target.ExtraContent = nil
+	} else if text := msg.StringContent(); text != "" {
 		if existing := target.StringContent(); existing != "" {
 			target.Content = existing + "\n" + text
 		} else {

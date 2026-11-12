@@ -67,6 +67,10 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 		return newResp, nil
 	}
 
+	if failure := rejectClaudeGeminiFunctionFragments(c, &geminiResp); failure != nil {
+		return nil, failure
+	}
+
 	// Convert to Claude Messages format
 	claudeResp := model.ClaudeResponse{
 		ID:      openai_compatible.ClaudeMessageID(""),
@@ -89,9 +93,9 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 
 		// Convert parts to Claude content
 		for _, part := range candidate.Content.Parts {
-			if part.Text != "" {
+			if part.Text != "" || (part.FunctionCall == nil && part.InlineData == nil && part.FileData == nil && (part.ThoughtSignature != "" || part.Thought)) {
 				textBuilder.WriteString(part.Text)
-				claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "text", Text: part.Text})
+				claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "text", Text: part.Text, ExtraContent: model.GooglePartMetadata(part.ThoughtSignature, part.Thought)})
 			}
 
 			if geminiOpenaiCompatible.IsGeminiImageGenerationModel(meta.ActualModelName) {
@@ -108,10 +112,11 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 					}
 				}
 				claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{
-					Type:  "tool_use",
-					ID:    claudeGeminiToolID(),
-					Name:  part.FunctionCall.FunctionName,
-					Input: openai_compatible.ClaudeToolInputFromArguments(part.FunctionCall.Arguments),
+					Type:         "tool_use",
+					ID:           claudeGeminiToolID(),
+					Name:         part.FunctionCall.FunctionName,
+					Input:        openai_compatible.ClaudeToolInputFromArguments(part.FunctionCall.Arguments),
+					ExtraContent: model.GooglePartMetadata(part.ThoughtSignature, part.Thought),
 				})
 			}
 		}
@@ -187,8 +192,9 @@ func geminiClaudeUsageReceipt(prompt, completion, cached int) *model.Usage {
 
 // claudeGeminiToolUse is one Gemini function call awaiting rendering.
 type claudeGeminiToolUse struct {
-	name  string
-	input string
+	name         string
+	input        string
+	extraContent *model.ToolExtraContent
 }
 
 // convertStreamingToClaudeResponse converts a buffered Gemini SSE stream to a
@@ -207,6 +213,8 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 	imageReceipt := &model.ClaudeImageReceipt{}
 	nanoOutput := geminiOpenaiCompatible.IsGeminiImageGenerationModel(meta.ActualModelName)
 	var toolUses []claudeGeminiToolUse
+	var nativeBlocks []model.ClaudeContent
+	hasNativeMetadata := false
 	stopReason := ""
 	promptTokens := 0
 	completionTokens := 0
@@ -262,6 +270,10 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 			}
 		}
 
+		if failure := rejectClaudeGeminiFunctionFragments(c, &geminiResp); failure != nil {
+			return nil, failure
+		}
+
 		if geminiResp.UsageMetadata != nil {
 			c.Set(NativeUsageReceiptKey, geminiUsageMetadataToOpenAIUsage(geminiResp.UsageMetadata))
 			imageReceipt.CandidateImageTokens = geminiCandidateImageTokens(geminiResp.UsageMetadata)
@@ -299,6 +311,10 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 		}
 
 		for _, part := range candidate.Content.Parts {
+			if part.ThoughtSignature != "" || part.Thought {
+				hasNativeMetadata = true
+			}
+			nativeBlocks = appendClaudeNativeBlocks(nativeBlocks, part)
 			if part.Text != "" {
 				textBuilder.WriteString(part.Text)
 				if nanoOutput {
@@ -322,7 +338,7 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 						argStr = string(bytesValue)
 					}
 				}
-				toolUses = append(toolUses, claudeGeminiToolUse{name: part.FunctionCall.FunctionName, input: argStr})
+				toolUses = append(toolUses, claudeGeminiToolUse{name: part.FunctionCall.FunctionName, input: argStr, extraContent: model.GooglePartMetadata(part.ThoughtSignature, part.Thought)})
 			}
 		}
 	}
@@ -357,18 +373,22 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 	output := &bytes.Buffer{}
 	em := openai_compatible.NewClaudeStreamEmitter(output, nil)
 	em.Start("", meta.ActualModelName, startUsage)
-	for _, block := range textBlocks {
-		index := em.StartBlock(model.ClaudeContent{Type: "text"})
-		em.TextDelta(index, block.text)
-		if block.image {
-			imageReceipt.ImageEndOffsets = append(imageReceipt.ImageEndOffsets, output.Len())
+	if hasNativeMetadata && !nanoOutput {
+		emitClaudeNativeBlocks(em, nativeBlocks)
+	} else {
+		for _, block := range textBlocks {
+			index := em.StartBlock(model.ClaudeContent{Type: "text"})
+			em.TextDelta(index, block.text)
+			if block.image {
+				imageReceipt.ImageEndOffsets = append(imageReceipt.ImageEndOffsets, output.Len())
+			}
+			em.StopBlock(index)
 		}
-		em.StopBlock(index)
-	}
-	for _, tool := range toolUses {
-		index := em.StartBlock(model.ClaudeContent{Type: "tool_use", ID: claudeGeminiToolID(), Name: tool.name})
-		em.InputJSONDelta(index, tool.input)
-		em.StopBlock(index)
+		for _, tool := range toolUses {
+			index := em.StartBlock(model.ClaudeContent{Type: "tool_use", ID: claudeGeminiToolID(), Name: tool.name, ExtraContent: tool.extraContent})
+			em.InputJSONDelta(index, tool.input)
+			em.StopBlock(index)
+		}
 	}
 	em.Finish(openai_compatible.FinalizeClaudeStopReason(stopReason, len(toolUses) > 0), claudeUsage)
 	if err := em.Err(); err != nil {

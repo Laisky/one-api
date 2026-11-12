@@ -92,14 +92,17 @@ type chatToResponseStreamBridge struct {
 }
 
 type streamToolCallState struct {
-	id          string
-	name        string
-	index       int
-	arguments   strings.Builder
-	streamIndex *int
+	extraContent *model.ToolExtraContent
+	id           string
+	name         string
+	index        int
+	arguments    strings.Builder
+	streamIndex  *int
 }
 
 type responseChoiceState struct {
+	contentParts         []openai.OutputContent
+	contentDone          int
 	index                int
 	messageID            string
 	messageIndex         int
@@ -218,29 +221,9 @@ func (h *chatToResponseStreamBridge) HandleDone(c *gin.Context) (bool, bool) {
 		// assistant message, as it always has.
 		h.openPrimaryMessage(c)
 	}
-	text := h.textBuilder.String()
-	messageItem := openai.OutputItem{
-		Id:      h.messageItemID,
-		Type:    "message",
-		Status:  "completed",
-		Role:    "assistant",
-		Content: []openai.OutputContent{{Type: "output_text", Text: text}},
-	}
+	messageItem := h.primaryMessage("completed")
 	if h.messageOpened {
-		h.emitEvent(c, "response.output_text.done", openai.ResponseAPIStreamEvent{
-			Type:         "response.output_text.done",
-			ItemId:       h.messageItemID,
-			OutputIndex:  h.messageOutputIndex,
-			ContentIndex: 0,
-			Text:         text,
-		})
-		h.emitEvent(c, "response.content_part.done", openai.ResponseAPIStreamEvent{
-			Type:         "response.content_part.done",
-			ItemId:       h.messageItemID,
-			OutputIndex:  h.messageOutputIndex,
-			ContentIndex: 0,
-			Part:         &openai.OutputContent{Type: "output_text", Text: text},
-		})
+		h.emitChoiceContentDone(c, h.choices[h.primaryChoiceIndex])
 	}
 
 	// Emit tool-call terminals BEFORE the message item's output_item.done so that
@@ -635,6 +618,10 @@ func (h *chatToResponseStreamBridge) ensureToolCallState(c *gin.Context, tool *m
 
 	if tool.Function != nil && tool.Function.Name != "" {
 		state.name = tool.Function.Name
+	}
+
+	if tool.ExtraContent != nil {
+		state.extraContent = tool.ExtraContent
 	}
 
 	if created {

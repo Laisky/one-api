@@ -57,6 +57,10 @@ func (h *chatToResponseStreamBridge) closePrimaryMessage(c *gin.Context) {
 	h.sealedMessages = append(h.sealedMessages, sealedReasoningItem{index: h.messageOutputIndex, item: item})
 	h.messageOpened = false
 	h.textBuilder.Reset()
+	if choice := h.choices[h.primaryChoiceIndex]; choice != nil {
+		choice.contentParts = nil
+		choice.contentDone = 0
+	}
 	h.messageItemID = "msg_" + random.GetRandomString(16)
 	h.messageOutputIndex = -1
 }
@@ -64,26 +68,8 @@ func (h *chatToResponseStreamBridge) closePrimaryMessage(c *gin.Context) {
 // emitPrimaryMessageDone emits the completion events of the open primary
 // message and returns its completed item.
 func (h *chatToResponseStreamBridge) emitPrimaryMessageDone(c *gin.Context) openai.OutputItem {
-	text := h.textBuilder.String()
-	h.emitEvent(c, "response.output_text.done", openai.ResponseAPIStreamEvent{
-		ItemId:       h.messageItemID,
-		OutputIndex:  h.messageOutputIndex,
-		ContentIndex: 0,
-		Text:         text,
-	})
-	h.emitEvent(c, "response.content_part.done", openai.ResponseAPIStreamEvent{
-		ItemId:       h.messageItemID,
-		OutputIndex:  h.messageOutputIndex,
-		ContentIndex: 0,
-		Part:         &openai.OutputContent{Type: "output_text", Text: text},
-	})
-	item := openai.OutputItem{
-		Id:      h.messageItemID,
-		Type:    "message",
-		Status:  "completed",
-		Role:    "assistant",
-		Content: []openai.OutputContent{{Type: "output_text", Text: text}},
-	}
+	item := h.primaryMessage("completed")
+	h.emitChoiceContentDone(c, h.choices[h.primaryChoiceIndex])
 	h.emitEvent(c, "response.output_item.done", openai.ResponseAPIStreamEvent{
 		OutputIndex: h.messageOutputIndex,
 		Item:        &item,

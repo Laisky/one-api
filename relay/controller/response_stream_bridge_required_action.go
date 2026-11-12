@@ -66,8 +66,9 @@ func (h *chatToResponseStreamBridge) currentToolCallSnapshots() []openai.Respons
 		callID := ensureResponseAPICallID(state.id)
 		state.id = callID
 		calls = append(calls, openai.ResponseAPIToolCall{
-			Id:   callID,
-			Type: "function",
+			ExtraContent: state.extraContent,
+			Id:           callID,
+			Type:         "function",
 			Function: &openai.ResponseAPIFunctionCall{
 				Name:      state.name,
 				Arguments: state.arguments.String(),

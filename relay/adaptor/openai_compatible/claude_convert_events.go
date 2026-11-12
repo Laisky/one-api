@@ -105,11 +105,19 @@ func (e *ClaudeStreamEmitter) Start(id, model string, usage relaymodel.ClaudeUsa
 func claudeStartPlaceholder(block relaymodel.ClaudeContent) map[string]any {
 	switch block.Type {
 	case claudeBlockText:
-		return map[string]any{"type": claudeBlockText, "text": ""}
+		placeholder := map[string]any{"type": claudeBlockText, "text": ""}
+		if block.ExtraContent != nil {
+			placeholder["extra_content"] = block.ExtraContent
+		}
+		return placeholder
 	case claudeBlockThinking:
 		return map[string]any{"type": claudeBlockThinking, "thinking": "", "signature": ""}
 	case claudeBlockToolUse:
-		return map[string]any{"type": claudeBlockToolUse, "id": block.ID, "name": block.Name, "input": map[string]any{}}
+		placeholder := map[string]any{"type": claudeBlockToolUse, "id": block.ID, "name": block.Name, "input": map[string]any{}}
+		if block.ExtraContent != nil {
+			placeholder["extra_content"] = block.ExtraContent
+		}
+		return placeholder
 	default:
 		return map[string]any{"type": block.Type}
 	}

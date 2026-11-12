@@ -1,5 +1,7 @@
 package gemini
 
+import "encoding/json"
+
 type ChatRequest struct {
 	Contents          []ChatContent        `json:"contents"`
 	SafetySettings    []ChatSafetySettings `json:"safety_settings,omitempty"`
@@ -79,15 +81,30 @@ type FileData struct {
 }
 
 type FunctionCall struct {
-	FunctionName string `json:"name"`
-	Arguments    any    `json:"args"`
+	PartialArgs  json.RawMessage `json:"partialArgs,omitempty"`
+	WillContinue *bool           `json:"willContinue,omitempty"`
+	FunctionName string          `json:"name"`
+	Arguments    any             `json:"args"`
+}
+
+// FunctionResponse carries a correlated Vertex v1 tool result as a JSON object.
+type FunctionResponse struct {
+	Name     string         `json:"name"`
+	Response map[string]any `json:"response"`
 }
 
 type Part struct {
-	Text         string        `json:"text,omitempty"`
-	InlineData   *InlineData   `json:"inlineData,omitempty"`
-	FileData     *FileData     `json:"fileData,omitempty"`
-	FunctionCall *FunctionCall `json:"functionCall,omitempty"`
+	// TextPresent distinguishes the native text oneof, including an explicit empty string.
+	TextPresent bool `json:"-"`
+	// GatewayPartIndex is consumed internally and never sent to the native API.
+	GatewayPartIndex *int              `json:"-"`
+	ThoughtSignature string            `json:"thoughtSignature,omitempty"`
+	Thought          bool              `json:"thought,omitempty"`
+	FunctionResponse *FunctionResponse `json:"functionResponse,omitempty"`
+	Text             string            `json:"text,omitempty"`
+	InlineData       *InlineData       `json:"inlineData,omitempty"`
+	FileData         *FileData         `json:"fileData,omitempty"`
+	FunctionCall     *FunctionCall     `json:"functionCall,omitempty"`
 }
 
 type ChatContent struct {

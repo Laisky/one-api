@@ -220,7 +220,9 @@ func chatResponseToClaude(c *gin.Context, r *chatTextResponse) relaymodel.Claude
 			out.Content = append(out.Content, relaymodel.ClaudeContent{Type: claudeBlockThinking, Thinking: thinking})
 		}
 
-		if choice.Message.Content != nil {
+		if blocks, native := claudeGoogleTextBlocks(choice.Message); native {
+			out.Content = append(out.Content, blocks...)
+		} else if choice.Message.Content != nil {
 			switch content := choice.Message.Content.(type) {
 			case string:
 				if content != "" {
@@ -246,10 +248,11 @@ func chatResponseToClaude(c *gin.Context, r *chatTextResponse) relaymodel.Claude
 					name, args = tc.Function.Name, tc.Function.Arguments
 				}
 				out.Content = append(out.Content, relaymodel.ClaudeContent{
-					Type:  claudeBlockToolUse,
-					ID:    ids.Allocate(tc.Id),
-					Name:  name,
-					Input: ClaudeToolInputFromArguments(args),
+					Type:         claudeBlockToolUse,
+					ID:           ids.Allocate(tc.Id),
+					Name:         name,
+					Input:        ClaudeToolInputFromArguments(args),
+					ExtraContent: tc.ExtraContent,
 				})
 			}
 		}

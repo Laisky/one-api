@@ -215,17 +215,25 @@ func convertRequest(ctx context.Context, textRequest model.GeneralOpenAIRequest,
 			initialText = message.StringContent()
 		}
 		var parts []Part
+		var partSources []model.NativePartReference
 
-		// Add text content if it's not empty
-		if initialText != "" {
+		messageSignature, messageThought := model.GoogleMetadata(message.ExtraContent)
+		messagePosition := nativeGatewayPosition(message.ExtraContent)
+		// Preserve signed empty scalar text as a native part as well.
+		if initialText != "" || (message.IsStringContent() && (messageSignature != "" || messageThought || messagePosition != nil)) {
 			parts = append(parts, Part{
-				Text: initialText,
+				Text:             initialText,
+				TextPresent:      model.GeminiTextPresent(message.ExtraContent),
+				GatewayPartIndex: messagePosition,
+				ThoughtSignature: messageSignature,
+				Thought:          messageThought,
 			})
+			partSources = append(partSources, nativeContentReference(0))
 		}
 
 		// Handle OpenAI tool calls - convert them to Gemini function calls
 		if len(message.ToolCalls) > 0 {
-			for _, toolCall := range message.ToolCalls {
+			for toolIndex, toolCall := range message.ToolCalls {
 				// Parse the arguments from JSON string to interface{}.
 				// ArgumentsJSON keeps a client-supplied object, a missing `function`
 				// or absent arguments from panicking here.
@@ -239,12 +247,17 @@ func convertRequest(ctx context.Context, textRequest model.GeneralOpenAIRequest,
 					args = rawArguments
 				}
 
+				signature, thought := model.GoogleMetadata(toolCall.ExtraContent)
 				parts = append(parts, Part{
+					GatewayPartIndex: nativeGatewayPosition(toolCall.ExtraContent),
+					ThoughtSignature: signature,
+					Thought:          thought,
 					FunctionCall: &FunctionCall{
 						FunctionName: toolCall.FunctionName(),
 						Arguments:    args,
 					},
 				})
+				partSources = append(partSources, nativeToolReference(toolIndex))
 			}
 		}
 
@@ -254,13 +267,20 @@ func convertRequest(ctx context.Context, textRequest model.GeneralOpenAIRequest,
 			return nil, errors.Wrap(err, "validation failed: native Gemini content")
 		}
 		imageNum := 0
-		for _, part := range openaiContent {
-			if part.Type == model.ContentTypeText && part.Text != nil && *part.Text != "" {
+		for contentIndex, part := range openaiContent {
+			signature, thought := model.GoogleMetadata(part.ExtraContent)
+			_, positioned := model.GeminiPartIndex(part.ExtraContent)
+			if part.Type == model.ContentTypeText && part.Text != nil && (*part.Text != "" || signature != "" || thought || positioned || len(message.NativePartOrder) > 0) {
 				// Only add if we haven't already added this text from StringContent()
-				if *part.Text != initialText {
+				if *part.Text != initialText || (!message.IsStringContent() && (signature != "" || thought || positioned || len(message.NativePartOrder) > 0)) {
 					parts = append(parts, Part{
-						Text: *part.Text,
+						Text:             *part.Text,
+						TextPresent:      model.GeminiTextPresent(part.ExtraContent),
+						GatewayPartIndex: nativeGatewayPosition(part.ExtraContent),
+						ThoughtSignature: signature,
+						Thought:          thought,
 					})
+					partSources = append(partSources, nativeContentReference(contentIndex))
 				}
 			} else if part.Type == model.ContentTypeImageURL {
 				imageNum += 1
@@ -279,11 +299,15 @@ func convertRequest(ctx context.Context, textRequest model.GeneralOpenAIRequest,
 					}
 				}
 				parts = append(parts, Part{
+					GatewayPartIndex: nativeGatewayPosition(part.ExtraContent),
+					ThoughtSignature: signature,
+					Thought:          thought,
 					InlineData: &InlineData{
 						MimeType: mimeType,
 						Data:     data,
 					},
 				})
+				partSources = append(partSources, nativeContentReference(contentIndex))
 			} else if part.Type == model.ContentTypeVideoURL || part.Type == model.ContentTypeFile || part.Type == model.ContentTypeInputAudio {
 				converted, size, err := convertNativeMediaPart(textRequest.Model, part)
 				if err != nil {
@@ -293,8 +317,19 @@ func convertRequest(ctx context.Context, textRequest model.GeneralOpenAIRequest,
 				if additionalInlineBytes > nativeInlineMediaLimit {
 					return nil, errors.New("validation failed: aggregate inline video/audio/file input exceeds the relay limit")
 				}
+				converted.ThoughtSignature, converted.Thought = signature, thought
+				converted.GatewayPartIndex = nativeGatewayPosition(part.ExtraContent)
 				parts = append(parts, converted)
+				partSources = append(partSources, nativeContentReference(contentIndex))
 			}
+		}
+
+		if len(message.NativePartOrder) > 0 || hasNativeGatewayPositions(parts) {
+			ordered, orderErr := restoreNativePartOrder(parts, partSources, message.NativePartOrder)
+			if orderErr != nil {
+				return nil, errors.Wrap(orderErr, "validation failed: native part ordering")
+			}
+			parts = ordered
 		}
 
 		// If we have no parts at all (empty content with tool calls), add a minimal text part
@@ -423,6 +458,13 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			streamErr = errors.Wrap(err, "unmarshal stream")
 			break
 		}
+		if geminiResponse.UsageMetadata != nil && geminiResponse.UsageMetadata.TotalTokenCount > 0 {
+			usageMetadata = geminiResponse.UsageMetadata
+		}
+		if unsupportedGeminiFunctionFragments(&geminiResponse) {
+			streamErr = errors.New("incremental Gemini function arguments are unsupported on this relay")
+			break
+		}
 		seen := make(map[int64]bool, len(geminiResponse.Candidates))
 		for _, candidate := range geminiResponse.Candidates {
 			if candidate.Index < 0 || int64(int(candidate.Index)) != candidate.Index || seen[candidate.Index] {
@@ -439,9 +481,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			// aggregate IMAGE-token receipt was separately image-billed.
 			c.Set(ctxkey.GeminiOutputIncomplete, true)
 		}
-		if geminiResponse.UsageMetadata != nil && geminiResponse.UsageMetadata.TotalTokenCount > 0 {
-			usageMetadata = geminiResponse.UsageMetadata
-		}
+		assignGeminiStreamPartPositions(c, &geminiResponse)
 		response := streamResponseGeminiChat2OpenAI(c, &geminiResponse)
 		if response == nil {
 			continue
@@ -523,6 +563,10 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	err = json.Unmarshal(responseBody, &geminiResponse)
 	if err != nil {
 		return openai.ErrorWrapper(errors.Wrap(err, "unmarshal_response_body_failed"), "unmarshal_response_body_failed", http.StatusInternalServerError), nil
+	}
+
+	if unsupportedGeminiFunctionFragments(&geminiResponse) {
+		return openai.ErrorWrapper(errors.New("incremental Gemini function arguments are unsupported on this relay"), "unsupported_gemini_function_arguments", http.StatusBadGateway), geminiUsageMetadataToOpenAIUsage(geminiResponse.UsageMetadata)
 	}
 
 	// Debug logging for Gemini response structure
