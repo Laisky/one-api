@@ -94,6 +94,8 @@ type FunctionResponse struct {
 }
 
 type Part struct {
+	// SourceToolCallIndex binds generated calls to caller identities through internal reordering.
+	SourceToolCallIndex *int `json:"-"`
 	// TextPresent distinguishes the native text oneof, including an explicit empty string.
 	TextPresent bool `json:"-"`
 	// GatewayPartIndex is consumed internally and never sent to the native API.

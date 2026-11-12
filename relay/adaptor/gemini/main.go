@@ -249,9 +249,10 @@ func convertRequest(ctx context.Context, textRequest model.GeneralOpenAIRequest,
 
 				signature, thought := model.GoogleMetadata(toolCall.ExtraContent)
 				parts = append(parts, Part{
-					GatewayPartIndex: nativeGatewayPosition(toolCall.ExtraContent),
-					ThoughtSignature: signature,
-					Thought:          thought,
+					SourceToolCallIndex: &toolIndex,
+					GatewayPartIndex:    nativeGatewayPosition(toolCall.ExtraContent),
+					ThoughtSignature:    signature,
+					Thought:             thought,
 					FunctionCall: &FunctionCall{
 						FunctionName: toolCall.FunctionName(),
 						Arguments:    args,

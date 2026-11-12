@@ -74,20 +74,29 @@ func configureToolHistory(converted *gemini.ChatRequest, source *model.GeneralOp
 			if message.Role != "assistant" {
 				return errors.New("validation failed: Vertex function calls require an assistant message")
 			}
-			pending = message.ToolCalls
+			for _, call := range message.ToolCalls {
+				if call.Id == "" || callsByID[call.Id] != nil || call.Function == nil || call.Function.Name == "" {
+					return errors.New("validation failed: Vertex function calls require unique IDs and function names")
+				}
+				callsByID[call.Id] = call.Function
+			}
+			seenSources := make(map[int]bool, len(message.ToolCalls))
 			callIndex := 0
 			for i := range content.Parts {
 				if content.Parts[i].FunctionCall == nil {
 					continue
 				}
-				if callIndex >= len(pending) {
+				sourceIndex := content.Parts[i].SourceToolCallIndex
+				if sourceIndex == nil || *sourceIndex < 0 || *sourceIndex >= len(message.ToolCalls) || seenSources[*sourceIndex] {
 					return errors.New("validation failed: invalid Vertex function call alignment")
 				}
-				call := pending[callIndex]
-				if call.Id == "" || callsByID[call.Id] != nil || call.Function == nil || call.Function.Name == "" {
-					return errors.New("validation failed: Vertex function calls require unique IDs and function names")
+				seenSources[*sourceIndex] = true
+				call := message.ToolCalls[*sourceIndex]
+				if content.Parts[i].FunctionCall.FunctionName != call.Function.Name {
+					return errors.New("validation failed: Vertex function call source does not match its native part")
 				}
-				callsByID[call.Id] = call.Function
+				// Pending order follows restored native parts, not the caller's physical array order.
+				pending = append(pending, call)
 				raw, err := call.Function.ArgumentsJSON()
 				if err != nil {
 					return errors.Wrap(err, "validation failed: invalid Vertex function arguments")
@@ -105,7 +114,7 @@ func configureToolHistory(converted *gemini.ChatRequest, source *model.GeneralOp
 				content.Parts[i].FunctionCall.Arguments = args
 				callIndex++
 			}
-			if callIndex != len(pending) {
+			if callIndex != len(message.ToolCalls) {
 				return errors.New("validation failed: invalid Vertex function call alignment")
 			}
 		}
