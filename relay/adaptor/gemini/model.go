@@ -113,6 +113,7 @@ type ChatGenerationConfig struct {
 	ThinkingConfig     *ThinkingConfig `json:"thinkingConfig,omitempty"`
 	ResponseMimeType   string          `json:"responseMimeType,omitempty"`
 	ResponseSchema     any             `json:"responseSchema,omitempty"`
+	ResponseJSONSchema any             `json:"responseJsonSchema,omitempty"`
 	Temperature        *float64        `json:"temperature,omitempty"`
 	TopP               *float64        `json:"topP,omitempty"`
 	TopK               float64         `json:"topK,omitempty"`

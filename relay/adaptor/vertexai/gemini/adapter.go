@@ -63,6 +63,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		if err != nil {
 			return nil, errors.Wrap(err, "convert native Vertex Gemini request")
 		}
+		configureJSONSchemas(geminiRequest, request)
 		convertedRequest = geminiRequest
 	}
 
@@ -94,14 +95,14 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	var parameterTypes []string
 	if geminiRequest != nil {
 		for _, tool := range geminiRequest.Tools {
-			functions, ok := tool.FunctionDeclarations.([]model.Function)
+			functions, ok := tool.FunctionDeclarations.([]functionDeclaration)
 			if !ok {
 				continue
 			}
 
 			for _, fn := range functions {
 				functionNames = append(functionNames, fn.Name)
-				if params, ok := fn.Parameters.(map[string]any); ok {
+				if params, ok := fn.ParametersJSONSchema.(map[string]any); ok {
 					if typeVal, ok := params["type"].(string); ok {
 						parameterTypes = append(parameterTypes, typeVal)
 						continue
