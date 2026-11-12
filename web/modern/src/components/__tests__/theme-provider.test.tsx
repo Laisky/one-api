@@ -17,7 +17,9 @@ type DocumentThemeState = {
 /** loadBootScript extracts the classic inline theme boot script from index.html and returns its source. */
 function loadBootScript(): string {
   const html = readFileSync(resolve(__dirname, '../../../index.html'), 'utf8');
-  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+  // Parse the document instead of regex-matching tags; classic inline scripts have neither src nor type.
+  const parsed = new DOMParser().parseFromString(html, 'text/html');
+  const scripts = [...parsed.querySelectorAll('script:not([src]):not([type])')].map((script) => script.textContent ?? '');
   const boot = scripts.filter((source) => source.includes(STORAGE_KEY));
   if (boot.length !== 1) throw new Error(`expected exactly one theme boot script, found ${boot.length}`);
   return boot[0];
