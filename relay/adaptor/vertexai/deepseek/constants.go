@@ -36,6 +36,16 @@ var (
 //   - https://cloudprice.net/models/vertex_ai/deepseek-ai/deepseek-v3.2-maas
 //   - https://cloudprice.net/models/vertex_ai/deepseek-ai/deepseek-ocr-maas
 var ModelRatios = map[string]adaptor.ModelConfig{
+	// Official Vertex card/prices retrieved 2026-11-12:
+	// https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/maas/deepseek/deepseek-v41-flash
+	// https://cloud.google.com/model-garden/partner-models/pricing
+	"deepseek-ai/deepseek-v4.1-flash-maas": {
+		Ratio: .30 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / .30, CachedInputRatio: .03 * ratio.MilliTokensUsd,
+		ContextLength: 1048576, MaxOutputTokens: 1048576,
+		InputModalities: []string{"text", "image"}, OutputModalities: deepSeekVertexTextOutputs,
+		SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+		Description:       "DeepSeek V4.1 Flash on Vertex MaaS (Preview, global), text/image input. Minimum availability November 28, 2026; no audio/video or batch inference.",
+	},
 	// DeepSeek OCR - Input: $0.30 / million tokens, Output: $1.20 / million tokens
 	// Vertex GA 2025-10-23 in us-central1 only; accepts text, documents, and images.
 	"deepseek-ai/deepseek-ocr-maas": {

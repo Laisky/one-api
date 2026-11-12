@@ -540,8 +540,9 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 
 	// When upstream expects the native OpenAI chat payload and we didn't rewrite the
 	// system prompt, merge unknown user fields (e.g. encrypted extensions) back into
-	// the converted JSON so we can preserve pass-through semantics.
-	if _, isChatPayload := convertedRequest.(*relaymodel.GeneralOpenAIRequest); isChatPayload && (meta.APIType == apitype.OpenAI || meta.APIType == apitype.Azure) {
+	// the converted JSON so we can preserve pass-through semantics. Vertex managed
+	// open models use this chat envelope too; native Gemini/Claude payloads do not.
+	if _, isChatPayload := convertedRequest.(*relaymodel.GeneralOpenAIRequest); isChatPayload && (meta.APIType == apitype.OpenAI || meta.APIType == apitype.Azure || meta.APIType == apitype.VertexAI) {
 		allowUnknown := meta.ChannelType == channeltype.OpenAI && !config.EnforceIncludeUsage && !systemPromptReset
 		if merged, stats, changed, mergeErr := mergeControlledPassthroughJSON(originalBody, jsonData, allowUnknown); mergeErr == nil {
 			jsonData = merged

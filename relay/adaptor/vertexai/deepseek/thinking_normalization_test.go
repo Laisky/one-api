@@ -42,6 +42,7 @@ func TestConvertRequest_NormalizesAdaptiveThinkingType(t *testing.T) {
 	require.True(t, ok)
 	require.NotNil(t, converted.Thinking)
 	require.Equal(t, "enabled", converted.Thinking.Type)
+	require.Equal(t, "adaptive", request.Thinking.Type, "normalization must not mutate caller-owned thinking")
 	require.Equal(t, 1024, *converted.Thinking.BudgetTokens)
 	require.Nil(t, converted.MaxCompletionTokens)
 	require.Equal(t, 512, converted.MaxTokens)

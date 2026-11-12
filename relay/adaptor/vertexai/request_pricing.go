@@ -32,6 +32,25 @@ func (a *Adaptor) ValidateRequestPricing(c *gin.Context, m *meta.Meta) error {
 	if name == "" {
 		name = m.OriginModelName
 	}
+	if name == "gemini-4-argon-cyber-permissive" {
+		if err := pricing.RequireExplicitTokenPricing(c, m); err != nil {
+			return err
+		}
+		value, _ := c.Get(ctxkey.ChannelModel)
+		channel := value.(*dbmodel.Channel)
+		configs := channel.GetModelPriceConfigsWithContext(gmw.Ctx(c))
+		cfg, found := pricing.ResolveModelConfigRatioOnly(name, configs, nil, m.StartTime)
+		valid := func(v float64) bool { return v > 0 && !math.IsNaN(v) && !math.IsInf(v, 0) }
+		if !found || !valid(cfg.CachedInputRatio) {
+			return errors.New("Vertex Argon Cyber requires explicit positive cache read pricing in channel model_configs")
+		}
+		for _, tier := range cfg.Tiers {
+			if tier.CachedInputRatio != 0 && !valid(tier.CachedInputRatio) {
+				return errors.New("Vertex Argon Cyber has invalid explicit tier cache pricing")
+			}
+		}
+		return nil
+	}
 	if !requiresClaude52Pricing(name) {
 		return nil
 	}

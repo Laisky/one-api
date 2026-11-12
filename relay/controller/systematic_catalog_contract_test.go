@@ -15,6 +15,7 @@ import (
 
 	persistmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/vertexai"
 	"github.com/Laisky/one-api/relay/adaptor/xai"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -195,12 +196,16 @@ func TestSystematicCatalogModelExposure(t *testing.T) {
 		for name, cfg := range p.GetDefaultModelPricing() {
 			t.Run(fmt.Sprintf("%s/%s", channeltype.IdToName(channel), name), func(t *testing.T) {
 				require.NotEmpty(t, strings.TrimSpace(name))
-				// These three adaptors intentionally retain tariffs for historical or
+				// These adaptors intentionally retain tariffs for historical or
 				// non-advertised models. Pricing availability is not proof of routing
 				// support; Azure Foundry, Bedrock registries and Groq retirement policy
 				// maintain their published lists separately from billing fallbacks.
-				if channel != channeltype.Azure && channel != channeltype.AwsClaude && channel != channeltype.Groq {
+				// Vertex likewise separates current suggestions from legacy dispatch.
+				if channel != channeltype.Azure && channel != channeltype.AwsClaude && channel != channeltype.Groq && channel != channeltype.VertextAI {
 					require.True(t, slices.Contains(listed, name), "priced model is missing from model list")
+				}
+				if channel == channeltype.VertextAI && !slices.Contains(listed, name) {
+					require.NotNil(t, vertexai.GetAdaptor(name), "unadvertised Vertex legacy pricing must retain its adapter route")
 				}
 				// A fixed effort may be informational when the model is not tunable.
 				if cfg.DefaultReasoningEffort != "" && len(cfg.SupportedReasoningEfforts) > 0 {
