@@ -917,7 +917,9 @@
         },
         "title": "创建用户",
         "validation": {
+          "password_max": "密码最多 {{count}} 个字符",
           "password_min": "密码至少需要 {{count}} 个字符",
+          "username_max": "用户名最多 {{count}} 个字符",
           "username_required": "请输入用户名"
         }
       },
@@ -1060,6 +1062,9 @@
         "error_title": "验证错误",
         "fix_fields": "请更正高亮显示的字段。",
         "group_required": "分组是必填项",
+        "password_max": "密码最多 {{count}} 个字符",
+        "password_min": "密码至少需要 {{count}} 个字符",
+        "password_required": "密码是必填项",
         "quota_min": "额度必须为非负数",
         "username_max": "用户名最多 30 个字符",
         "username_min": "用户名至少需要 3 个字符"

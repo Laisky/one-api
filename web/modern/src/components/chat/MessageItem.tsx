@@ -14,12 +14,13 @@ import {
 import { MarkdownRenderer } from '@/components/ui/markdown';
 import { useNotifications } from '@/components/ui/notifications';
 import { useAuthStore } from '@/lib/stores/auth';
-import { Message, getMessageStringContent } from '@/lib/utils';
+import { MESSAGE_ACTIONS_REVEAL_CLASS } from '@/components/chat/messageActionReveal';
+import { Message, copyToClipboard, getMessageStringContent } from '@/lib/utils';
 import { AlertCircle, Bot, Copy, Edit2, MoreHorizontal, RotateCcw, Settings, Trash2, User, X } from 'lucide-react';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-// Simple image component without lazy loading for better performance
+/** SimpleImageProps describes one attached chat image and its optional delete action. */
 interface SimpleImageProps {
   src: string;
   alt: string;
@@ -28,18 +29,17 @@ interface SimpleImageProps {
   deleteLabel?: string;
 }
 
+/**
+ * SimpleImage renders an attached chat image, lazily loaded and decoded off the
+ * main thread because older messages are usually below the fold.
+ *
+ * @param props - Image source, alt text, classes, and an optional delete callback with its label.
+ * @returns The image with an optional delete button.
+ */
 function SimpleImage({ src, alt, className = '', onDelete, deleteLabel }: SimpleImageProps) {
   return (
-    <div className="relative group">
-      <img
-        src={src}
-        alt={alt}
-        className={className}
-        style={{
-          maxWidth: '100%',
-          height: 'auto',
-        }}
-      />
+    <div className="relative group/image">
+      <img src={src} alt={alt} loading="lazy" decoding="async" className={className} />
 
       {/* Delete button */}
       {onDelete && (
@@ -47,7 +47,7 @@ function SimpleImage({ src, alt, className = '', onDelete, deleteLabel }: Simple
           variant="destructive"
           size="icon"
           onClick={onDelete}
-          className="absolute top-2 right-2 h-8 w-8 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 shadow-lg rounded-full"
+          className="absolute top-2 right-2 h-8 w-8 p-0 transition-opacity duration-200 shadow-lg rounded-full no-touch:opacity-0 no-touch:group-hover/image:opacity-100 no-touch:group-focus-within/image:opacity-100"
           aria-label={deleteLabel}
         >
           <X className="h-4 w-4" />
@@ -143,15 +143,15 @@ export function MessageItem({
     if (onCopyMessage) {
       onCopyMessage(messageIndex, stringContent);
     } else {
-      // Fallback copy functionality
+      // Fallback copy through the shared helper, which also works on plain-HTTP deployments.
       try {
-        await navigator.clipboard.writeText(stringContent);
+        await copyToClipboard(stringContent);
         notify({
           title: t('playground.notifications.copied_title'),
           message: t('playground.notifications.copied_message'),
           type: 'success',
         });
-      } catch (error) {
+      } catch {
         notify({
           title: t('playground.notifications.copy_failed_title'),
           message: t('playground.notifications.copy_failed_message'),
@@ -302,7 +302,7 @@ export function MessageItem({
                 </div>
 
                 {/* Message Actions */}
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                <div className={MESSAGE_ACTIONS_REVEAL_CLASS}>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button
@@ -385,7 +385,7 @@ export function MessageItem({
               </div>
 
               {/* Message Actions */}
-              <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+              <div className={MESSAGE_ACTIONS_REVEAL_CLASS}>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -482,6 +482,8 @@ export function MessageItem({
               <div className="flex items-center justify-center p-4 text-sm text-muted-foreground">
                 <svg
                   className="animate-spin -ml-1 mr-3 h-5 w-5 text-current"
+                  aria-hidden="true"
+                  focusable="false"
                   xmlns="http://www.w3.org/2000/svg"
                   fill="none"
                   viewBox="0 0 24 24"

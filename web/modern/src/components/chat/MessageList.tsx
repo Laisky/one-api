@@ -2,8 +2,14 @@ import { MessageItem } from '@/components/chat/MessageItem';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Message } from '@/lib/utils';
 import { Bot } from 'lucide-react';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+
+/** STICK_TO_BOTTOM_THRESHOLD_PX is how close to the bottom the user must be for streaming to keep following. */
+const STICK_TO_BOTTOM_THRESHOLD_PX = 64;
+
+/** RECENT_MESSAGES_RENDERED_EAGERLY is how many trailing messages always render; older ones defer off-screen work. */
+const RECENT_MESSAGES_RENDERED_EAGERLY = 3;
 
 interface MessageListProps {
   messages: Message[];
@@ -19,6 +25,15 @@ interface MessageListProps {
   onDeleteMessage?: (messageIndex: number) => void;
 }
 
+/**
+ * MessageList renders the conversation inside a scroll area. A restored or newly
+ * loaded conversation opens at its latest message, focus mode follows streamed
+ * output only while the user stays near the bottom, and older messages skip
+ * off-screen rendering work via the chat-message-deferred class.
+ *
+ * @param props - Messages, streaming and reasoning state, focus mode flag, and message action callbacks.
+ * @returns The scrollable message list.
+ */
 export function MessageList({
   messages,
   isStreaming,
@@ -33,26 +48,59 @@ export function MessageList({
 }: MessageListProps) {
   const { t } = useTranslation();
   const scrollAreaRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  // Whether the user was within the threshold of the bottom at their last scroll.
+  const pinnedToBottomRef = useRef(true);
+  // Whether the current non-empty conversation already received its initial scroll.
+  const initialScrollDoneRef = useRef(false);
 
-  // Scroll to bottom when new messages arrive - use ScrollArea's viewport for proper containment
+  /** getViewport returns the Radix scroll viewport element, or null before it mounts. */
+  const getViewport = useCallback(
+    () => scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]') ?? null,
+    []
+  );
+
+  /** scrollToBottom jumps the viewport to its end instantly, without moving the page. */
   const scrollToBottom = useCallback(() => {
-    if (scrollAreaRef.current) {
-      const viewport = scrollAreaRef.current.querySelector('[data-radix-scroll-area-viewport]');
-      if (viewport) {
-        // Use requestAnimationFrame to scroll after content is rendered
-        requestAnimationFrame(() => {
-          viewport.scrollTop = viewport.scrollHeight;
-        });
-      }
+    const viewport = getViewport();
+    if (viewport) {
+      viewport.scrollTop = viewport.scrollHeight;
     }
-  }, []);
+  }, [getViewport]);
 
-  // Focus mode: Auto-scroll to bottom continuously while streaming
+  // Track whether the user is near the bottom so streaming never yanks someone who scrolled up to read.
   useEffect(() => {
-    if (!focusModeEnabled || !isStreaming) return;
+    const viewport = getViewport();
+    if (!viewport) return undefined;
+
+    const handleScroll = () => {
+      const distanceFromBottom = viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight;
+      pinnedToBottomRef.current = distanceFromBottom <= STICK_TO_BOTTOM_THRESHOLD_PX;
+    };
+
+    viewport.addEventListener('scroll', handleScroll, { passive: true });
+    return () => viewport.removeEventListener('scroll', handleScroll);
+  }, [getViewport]);
+
+  // Restored conversations arrive after mount; open them at the latest message once, before paint.
+  useLayoutEffect(() => {
+    if (messages.length === 0) {
+      initialScrollDoneRef.current = false;
+      pinnedToBottomRef.current = true;
+      return;
+    }
+    if (initialScrollDoneRef.current) return;
+    initialScrollDoneRef.current = true;
+    pinnedToBottomRef.current = true;
+    scrollToBottom();
+  }, [messages.length, scrollToBottom]);
+
+  // Focus mode follows streamed output, but only while the user stays near the bottom.
+  useLayoutEffect(() => {
+    if (!focusModeEnabled || !isStreaming || !pinnedToBottomRef.current) return;
     scrollToBottom();
   }, [messages, focusModeEnabled, isStreaming, scrollToBottom]);
+
+  const deferredBefore = messages.length - RECENT_MESSAGES_RENDERED_EAGERLY;
 
   return (
     <ScrollArea ref={scrollAreaRef} className="h-full p-4">
@@ -76,7 +124,7 @@ export function MessageList({
                   : message.role === 'assistant'
                     ? 'space-y-2'
                     : 'flex justify-start'
-            }`}
+            }${index < deferredBefore ? ' chat-message-deferred' : ''}`}
           >
             <MessageItem
               message={message}
@@ -93,7 +141,6 @@ export function MessageList({
             />
           </div>
         ))}
-        <div ref={messagesEndRef} />
       </div>
     </ScrollArea>
   );

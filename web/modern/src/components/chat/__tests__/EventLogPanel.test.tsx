@@ -103,4 +103,38 @@ describe('EventLogPanel', () => {
 
     expect(screen.queryByRole('button', { name: /Clear/i })).toBeNull();
   });
+
+  it('keeps new events in view by scrolling only its own viewport', () => {
+    const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView');
+    const { container, rerender } = render(
+      <EventLogPanel events={[buildEvent({ id: 'a' })]} expandedEvents={new Set()} onToggleExpand={vi.fn()} onClear={vi.fn()} />
+    );
+    const viewport = container.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');
+    expect(viewport).not.toBeNull();
+    Object.defineProperty(viewport!, 'scrollHeight', { configurable: true, value: 900 });
+    Object.defineProperty(viewport!, 'scrollTop', { configurable: true, writable: true, value: 0 });
+
+    rerender(
+      <EventLogPanel
+        events={[buildEvent({ id: 'a' }), buildEvent({ id: 'b' })]}
+        expandedEvents={new Set()}
+        onToggleExpand={vi.fn()}
+        onClear={vi.fn()}
+      />
+    );
+
+    expect(viewport!.scrollTop).toBe(900);
+    expect(scrollIntoView).not.toHaveBeenCalled();
+    scrollIntoView.mockRestore();
+  });
+
+  it('sizes the scroll area with classes instead of inline styles', () => {
+    const { container, rerender } = render(<EventLogPanel events={[]} expandedEvents={new Set()} onToggleExpand={vi.fn()} onClear={vi.fn()} />);
+    const root = container.querySelector('[data-radix-scroll-area-viewport]')!.parentElement!;
+    expect(root).toHaveClass('h-[300px]');
+    expect(root.style.height).toBe('');
+
+    rerender(<EventLogPanel events={[]} expandedEvents={new Set()} onToggleExpand={vi.fn()} onClear={vi.fn()} isMobile />);
+    expect(root).toHaveClass('h-[250px]');
+  });
 });

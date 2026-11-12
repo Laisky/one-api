@@ -917,7 +917,9 @@
         },
         "title": "Create User",
         "validation": {
+          "password_max": "Password must be at most {{count}} characters.",
           "password_min": "Password must be at least {{count}} characters.",
+          "username_max": "Username must be at most {{count}} characters.",
           "username_required": "Enter a username."
         }
       },
@@ -1060,6 +1062,9 @@
         "error_title": "Validation error",
         "fix_fields": "Please correct the highlighted fields.",
         "group_required": "Group is required",
+        "password_max": "Password must be at most {{count}} characters",
+        "password_min": "Password must be at least {{count}} characters",
+        "password_required": "Password is required",
         "quota_min": "Quota must be non-negative",
         "username_max": "Username must be at most 30 characters",
         "username_min": "Username must be at least 3 characters"

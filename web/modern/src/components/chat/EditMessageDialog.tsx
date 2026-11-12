@@ -229,7 +229,7 @@ export function EditMessageDialog({ isOpen, onClose, onSave, currentContent, ori
                             variant="destructive"
                             size="icon"
                             onClick={() => handleDeleteAttachment(index)}
-                            className="absolute top-2 right-2 h-8 w-8 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity duration-200 shadow-lg rounded-full"
+                            className="absolute top-2 right-2 h-8 w-8 p-0 transition-opacity duration-200 shadow-lg rounded-full no-touch:opacity-0 no-touch:group-hover:opacity-100 no-touch:group-focus-within:opacity-100"
                             title={t('playground.edit.delete_attachment')}
                             aria-label={t('playground.edit.delete_attachment')}
                           >

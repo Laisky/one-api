@@ -72,6 +72,69 @@ describe('Responsive Components', () => {
     expect(container).toBeTruthy();
   });
 
+  it('labels an open MobileDrawer with a unique title id, focuses inside it, and leaves body overflow alone', () => {
+    const onClose = vi.fn();
+    render(
+      <TestWrapper>
+        <MobileDrawer isOpen onClose={onClose} title="First drawer" id="first-drawer">
+          <div>First content</div>
+        </MobileDrawer>
+        <MobileDrawer isOpen onClose={() => {}} title="Second drawer">
+          <div>Second content</div>
+        </MobileDrawer>
+      </TestWrapper>
+    );
+
+    const first = screen.getByRole('dialog', { name: 'First drawer' });
+    const second = screen.getByRole('dialog', { name: 'Second drawer' });
+    expect(first).toHaveAttribute('id', 'first-drawer');
+    expect(first).toHaveAttribute('aria-modal', 'true');
+    expect(first.getAttribute('aria-labelledby')).not.toBe(second.getAttribute('aria-labelledby'));
+    expect(document.querySelector('#drawer-title')).toBeNull();
+    // Scroll chaining is contained with overscroll-behavior instead of locking <body>.
+    expect(document.body.style.overflow).toBe('');
+    expect(first.className).toContain('overscroll-contain');
+    expect(first.className).toContain('motion-reduce:transition-none');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('restores focus to the opener and clears inert on the app root when a MobileDrawer closes', () => {
+    const appRoot = document.createElement('div');
+    appRoot.id = 'root';
+    document.body.appendChild(appRoot);
+    const opener = document.createElement('button');
+    opener.textContent = 'Open drawer';
+    appRoot.appendChild(opener);
+    opener.focus();
+
+    const { rerender } = render(
+      <TestWrapper>
+        <MobileDrawer isOpen onClose={() => {}} title="Menu">
+          <a href="/x">Link</a>
+        </MobileDrawer>
+      </TestWrapper>
+    );
+
+    const drawer = screen.getByRole('dialog', { name: 'Menu' });
+    expect(appRoot).toHaveAttribute('inert');
+    expect(drawer).toContainElement(document.activeElement as HTMLElement);
+
+    rerender(
+      <TestWrapper>
+        <MobileDrawer isOpen={false} onClose={() => {}} title="Menu">
+          <a href="/x">Link</a>
+        </MobileDrawer>
+      </TestWrapper>
+    );
+
+    expect(screen.queryByRole('dialog', { name: 'Menu' })).toBeNull();
+    expect(appRoot).not.toHaveAttribute('inert');
+    expect(document.activeElement).toBe(opener);
+    appRoot.remove();
+  });
+
   it('should render ResponsiveForm without crashing', () => {
     const { container } = render(
       <TestWrapper>

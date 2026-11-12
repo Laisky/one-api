@@ -1,5 +1,8 @@
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
+import { copyToClipboard } from '@/lib/utils';
+import { startRegistration } from '@simplewebauthn/browser';
+import QRCode from 'qrcode';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PersonalSettings } from './PersonalSettings';
@@ -26,8 +29,14 @@ vi.mock('@/lib/utils', async (importOriginal) => {
   return {
     ...actual,
     loadSystemStatus: vi.fn().mockResolvedValue({}),
+    copyToClipboard: vi.fn().mockResolvedValue(undefined),
   };
 });
+
+vi.mock('@simplewebauthn/browser', () => ({
+  browserSupportsWebAuthn: () => true,
+  startRegistration: vi.fn(),
+}));
 
 vi.mock('@/hooks/useResponsive', () => ({
   useResponsive: () => ({ isMobile: false }),
@@ -62,6 +71,9 @@ describe('PersonalSettings', () => {
 
   beforeEach(() => {
     notify.mockReset();
+    vi.mocked(copyToClipboard).mockReset();
+    vi.mocked(copyToClipboard).mockResolvedValue(undefined);
+    vi.mocked(startRegistration).mockReset();
     localStorage.clear();
 
     currentProfile = {
@@ -265,5 +277,115 @@ describe('PersonalSettings', () => {
 
     expect(api.post).toHaveBeenCalledWith('/api/user/aff');
     expect(api.get).not.toHaveBeenCalledWith('/api/user/aff');
+  });
+
+  it('copies a generated access token without reporting an error', async () => {
+    (api.post as any).mockImplementation((url: string) =>
+      Promise.resolve(url === '/api/user/token' ? { data: { success: true, data: 'generated-token' } } : { data: { success: true } })
+    );
+
+    render(<PersonalSettings />);
+    fireEvent.click(await screen.findByRole('button', { name: 'personal_settings.access_token.generate_token' }));
+
+    expect(await screen.findByText('generated-token')).toBeInTheDocument();
+    expect(copyToClipboard).toHaveBeenCalledWith('generated-token');
+    expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+  });
+
+  it('reports a clipboard failure for a generated access token instead of a generation failure', async () => {
+    vi.mocked(copyToClipboard).mockRejectedValueOnce(new Error('Copy to clipboard failed'));
+    (api.post as any).mockImplementation((url: string) =>
+      Promise.resolve(url === '/api/user/token' ? { data: { success: true, data: 'generated-token' } } : { data: { success: true } })
+    );
+
+    render(<PersonalSettings />);
+    fireEvent.click(await screen.findByRole('button', { name: 'personal_settings.access_token.generate_token' }));
+
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', message: 'personal_settings.access_token.copy_failed' }));
+    });
+    // The token stays visible so it can be copied manually.
+    expect(screen.getByText('generated-token')).toBeInTheDocument();
+    expect(notify).not.toHaveBeenCalledWith(expect.objectContaining({ message: 'personal_settings.access_token.generate_failed' }));
+  });
+
+  it('reports a clipboard failure for the invitation link', async () => {
+    vi.mocked(copyToClipboard).mockRejectedValueOnce(new Error('Copy to clipboard failed'));
+    (api.post as any).mockImplementation((url: string) =>
+      Promise.resolve(url === '/api/user/aff' ? { data: { success: true, data: 'AFF1' } } : { data: { success: true } })
+    );
+
+    render(<PersonalSettings />);
+    fireEvent.click(await screen.findByRole('button', { name: 'personal_settings.access_token.get_invite_link' }));
+
+    await waitFor(() => {
+      expect(notify).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', message: 'personal_settings.access_token.copy_failed' }));
+    });
+    expect(copyToClipboard).toHaveBeenCalledWith(`${window.location.origin}/register?aff=AFF1`);
+  });
+
+  it('labels the email and verification-code inputs with identifier autofill hints', async () => {
+    render(<PersonalSettings />);
+
+    const email = await screen.findByLabelText('personal_settings.profile_info.email');
+    expect(email).toHaveAttribute('type', 'email');
+    expect(email).toHaveAttribute('autocomplete', 'email');
+    expect(email).toHaveAttribute('spellcheck', 'false');
+
+    const code = screen.getByLabelText('personal_settings.profile_info.email_verification_code');
+    expect(code).toHaveAttribute('autocomplete', 'one-time-code');
+    expect(code).toHaveAttribute('autocapitalize', 'none');
+    expect(code).toHaveAttribute('spellcheck', 'false');
+  });
+
+  it('treats a dismissed passkey registration prompt as a silent cancel', async () => {
+    const browserMessage = 'The operation either timed out or was not allowed.';
+    vi.mocked(startRegistration).mockRejectedValueOnce(Object.assign(new Error(browserMessage), { name: 'NotAllowedError' }));
+    (api.post as any).mockImplementation((url: string) =>
+      Promise.resolve(url === '/api/user/passkey/register/begin' ? { data: { success: true, data: { publicKey: { challenge: 'c' } } } } : { data: { success: true } })
+    );
+
+    render(<PersonalSettings />);
+    fireEvent.click(await screen.findByRole('button', { name: 'personal_settings.passkey.register_button' }));
+    const buttons = await screen.findAllByRole('button', { name: 'personal_settings.passkey.register_button' });
+    fireEvent.click(buttons[buttons.length - 1]);
+
+    await waitFor(() => expect(startRegistration).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'personal_settings.passkey.register_button' }).at(-1)).not.toBeDisabled());
+    expect(screen.queryByText(browserMessage)).not.toBeInTheDocument();
+  });
+
+  it('loads the QR encoder on demand when TOTP setup starts', async () => {
+    (api.post as any).mockImplementation((url: string) =>
+      Promise.resolve(
+        url === '/api/user/totp/setup'
+          ? { data: { success: true, data: { secret: 'SECRET', qr_code: 'otpauth://totp/test' } } }
+          : { data: { success: true } }
+      )
+    );
+
+    render(<PersonalSettings />);
+    fireEvent.click(await screen.findByRole('button', { name: 'personal_settings.totp.enable_button' }));
+
+    await waitFor(() => expect(QRCode.toDataURL).toHaveBeenCalledWith('otpauth://totp/test', { width: 256, margin: 2 }));
+  });
+
+  it('dismisses the passkey setup prompt once a passkey is registered', async () => {
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    vi.mocked(startRegistration).mockResolvedValueOnce({ id: 'cred' } as any);
+    (api.post as any).mockImplementation((url: string) =>
+      Promise.resolve(
+        url === '/api/user/passkey/register/begin' ? { data: { success: true, data: { publicKey: { challenge: 'c' } } } } : { data: { success: true } }
+      )
+    );
+
+    render(<PersonalSettings />);
+    fireEvent.click(await screen.findByRole('button', { name: 'personal_settings.passkey.register_button' }));
+    const buttons = await screen.findAllByRole('button', { name: 'personal_settings.passkey.register_button' });
+    fireEvent.click(buttons[buttons.length - 1]);
+
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/user/passkey/register/finish?name=Passkey', { id: 'cred' }));
+    await waitFor(() => expect(setItem).toHaveBeenCalledWith('passkey_prompt_dismissed', '1'));
+    setItem.mockRestore();
   });
 });

@@ -45,7 +45,11 @@ export function PersonalPasskeySection({
         <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">{t('personal_settings.passkey.recommended')}</Badge>
       </div>
       <p className="text-sm text-muted-foreground">{t('personal_settings.passkey.description')}</p>
-      {passkeyError && <div className="text-sm text-destructive font-medium">{passkeyError}</div>}
+      {passkeyError && (
+        <div role="alert" className="text-sm text-destructive font-medium">
+          {passkeyError}
+        </div>
+      )}
       {!passkeySupported ? (
         <Alert>
           <AlertTitle>{t('personal_settings.passkey.errors.not_supported')}</AlertTitle>

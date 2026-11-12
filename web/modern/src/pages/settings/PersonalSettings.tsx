@@ -1,23 +1,19 @@
-import Turnstile from '@/components/Turnstile';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
 import { useNotifications } from '@/components/ui/notifications';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { buildLarkOAuthUrl, buildOidcOAuthUrl, getOAuthState } from '@/lib/oauth';
 import { useAuthStore } from '@/lib/stores/auth';
-import { loadSystemStatus, type SystemStatus } from '@/lib/utils';
+import { copyToClipboard, loadSystemStatus, type SystemStatus } from '@/lib/utils';
 import { zodResolver } from '@/lib/zod-resolver';
 import { browserSupportsWebAuthn, startRegistration } from '@simplewebauthn/browser';
-import QRCode from 'qrcode';
 import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import * as z from 'zod';
+import { isPasskeyCeremonyCancelled } from '@/pages/auth/passkey-errors';
 import { PersonalAccessAndBindingsCards } from './PersonalAccessAndBindingsCards';
+import { PersonalProfileCard } from './PersonalProfileCard';
 import { PersonalSecurityCard } from './PersonalSecurityCard';
 import type { OAuthBindings, PasskeyInfo, PersonalForm } from './personal-settings-types';
 
@@ -184,6 +180,8 @@ export function PersonalSettings() {
       const res = await api.post('/api/user/totp/setup');
       if (res.data.success) {
         setTotpSecret(res.data.data.secret);
+        // Loaded on demand so the QR encoder stays out of the shared settings chunk.
+        const { default: QRCode } = await import('qrcode');
         const qrCodeDataURL = await QRCode.toDataURL(res.data.data.qr_code, {
           width: 256,
           margin: 2,
@@ -333,14 +331,21 @@ export function PersonalSettings() {
       if (finishRes.data.success) {
         setShowPasskeyName(false);
         setPasskeyName('');
+        // The account now has a passkey, so the "set up a passkey" banner (PasskeyPromptBanner) is no longer needed.
+        try {
+          localStorage.setItem('passkey_prompt_dismissed', '1');
+        } catch (storageError) {
+          // Storage can be blocked (private mode, site-data settings); the banner then simply stays dismissible.
+          console.warn(`Could not persist the passkey prompt dismissal: ${storageError instanceof Error ? storageError.message : String(storageError)}`);
+        }
         await loadPasskeys();
       } else {
         setPasskeyError(finishRes.data.message || t('personal_settings.passkey.errors.register_failed'));
       }
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : t('personal_settings.passkey.errors.register_failed');
-      if (!msg.includes('cancelled') && !msg.includes('AbortError')) {
-        setPasskeyError(msg);
+      // A dismissed prompt (NotAllowedError) or aborted ceremony (AbortError) is a cancellation, not a failure.
+      if (!isPasskeyCeremonyCancelled(error)) {
+        setPasskeyError(error instanceof Error && error.message ? error.message : t('personal_settings.passkey.errors.register_failed'));
       }
     } finally {
       setPasskeyLoading(false);
@@ -412,6 +417,22 @@ export function PersonalSettings() {
     }
   };
 
+  /**
+   * copyGeneratedValue copies a freshly generated token or invitation link, which stays visible on the page.
+   * It takes the value to copy and returns once done; a failed copy is reported as a notification (the value itself
+   * is never logged) so the user knows to copy it manually instead of assuming it reached the clipboard.
+   */
+  const copyGeneratedValue = async (value: string) => {
+    try {
+      await copyToClipboard(value);
+    } catch {
+      notify({
+        type: 'error',
+        message: t('personal_settings.access_token.copy_failed'),
+      });
+    }
+  };
+
   const generateAccessToken = async () => {
     try {
       const res = await api.post('/api/user/token');
@@ -419,7 +440,7 @@ export function PersonalSettings() {
       if (success) {
         setSystemToken(data);
         setAffLink('');
-        await navigator.clipboard.writeText(data);
+        await copyGeneratedValue(data);
       } else {
         notify({
           type: 'error',
@@ -442,7 +463,7 @@ export function PersonalSettings() {
         const link = `${window.location.origin}/register?aff=${data}`;
         setAffLink(link);
         setSystemToken('');
-        await navigator.clipboard.writeText(link);
+        await copyGeneratedValue(link);
       } else {
         notify({
           type: 'error',
@@ -457,21 +478,25 @@ export function PersonalSettings() {
     }
   };
 
+  /**
+   * setEmailError shows an email-field error and focuses the field. FormMessage is not a live region, so focusing
+   * the field is what makes screen readers announce the linked message. It takes the message and returns nothing.
+   */
+  const setEmailError = (message: string) => {
+    form.setError('email', { message }, { shouldFocus: true });
+  };
+
   const sendEmailVerificationCode = async () => {
     const email = form.getValues('email')?.trim() || '';
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!emailRegex.test(email)) {
-      form.setError('email', {
-        message: t('auth.register.email_invalid'),
-      });
+      setEmailError(t('auth.register.email_invalid'));
       return;
     }
 
     if (turnstileEnabled && !turnstileToken) {
-      form.setError('email', {
-        message: t('auth.login.turnstile_required'),
-      });
+      setEmailError(t('auth.login.turnstile_required'));
       return;
     }
 
@@ -496,13 +521,9 @@ export function PersonalSettings() {
         return;
       }
 
-      form.setError('email', {
-        message: message || t('personal_settings.profile_info.failed'),
-      });
+      setEmailError(message || t('personal_settings.profile_info.failed'));
     } catch (error) {
-      form.setError('email', {
-        message: error instanceof Error ? error.message : t('personal_settings.profile_info.failed'),
-      });
+      setEmailError(error instanceof Error ? error.message : t('personal_settings.profile_info.failed'));
     } finally {
       setEmailAction(null);
     }
@@ -513,9 +534,7 @@ export function PersonalSettings() {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
     if (!emailRegex.test(email)) {
-      form.setError('email', {
-        message: t('auth.register.email_invalid'),
-      });
+      setEmailError(t('auth.register.email_invalid'));
       return;
     }
 
@@ -622,110 +641,29 @@ export function PersonalSettings() {
 
   return (
     <div className="space-y-6">
-      {/* Profile Information Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>{t('personal_settings.profile_info.title')}</CardTitle>
-          <CardDescription>{t('personal_settings.profile_info.description')}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="username"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('personal_settings.profile_info.username')}</FormLabel>
-                      <FormControl>
-                        <Input {...field} disabled />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="display_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>{t('personal_settings.profile_info.display_name')}</FormLabel>
-                      <FormControl>
-                        <Input placeholder={t('personal_settings.profile_info.display_name_placeholder')} {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem className="space-y-3">
-                    <FormLabel>{t('personal_settings.profile_info.email')}</FormLabel>
-                    <FormControl>
-                      <Input type="email" placeholder={t('personal_settings.profile_info.email_placeholder')} {...field} />
-                    </FormControl>
-                    <div className="flex flex-col gap-3">
-                      <p className="text-sm text-muted-foreground">{t('personal_settings.profile_info.email_help')}</p>
-                      <div className="flex flex-col gap-3 md:flex-row items-end">
-                        <div className="flex-1 w-full space-y-1">
-                          <Input
-                            value={emailVerificationCode}
-                            onChange={(e) => {
-                              setEmailVerificationCode(e.target.value);
-                              if (emailVerificationError) {
-                                setEmailVerificationError('');
-                              }
-                            }}
-                            placeholder={t('personal_settings.profile_info.email_verification_code_placeholder')}
-                          />
-                        </div>
-                        <div className="flex flex-col gap-2 sm:flex-row flex-shrink-0">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={sendEmailVerificationCode}
-                            disabled={emailAction !== null || (turnstileEnabled && !turnstileToken)}
-                          >
-                            {emailAction === 'send'
-                              ? t('personal_settings.profile_info.sending_code')
-                              : t('personal_settings.profile_info.send_code')}
-                          </Button>
-                          <Button type="button" onClick={bindEmail} disabled={emailAction !== null}>
-                            {emailAction === 'bind'
-                              ? t('personal_settings.profile_info.binding_email')
-                              : t('personal_settings.profile_info.bind_email')}
-                          </Button>
-                        </div>
-                      </div>
-                      {turnstileRenderable && systemStatus.turnstile_site_key && (
-                        <Turnstile
-                          siteKey={systemStatus.turnstile_site_key}
-                          onVerify={(token) => setTurnstileToken(token)}
-                          onExpire={() => setTurnstileToken('')}
-                        />
-                      )}
-                      {emailVerificationError && <div className="text-sm text-destructive">{emailVerificationError}</div>}
-                    </div>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {form.formState.errors.root && <div className="text-sm text-destructive">{form.formState.errors.root.message}</div>}
-
-              <Button type="submit" disabled={loading}>
-                {loading ? t('personal_settings.profile_info.updating') : t('personal_settings.profile_info.update_button')}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+      <PersonalProfileCard
+        t={t}
+        form={form}
+        loading={loading}
+        onSubmit={onSubmit}
+        emailVerificationCode={emailVerificationCode}
+        onEmailVerificationCodeChange={(value) => {
+          setEmailVerificationCode(value);
+          if (emailVerificationError) {
+            setEmailVerificationError('');
+          }
+        }}
+        emailVerificationError={emailVerificationError}
+        emailAction={emailAction}
+        onSendEmailVerificationCode={sendEmailVerificationCode}
+        onBindEmail={bindEmail}
+        turnstileEnabled={turnstileEnabled}
+        turnstileToken={turnstileToken}
+        turnstileSiteKey={systemStatus.turnstile_site_key}
+        turnstileRenderable={turnstileRenderable}
+        onTurnstileVerify={(token) => setTurnstileToken(token)}
+        onTurnstileExpire={() => setTurnstileToken('')}
+      />
 
       <PersonalAccessAndBindingsCards
         t={t}

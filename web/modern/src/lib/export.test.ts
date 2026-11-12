@@ -1,6 +1,14 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { buildCsv, fetchAllPaginatedResults, mapWithConcurrency } from './export';
+import { buildCsv, buildCsvChunked, fetchAllPaginatedResults, mapWithConcurrency } from './export';
+
+/** csvFixtureRows returns a header plus rows exercising every value kind and escaping rule buildCsv handles. */
+const csvFixtureRows = (): unknown[][] => [
+  ['Title', 'Metadata', 'Tracing', 'Count', 'Flag', 'Missing', 'Empty'],
+  ['alpha,beta', { value: 'hello', lines: ['first', 'second'] }, 'line 1\nline 2', 42, true, null, ''],
+  ['quote "inside"', [1, 2, { nested: '"q"' }], undefined, 0, false, BigInt(7), '\r\n'],
+  ...Array.from({ length: 50 }, (_value, index) => [`row-${index}`, { index }, `trace ${index}`, index, index % 2 === 0, null, 'x']),
+];
 
 describe('fetchAllPaginatedResults', () => {
   it('aggregates every page until the reported total is reached', async () => {
@@ -162,5 +170,52 @@ describe('mapWithConcurrency', () => {
 
     expect(rows).toHaveLength(total);
     expect(requestPage).toHaveBeenCalledTimes(Math.ceil(total / serverPageSize));
+  });
+});
+
+describe('buildCsvChunked', () => {
+  afterEach(() => {
+    delete (globalThis as { scheduler?: unknown }).scheduler;
+  });
+
+  it('matches buildCsv byte for byte when every row boundary yields', async () => {
+    const rows = csvFixtureRows();
+    const yieldFn = vi.fn().mockResolvedValue(undefined);
+
+    const csv = await buildCsvChunked(rows, { budgetMs: 0, yieldFn });
+
+    expect(csv).toBe(buildCsv(rows));
+    // A zero budget yields between every pair of rows and never after the final row.
+    expect(yieldFn).toHaveBeenCalledTimes(rows.length - 1);
+  });
+
+  it('matches buildCsv through the setTimeout fallback when scheduler.yield is unavailable', async () => {
+    expect((globalThis as { scheduler?: unknown }).scheduler).toBeUndefined();
+    const rows = csvFixtureRows();
+    const timeoutSpy = vi.spyOn(globalThis, 'setTimeout');
+
+    try {
+      const csv = await buildCsvChunked(rows, { budgetMs: 0 });
+
+      expect(csv).toBe(buildCsv(rows));
+      expect(timeoutSpy).toHaveBeenCalledWith(expect.any(Function), 0);
+    } finally {
+      timeoutSpy.mockRestore();
+    }
+  });
+
+  it('matches buildCsv through scheduler.yield when the Scheduler API is available', async () => {
+    const schedulerYield = vi.fn().mockResolvedValue(undefined);
+    (globalThis as { scheduler?: unknown }).scheduler = { yield: schedulerYield };
+    const rows = csvFixtureRows();
+
+    const csv = await buildCsvChunked(rows, { budgetMs: 0 });
+
+    expect(csv).toBe(buildCsv(rows));
+    expect(schedulerYield).toHaveBeenCalledTimes(rows.length - 1);
+  });
+
+  it('returns an empty string for an empty matrix, like buildCsv', async () => {
+    await expect(buildCsvChunked([])).resolves.toBe(buildCsv([]));
   });
 });

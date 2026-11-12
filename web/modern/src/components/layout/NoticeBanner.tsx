@@ -1,6 +1,6 @@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { MarkdownRenderer } from '@/components/ui/markdown';
+import { LazyMarkdownRenderer } from '@/components/ui/lazy-markdown';
 import { useNotice } from '@/hooks/useNotice';
 import { useResponsive } from '@/hooks/useResponsive';
 import { cn } from '@/lib/utils';
@@ -11,6 +11,9 @@ import { useTranslation } from 'react-i18next';
  * NoticeBanner renders the site-wide notice/announcement at the top of the
  * authenticated app shell. It is intentionally rendered globally inside
  * Layout so the banner shows on every page, not just HomePage.
+ *
+ * The notice Markdown is rendered through LazyMarkdownRenderer so the Markdown
+ * stack stays out of the app shell, and the banner is a polite status region.
  *
  * Returns null when there is no active notice or the user has dismissed the
  * current notice (state is owned by the useNotice hook via localStorage).
@@ -32,9 +35,11 @@ export function NoticeBanner() {
         isMobile ? 'px-2 pt-4' : 'px-4 pt-6'
       )}
     >
-      <Alert className="relative pr-12" data-testid="global-notice">
+      {/* role="status" (polite) instead of Alert's default role="alert": an announcement is not urgent, and
+          Layout remounts on navigation, which would otherwise re-interrupt screen readers every time. */}
+      <Alert role="status" className="relative pr-12" data-testid="global-notice">
         <AlertDescription>
-          <MarkdownRenderer content={notice.content} compact={true} />
+          <LazyMarkdownRenderer content={notice.content} compact={true} />
         </AlertDescription>
         <Button
           variant="ghost"

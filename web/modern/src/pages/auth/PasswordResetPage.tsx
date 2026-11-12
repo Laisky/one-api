@@ -19,6 +19,7 @@ const resetSchema = (t: (key: string) => string) =>
 
 type ResetForm = z.infer<ReturnType<typeof resetSchema>>;
 
+/** PasswordResetPage renders the request form that emails a password-reset link and returns the page. */
 export function PasswordResetPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isEmailSent, setIsEmailSent] = useState(false);
@@ -92,7 +93,8 @@ export function PasswordResetPage() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {/* noValidate keeps the localized zod messages in charge while type/required describe the field. */}
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
               <FormField
                 control={form.control}
                 name="email"
@@ -100,7 +102,16 @@ export function PasswordResetPage() {
                   <FormItem>
                     <FormLabel>{t('common.email')}</FormLabel>
                     <FormControl>
-                      <Input type="email" placeholder={t('auth.reset.enter_email')} {...field} />
+                      <Input
+                        type="email"
+                        autoComplete="email"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        required
+                        placeholder={t('auth.reset.enter_email')}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -115,7 +126,11 @@ export function PasswordResetPage() {
                 />
               )}
 
-              {form.formState.errors.root && <div className="text-sm text-destructive">{form.formState.errors.root.message}</div>}
+              {form.formState.errors.root && (
+                <div role="alert" className="text-sm text-destructive">
+                  {form.formState.errors.root.message}
+                </div>
+              )}
 
               <Button type="submit" className="w-full" disabled={isLoading || (turnstileEnabled && !turnstileToken)}>
                 {isLoading ? t('auth.reset.sending') : t('auth.reset.send_link')}

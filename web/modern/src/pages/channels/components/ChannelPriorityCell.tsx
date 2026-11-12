@@ -35,6 +35,8 @@ export function ChannelPriorityCell({ value, ariaLabel, onCommit }: ChannelPrior
       onChange={(event) => setDraft(event.target.value)}
       onBlur={commit}
       onKeyDown={(event) => {
+        // An Enter that confirms an IME composition must not commit the draft.
+        if (event.nativeEvent.isComposing || event.keyCode === 229) return;
         if (event.key === 'Enter') {
           event.preventDefault();
           (event.target as HTMLInputElement).blur();

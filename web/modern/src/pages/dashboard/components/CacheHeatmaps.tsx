@@ -270,7 +270,7 @@ function CacheCell({ entityName, day, cell, hasData, rate, lowVolume, chartHsl, 
       <PopoverTrigger asChild>
         <button
           type="button"
-          className="rounded-sm transition-transform hover:scale-110 hover:ring-2 hover:ring-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 cursor-pointer"
+          className="rounded-sm motion-safe:transition-transform motion-safe:hover:scale-110 hover:ring-2 hover:ring-primary/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 cursor-pointer"
           style={{
             height: '24px',
             backgroundColor: cellBackground(rate, chartHsl, hasData),

@@ -221,3 +221,47 @@ describe('EditUserPage group catalog', () => {
     expect(payload).not.toHaveProperty('group');
   });
 });
+
+describe('EditUserPage password policy', () => {
+  beforeEach(() => {
+    notify.mockReset();
+    (api.post as any).mockReset();
+    (api.put as any).mockReset();
+    localStorage.clear();
+  });
+
+  it('describes the new-password field for autofill and links the label', async () => {
+    setAdmin();
+    seedTargetUser();
+    renderEditPage('2');
+
+    await screen.findByDisplayValue('alice');
+    const password = screen.getByLabelText('New Password (leave empty to keep current)');
+    expect(password).toHaveAttribute('autocomplete', 'new-password');
+    expect(password).toHaveAttribute('minlength', '8');
+    const username = screen.getByLabelText('Username *');
+    expect(username).toHaveAttribute('autocomplete', 'off');
+    expect(username).toHaveAttribute('spellcheck', 'false');
+    expect(username).toHaveAttribute('maxlength', '30');
+  });
+
+  it('rejects edit passwords outside the 8-20 characters accepted by the admin update endpoint', async () => {
+    setAdmin();
+    seedTargetUser();
+    renderEditPage('2');
+    const user = userEvent.setup();
+
+    await screen.findByDisplayValue('alice');
+    const password = screen.getByLabelText('New Password (leave empty to keep current)');
+
+    await user.type(password, 'abc1234');
+    await user.click(screen.getByRole('button', { name: 'Update User' }));
+    expect(await screen.findByText('Password must be at least 8 characters')).toBeInTheDocument();
+
+    await user.clear(password);
+    await user.type(password, 'a1'.repeat(11));
+    await user.click(screen.getByRole('button', { name: 'Update User' }));
+    expect(await screen.findByText('Password must be at most 20 characters')).toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+});

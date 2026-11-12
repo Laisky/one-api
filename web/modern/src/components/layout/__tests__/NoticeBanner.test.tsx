@@ -35,6 +35,21 @@ describe('NoticeBanner', () => {
     expect(window.localStorage.getItem('notice_seen_content')).toBe('# Important');
   });
 
+  it('announces politely as a status region and renders the notice Markdown lazily', async () => {
+    mockedGet.mockResolvedValue({ data: { success: true, data: '# Maintenance tonight' } });
+
+    render(<NoticeBanner />);
+
+    const banner = await screen.findByTestId('global-notice');
+    // A site notice must not interrupt assistive technology like an urgent alert would.
+    expect(banner).toHaveAttribute('role', 'status');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    // The Markdown renderer arrives in its own chunk and replaces the raw-source fallback.
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Maintenance tonight' }, { timeout: 10_000 });
+    expect(banner).toContainElement(heading);
+  });
+
   it('does not render banner when notice is empty', async () => {
     mockedGet.mockResolvedValue({ data: { success: true, data: '' } });
 

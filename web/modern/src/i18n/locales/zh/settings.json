@@ -134,6 +134,7 @@
   },
   "personal_settings": {
     "access_token": {
+      "copy_failed": "无法复制到剪贴板。请选中下方内容并手动复制。",
       "description": "生成访问令牌和邀请链接。",
       "generate_failed": "生成访问令牌失败。",
       "generate_token": "生成访问令牌",
@@ -196,6 +197,7 @@
       "email_help": "更换邮箱需要验证。发送验证码到新邮箱地址，然后在下方确认。",
       "email_placeholder": "输入邮箱",
       "email_required": "请输入有效的邮箱地址",
+      "email_verification_code": "邮箱验证码",
       "email_verification_code_placeholder": "输入邮箱验证码",
       "failed": "更新失败",
       "load_failed": "加载个人信息失败",

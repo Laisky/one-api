@@ -70,6 +70,7 @@
       "input": {
         "hint_no_model": "请从侧边栏选择一个模型以开始",
         "hint_no_token": "请从侧边栏选择一个 API 令牌以开始",
+        "label": "消息",
         "placeholder_default": "输入您的消息... (Shift+Enter 换行)",
         "placeholder_generating": "正在生成响应...",
         "placeholder_no_model": "选择一个模型以开始聊天...",
@@ -80,7 +81,8 @@
       "model_label": "模型:",
       "preview": "预览",
       "preview_desc": "这是您的消息渲染后的样子",
-      "processing": "正在处理..."
+      "processing": "正在处理...",
+      "response_complete": "回复已完成"
     },
     "delete": {
       "cancel": "取消",

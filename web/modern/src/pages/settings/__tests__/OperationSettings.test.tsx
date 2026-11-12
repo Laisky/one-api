@@ -4,6 +4,7 @@ import { AxiosError, AxiosHeaders } from 'axios';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { api } from '@/lib/api';
+import { invalidateSystemStatusCache } from '@/lib/utils';
 import OperationSettings from '../OperationSettings';
 
 const notify = vi.fn();
@@ -12,9 +13,15 @@ vi.mock('@/components/ui/notifications', () => ({
   useNotifications: () => ({ notify }),
 }));
 
+vi.mock('@/lib/utils', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/utils')>()),
+  invalidateSystemStatusCache: vi.fn(),
+}));
+
 describe('OperationSettings failure feedback', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(invalidateSystemStatusCache).mockClear();
     notify.mockReset();
   });
 
@@ -93,6 +100,7 @@ const editGroupRatio = async (next: Record<string, number>) => {
 describe('OperationSettings group ratio names', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(invalidateSystemStatusCache).mockClear();
     notify.mockReset();
   });
 
@@ -136,6 +144,8 @@ describe('OperationSettings group ratio names', () => {
         value: JSON.stringify({ default: 1, 'legacy group': 0.5 }),
       });
     });
+    // /api/status is cached briefly, so a successful save must drop the cached copy.
+    await waitFor(() => expect(invalidateSystemStatusCache).toHaveBeenCalled());
   });
 
   it('rejects a new group that differs from another only by letter case', async () => {

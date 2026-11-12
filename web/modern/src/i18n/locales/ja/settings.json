@@ -134,6 +134,7 @@
   },
   "personal_settings": {
     "access_token": {
+      "copy_failed": "クリップボードにコピーできませんでした。下の値を選択して手動でコピーしてください。",
       "description": "アクセストークンと招待リンクを生成します。",
       "generate_failed": "アクセストークンの生成に失敗しました。",
       "generate_token": "アクセストークンを生成",
@@ -196,6 +197,7 @@
       "email_help": "メールアドレスを変更するには認証が必要です。新しいアドレスに認証コードを送り、下で確認してください。",
       "email_placeholder": "メールアドレスを入力",
       "email_required": "有効なメールアドレスを入力してください",
+      "email_verification_code": "メール認証コード",
       "email_verification_code_placeholder": "メール認証コードを入力",
       "failed": "更新に失敗しました",
       "load_failed": "プロフィール情報の読み込みに失敗しました",

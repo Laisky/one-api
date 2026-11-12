@@ -557,6 +557,7 @@ export function UsersPage() {
       <Card className="border-0 md:border shadow-none md:shadow-sm">
         <CardContent className={cn(isMobile ? 'p-2' : 'p-6')}>
           <EnhancedDataTable
+            ariaLabel={t('common.users')}
             selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
             selectionDisabled={searchKeyword.trim() !== appliedKeyword}
             columns={columns}

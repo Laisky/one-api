@@ -17,43 +17,109 @@ const STORAGE_KEY = 'passkey_prompt_dismissed';
 const AUTH_PUBLIC_PATHS = new Set(['/login', '/register', '/reset', '/user/reset']);
 
 /**
- * One-time dismissible banner shown to logged-in users who have not yet
- * registered a passkey. Once dismissed (localStorage), the banner stays hidden.
+ * passkeyProbe caches, for the signed-in account identified by sessionKey, whether that account still has no
+ * passkey. It lives in module scope because Layout (and with it this banner) remounts whenever navigation
+ * crosses between public and protected routes; the server is asked at most once per session instead of on
+ * every navigation.
+ */
+let passkeyProbe: { sessionKey: string; needsPasskey: Promise<boolean> } | null = null;
+
+/**
+ * isAuthPublicPath reports whether a pathname belongs to the sign-in/OAuth flows where probing is unsafe.
+ *
+ * @param pathname - the current router pathname.
+ * @returns true for auth and OAuth callback routes.
+ */
+const isAuthPublicPath = (pathname: string): boolean => AUTH_PUBLIC_PATHS.has(pathname) || pathname.startsWith('/oauth/');
+
+/**
+ * isPromptDismissed reports whether the user already dismissed the prompt on this device.
+ *
+ * @returns true when the dismissal flag is stored, false when it is absent or storage is unavailable.
+ */
+const isPromptDismissed = (): boolean => {
+  try {
+    return localStorage.getItem(STORAGE_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * probeNeedsPasskey asks the server whether the signed-in account has no passkey yet, reusing the answer for
+ * the same session. Failed requests are not cached, so a later mount may retry.
+ *
+ * @param sessionKey - identifies the signed-in account; a different key starts a new probe.
+ * @returns a promise resolving to true when the account has no passkey registered.
+ */
+const probeNeedsPasskey = (sessionKey: string): Promise<boolean> => {
+  if (passkeyProbe?.sessionKey === sessionKey) {
+    return passkeyProbe.needsPasskey;
+  }
+
+  const needsPasskey = api.get('/api/user/passkey').then((res) => {
+    if (!res.data?.success) {
+      return false;
+    }
+    const passkeys: unknown[] = res.data.data ?? [];
+    return passkeys.length === 0;
+  });
+  const entry = { sessionKey, needsPasskey };
+  passkeyProbe = entry;
+  needsPasskey.catch(() => {
+    if (passkeyProbe === entry) {
+      passkeyProbe = null;
+    }
+  });
+  return needsPasskey;
+};
+
+/**
+ * PasskeyPromptBanner is a one-time dismissible banner shown to logged-in users who have not yet registered a
+ * passkey. Once dismissed (localStorage), the banner stays hidden. The passkey list is fetched once per
+ * signed-in session, only while the banner is eligible (authenticated, outside the auth flows, WebAuthn
+ * supported, not dismissed), and never again on ordinary route changes.
+ *
+ * @returns the banner, or null when it should not be shown.
  */
 export function PasskeyPromptBanner() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, user } = useAuthStore();
   const [visible, setVisible] = useState(false);
 
+  const sessionKey = String(user?.uuid ?? user?.id ?? user?.username ?? '');
+  const onAuthPublicPath = isAuthPublicPath(location.pathname);
+  const eligible = isAuthenticated && !onAuthPublicPath && browserSupportsWebAuthn() && !isPromptDismissed();
+
   useEffect(() => {
-    if (!isAuthenticated) return;
-    if (AUTH_PUBLIC_PATHS.has(location.pathname) || location.pathname.startsWith('/oauth/')) return;
-    if (!browserSupportsWebAuthn()) return;
-    if (localStorage.getItem(STORAGE_KEY) === '1') return;
+    if (!isAuthenticated) {
+      // The session ended: the next sign-in (possibly as someone else) must be probed again.
+      passkeyProbe = null;
+    }
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!eligible) return;
 
     let cancelled = false;
-
-    (async () => {
-      try {
-        const res = await api.get('/api/user/passkey');
-        if (cancelled) return;
-        if (res.data.success) {
-          const passkeys: unknown[] = res.data.data ?? [];
-          if (passkeys.length === 0) {
-            setVisible(true);
-          }
+    probeNeedsPasskey(sessionKey).then(
+      (needsPasskey) => {
+        if (!cancelled) {
+          setVisible(needsPasskey);
         }
-      } catch {
-        // Silently ignore – the banner is a nice-to-have, not critical.
+      },
+      () => {
+        // The banner is a nice-to-have, so a failed probe only keeps it hidden.
+        console.debug('[passkey-prompt] passkey probe failed; banner stays hidden');
       }
-    })();
+    );
 
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, location.pathname]);
+  }, [eligible, sessionKey]);
 
   const dismiss = () => {
     localStorage.setItem(STORAGE_KEY, '1');
@@ -65,7 +131,7 @@ export function PasskeyPromptBanner() {
     navigate('/settings');
   };
 
-  if (!visible) return null;
+  if (!visible || !eligible) return null;
 
   return (
     <Banner variant="info" density="slim" onDismiss={dismiss} dismissLabel={t('passkey_prompt.dismiss')} className="mx-2 mt-2 md:mx-4">

@@ -8,7 +8,9 @@ import { browserBuildContract } from '../legacy/browser-release.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const manualChunkGroups: Record<string, string[]> = {
-  vendor: ['react', 'react-dom'],
+  // use-sync-external-store is shared by react-i18next, zustand, recharts and TanStack Table; keeping it
+  // here stops whichever feature group reaches it first from becoming a dependency of every page.
+  vendor: ['react', 'react-dom', 'use-sync-external-store'],
   router: ['react-router-dom'],
   'tanstack-query': ['@tanstack/react-query'],
   'tanstack-table': ['@tanstack/react-table'],
@@ -23,7 +25,7 @@ const manualChunkGroups: Record<string, string[]> = {
     '@radix-ui/react-hover-card',
   ],
   'markdown-core': ['react-markdown', 'marked'],
-  'markdown-remark': ['remark-gfm', 'remark-math', 'remark-emoji'],
+  'markdown-remark': ['remark-gfm', 'remark-math', 'remark-emoji', 'remark-breaks'],
   'markdown-rehype-highlight': ['rehype-highlight'],
   'markdown-rehype-katex': ['rehype-katex', 'katex'],
   'markdown-rehype-sanitize': ['rehype-sanitize'],
@@ -31,7 +33,9 @@ const manualChunkGroups: Record<string, string[]> = {
   'ui-utils': ['lucide-react', 'class-variance-authority', 'clsx', 'tailwind-merge', 'cmdk'],
   forms: ['react-hook-form', '@hookform/resolvers', 'zod'],
   network: ['axios'],
-  'misc-utils': ['qrcode', 'zustand'],
+  // qrcode is deliberately not grouped here: only the 2FA setup flow in personal settings uses it, so it
+  // belongs in that lazy route's chunks rather than in a chunk the app shell loads.
+  'misc-utils': ['zustand'],
 };
 
 /** packagePattern builds a cross-platform module-id matcher for the supplied package names and returns it. */
@@ -46,9 +50,29 @@ function packagePattern(packages: string[]): RegExp {
   return new RegExp(`[\\\\/]node_modules[\\\\/](?:${packagePaths.join('|')})(?:[\\\\/]|$)`);
 }
 
+// Groups that only feature routes (dashboard charts, Markdown pages, data tables) need. Every other group
+// holds packages shared across the app shell.
+const featureChunkGroups = new Set([
+  'tanstack-table',
+  'markdown-core',
+  'markdown-remark',
+  'markdown-rehype-highlight',
+  'markdown-rehype-katex',
+  'markdown-rehype-sanitize',
+  'charts',
+]);
+
+// Rolldown groups capture their modules' dependencies recursively by default, so a feature group can swallow
+// a small shared package (recharts pulled in clsx; a table/chart group pulled in use-sync-external-store) and
+// make every chunk that needs it statically import the whole feature chunk. Shared groups therefore get a
+// higher priority: Rolldown resolves them first and removes their modules from lower-priority groups.
+const SHARED_GROUP_PRIORITY = 20;
+const FEATURE_GROUP_PRIORITY = 10;
+
 const codeSplittingGroups = Object.entries(manualChunkGroups).map(([name, packages]) => ({
   name,
   test: packagePattern(packages),
+  priority: featureChunkGroups.has(name) ? FEATURE_GROUP_PRIORITY : SHARED_GROUP_PRIORITY,
 }));
 
 // The build uses the latest locked caniuse-lite data. Suppress Browserslist's

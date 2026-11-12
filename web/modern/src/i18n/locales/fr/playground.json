@@ -70,6 +70,7 @@
       "input": {
         "hint_no_model": "Choisissez un modèle dans la barre latérale pour commencer",
         "hint_no_token": "Choisissez un jeton API dans la barre latérale pour commencer",
+        "label": "Message",
         "placeholder_default": "Saisissez votre message... (Shift+Entrée pour une nouvelle ligne)",
         "placeholder_generating": "Réponse en cours de génération...",
         "placeholder_no_model": "Sélectionnez un modèle pour discuter...",
@@ -80,7 +81,8 @@
       "model_label": "Modèle :",
       "preview": "Aperçu",
       "preview_desc": "Voici le rendu de votre message",
-      "processing": "est en cours de traitement..."
+      "processing": "est en cours de traitement...",
+      "response_complete": "Réponse terminée"
     },
     "delete": {
       "cancel": "Annuler",

@@ -9,6 +9,7 @@ import { useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import * as z from 'zod';
+import { USER_CREATE_PASSWORD_MAX_LENGTH, USER_PASSWORD_MIN_LENGTH, USER_USERNAME_MAX_LENGTH } from './user-password-policy';
 
 type CreateUserDialogProps = {
   open: boolean;
@@ -26,13 +27,28 @@ type TopUpDialogProps = {
 
 type DialogTranslator = (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
 
+// Limits mirror dto.UserCreateRequest (username max=30, password min=8,max=30).
+const CREATE_USERNAME_MAX_LENGTH = USER_USERNAME_MAX_LENGTH;
+const CREATE_PASSWORD_MIN_LENGTH = USER_PASSWORD_MIN_LENGTH;
+const CREATE_PASSWORD_MAX_LENGTH = USER_CREATE_PASSWORD_MAX_LENGTH;
+
 /** createUserSchema accepts the create-dialog translator and returns its localized validation schema. */
 const createUserSchema = (tr: DialogTranslator) =>
   z.object({
-    username: z.string().min(1, { error: tr('validation.username_required', 'Enter a username.') }),
-    password: z.string().min(6, {
-      error: tr('validation.password_min', 'Password must be at least {{count}} characters.', { count: 6 }),
-    }),
+    username: z
+      .string()
+      .min(1, { error: tr('validation.username_required', 'Enter a username.') })
+      .max(CREATE_USERNAME_MAX_LENGTH, {
+        error: tr('validation.username_max', 'Username must be at most {{count}} characters.', { count: CREATE_USERNAME_MAX_LENGTH }),
+      }),
+    password: z
+      .string()
+      .min(CREATE_PASSWORD_MIN_LENGTH, {
+        error: tr('validation.password_min', 'Password must be at least {{count}} characters.', { count: CREATE_PASSWORD_MIN_LENGTH }),
+      })
+      .max(CREATE_PASSWORD_MAX_LENGTH, {
+        error: tr('validation.password_max', 'Password must be at most {{count}} characters.', { count: CREATE_PASSWORD_MAX_LENGTH }),
+      }),
     display_name: z.string().optional(),
   });
 
@@ -71,8 +87,10 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: CreateUserDi
           <DialogTitle>{tr('title', 'Create User')}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
+          {/* noValidate keeps the localized zod messages in charge while the native attributes describe the fields. */}
           <form
             className="space-y-3"
+            noValidate
             onSubmit={form.handleSubmit(async (values) => {
               try {
                 const res = await api.post('/api/user/', {
@@ -110,7 +128,16 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: CreateUserDi
                 <FormItem>
                   <FormLabel>{tr('fields.username.label', 'Username')}</FormLabel>
                   <FormControl>
-                    <Input placeholder={tr('fields.username.placeholder', 'Enter username')} {...field} />
+                    <Input
+                      autoComplete="off"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      maxLength={CREATE_USERNAME_MAX_LENGTH}
+                      required
+                      placeholder={tr('fields.username.placeholder', 'Enter username')}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -123,7 +150,16 @@ export function CreateUserDialog({ open, onOpenChange, onCreated }: CreateUserDi
                 <FormItem>
                   <FormLabel>{tr('fields.password.label', 'Password')}</FormLabel>
                   <FormControl>
-                    <Input type="password" placeholder={tr('fields.password.placeholder', 'Enter password')} {...field} />
+                    {/* No maxLength attribute: it would silently truncate a pasted password in a masked field;
+                        the zod maximum reports the limit instead. */}
+                    <Input
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={CREATE_PASSWORD_MIN_LENGTH}
+                      required
+                      placeholder={tr('fields.password.placeholder', 'Enter password')}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>

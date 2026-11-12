@@ -610,6 +610,7 @@ export function LogsPage() {
           </div>
 
           <EnhancedDataTable
+            ariaLabel={t('logs.title')}
             batchActions={batchActions}
             batchActionsDisabled={batchDisabled}
             batchActionsBusy={selectedActions.busy}

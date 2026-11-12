@@ -6,6 +6,7 @@ import { useNotifications } from '@/components/ui/notifications';
 import { Textarea } from '@/components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
+import { invalidateSystemStatusCache } from '@/lib/utils';
 import { zodResolver } from '@/lib/zod-resolver';
 import { Info } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -97,6 +98,8 @@ export function OtherSettings() {
         });
         return false;
       }
+      // /api/status is cached briefly; drop it so the saved option shows up immediately.
+      invalidateSystemStatusCache();
       notify({
         type: 'success',
         title: t('other_settings.save_success_title'),

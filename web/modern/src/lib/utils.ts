@@ -250,20 +250,123 @@ export const persistSystemStatus = (data: SystemStatus) => {
   }
 };
 
-export const loadSystemStatus = async (): Promise<SystemStatus | null> => {
-  // Always fetch from the server so admin-toggled flags (e.g. password_login)
-  // propagate to clients without requiring a localStorage clear. We fall back
-  // to the cached value only if the network call fails.
-  try {
-    const response = await api.get('/api/status');
-    const { success, data } = response.data;
+/**
+ * SYSTEM_STATUS_CACHE_TTL_MS is how long a successful /api/status response is reused. The app shell asks for
+ * the status from several places at once (App boot, Header, Footer, auth pages) and again whenever Layout
+ * remounts on navigation; one short-lived shared result replaces those duplicate requests while admin changes
+ * (e.g. toggling password_login) still reach clients within seconds.
+ */
+export const SYSTEM_STATUS_CACHE_TTL_MS = 5_000;
 
-    if (success && data) {
+/** LoadSystemStatusOptions controls whether a status load may reuse a recent or in-flight response. */
+export interface LoadSystemStatusOptions {
+  /** force bypasses the short-lived cache and any in-flight request and always asks the server. */
+  force?: boolean;
+}
+
+let systemStatusCache: { data: SystemStatus; serialized: string; fetchedAt: number } | null = null;
+let systemStatusRequest: Promise<SystemStatus | null> | null = null;
+let systemStatusGeneration = 0;
+
+/**
+ * describeSystemStatusError renders an unknown failure as a plain string for console logging.
+ *
+ * @param error - the caught value.
+ * @returns the error message, or the value's string form.
+ */
+const describeSystemStatusError = (error: unknown): string => (error instanceof Error ? error.message : String(error));
+
+/**
+ * isSystemStatusCacheFresh reports whether the in-memory status may be reused: it must be younger than the TTL
+ * and localStorage must still hold exactly the copy it persisted. Logout clears that copy and other writers
+ * (another tab, the top-up page) replace it; either way the in-memory value is no longer authoritative.
+ *
+ * @param cache - the cached entry to check.
+ * @returns true when the entry can be served without a request.
+ */
+const isSystemStatusCacheFresh = (cache: NonNullable<typeof systemStatusCache>): boolean => {
+  if (Date.now() - cache.fetchedAt >= SYSTEM_STATUS_CACHE_TTL_MS) {
+    return false;
+  }
+  try {
+    return localStorage.getItem('status') === cache.serialized;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * invalidateSystemStatusCache drops the cached /api/status result and detaches any in-flight request, so the
+ * next load asks the server again. Call it after changing options that /api/status reports.
+ */
+export const invalidateSystemStatusCache = (): void => {
+  systemStatusCache = null;
+  systemStatusRequest = null;
+  // Responses to requests issued before the invalidation must not repopulate the cache.
+  systemStatusGeneration += 1;
+};
+
+/**
+ * fetchSystemStatus fetches /api/status once for all concurrent callers and reuses a successful response for
+ * SYSTEM_STATUS_CACHE_TTL_MS while localStorage still holds the copy it persisted (see isSystemStatusCacheFresh).
+ * Successful responses are persisted to localStorage. Failures are never cached.
+ *
+ * @param options - pass force to skip the cache and any in-flight request.
+ * @returns a promise resolving to the server's status, or null when the server answered without success; it
+ * rejects when the request itself fails.
+ */
+export const fetchSystemStatus = (options: LoadSystemStatusOptions = {}): Promise<SystemStatus | null> => {
+  if (!options.force) {
+    if (systemStatusCache && isSystemStatusCacheFresh(systemStatusCache)) {
+      return Promise.resolve(systemStatusCache.data);
+    }
+    if (systemStatusRequest) {
+      return systemStatusRequest;
+    }
+  }
+
+  systemStatusGeneration += 1;
+  const generation = systemStatusGeneration;
+  const request = (async (): Promise<SystemStatus | null> => {
+    const response = await api.get('/api/status');
+    const { success, data } = response.data ?? {};
+    if (!success || !data) {
+      return null;
+    }
+    // Only the newest request may update shared state; an older one finishing late would roll it back.
+    if (generation === systemStatusGeneration) {
       persistSystemStatus(data);
+      systemStatusCache = { data, serialized: JSON.stringify(data), fetchedAt: Date.now() };
+    }
+    return data as SystemStatus;
+  })();
+
+  systemStatusRequest = request;
+  const release = () => {
+    if (systemStatusRequest === request) {
+      systemStatusRequest = null;
+    }
+  };
+  request.then(release, release);
+  return request;
+};
+
+/**
+ * loadSystemStatus returns the system status, sharing one request between concurrent callers and reusing a
+ * response for a few seconds (see fetchSystemStatus). When the server cannot be reached or answers without
+ * success it falls back to the copy cached in localStorage so the app stays usable offline.
+ *
+ * @param options - pass force for an explicit refresh that must not reuse a cached response.
+ * @returns a promise resolving to the status, or null when neither the server nor localStorage has one.
+ */
+export const loadSystemStatus = async (options: LoadSystemStatusOptions = {}): Promise<SystemStatus | null> => {
+  try {
+    const data = await fetchSystemStatus(options);
+    if (data) {
       return data;
     }
   } catch (error) {
-    console.error('Error fetching system status:', error);
+    console.error(`Error fetching system status: ${describeSystemStatusError(error)}`);
   }
 
   // Network/server failure — fall back to whatever we previously cached so the
@@ -273,11 +376,28 @@ export const loadSystemStatus = async (): Promise<SystemStatus | null> => {
     try {
       return JSON.parse(cached) as SystemStatus;
     } catch (parseError) {
-      console.error('Error parsing system status:', parseError);
+      console.error(`Error parsing system status: ${describeSystemStatusError(parseError)}`);
     }
   }
 
   return null;
+};
+
+/**
+ * initializeSystem loads the system status when the app boots, joining any status request already in flight.
+ * When the request fails it stores default quota, currency and name settings so formatting helpers still work.
+ *
+ * @returns a promise that settles once the status was stored or the defaults were applied.
+ */
+export const initializeSystem = async (): Promise<void> => {
+  try {
+    await fetchSystemStatus();
+  } catch (error) {
+    console.error(`Failed to initialize system settings: ${describeSystemStatusError(error)}`);
+    localStorage.setItem('quota_per_unit', '500000');
+    localStorage.setItem('display_in_currency', 'true');
+    localStorage.setItem('system_name', 'One API');
+  }
 };
 
 // Crypto utility functions
@@ -370,11 +490,5 @@ export const hasMultiModalContent = (content: string | any[]): boolean => {
   return Array.isArray(content) && content.some((item) => item && item.type === 'image_url');
 };
 
-// Function to copy text to clipboard
-export const copyToClipboard = async (text: string) => {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch (error) {
-    console.error('Failed to copy to clipboard:', error);
-  }
-};
+// copyToClipboard lives in ./clipboard; it rejects on failure so callers can report it.
+export { copyToClipboard } from './clipboard';

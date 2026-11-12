@@ -21,11 +21,14 @@ import { RegistrationPasswordFields } from './RegistrationPasswordFields';
 // complete code has been entered, while the server still checks the real value.
 const VERIFICATION_CODE_PATTERN = /^[A-Za-z0-9]{6}$/;
 
+// REGISTER_USERNAME_MAX_LENGTH mirrors the 30-character username limit in dto.UserRegisterRequest.
+const REGISTER_USERNAME_MAX_LENGTH = 30;
+
 /** registerSchema builds the registration validator using translated messages and the same password rules as the live checklist. */
 const registerSchema = (t: (key: string) => string) =>
   z
     .object({
-      username: z.string().min(3, t('auth.register.username_min_length')),
+      username: z.string().min(3, t('auth.register.username_min_length')).max(REGISTER_USERNAME_MAX_LENGTH, t('auth.register.username_max_length')),
       password: z.string().refine(isRegistrationPasswordValid, { message: t('registration_password.invalid') }),
       password2: z.string().min(1, t('registration_password.confirmation_required')),
       email: z.string().email(t('auth.register.email_required')),
@@ -183,7 +186,16 @@ export function RegisterPage() {
                   <FormItem>
                     <FormLabel htmlFor="register-username">{t('common.username')}</FormLabel>
                     <FormControl>
-                      <Input id="register-username" autoComplete="username" placeholder={t('auth.register.enter_username')} {...field} />
+                      <Input
+                        id="register-username"
+                        autoComplete="username"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        maxLength={REGISTER_USERNAME_MAX_LENGTH}
+                        placeholder={t('auth.register.enter_username')}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -195,12 +207,21 @@ export function RegisterPage() {
               <FormField
                 control={form.control}
                 name="email"
-                render={({ field }) => (
+                render={({ field, fieldState }) => (
                   <FormItem>
                     <FormLabel htmlFor="register-email">{t('common.email')}</FormLabel>
                     <FormControl>
                       <div className="flex gap-2">
-                        <Input id="register-email" type="email" autoComplete="email" placeholder={t('auth.register.enter_email')} {...field} className="flex-1" />
+                        <Input
+                          id="register-email"
+                          type="email"
+                          autoComplete="email"
+                          placeholder={t('auth.register.enter_email')}
+                          {...field}
+                          className="flex-1"
+                          aria-invalid={Boolean(fieldState.error)}
+                          aria-describedby={fieldState.error ? 'register-email-message' : undefined}
+                        />
                         <Button
                           type="button"
                           variant="outline"
@@ -216,7 +237,7 @@ export function RegisterPage() {
                         </Button>
                       </div>
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage id="register-email-message" />
                   </FormItem>
                 )}
               />
@@ -240,7 +261,16 @@ export function RegisterPage() {
                   <FormItem>
                     <FormLabel htmlFor="register-verification-code">{t('auth.register.verification_code')}</FormLabel>
                     <FormControl>
-                      <Input id="register-verification-code" autoComplete="one-time-code" placeholder={t('auth.register.enter_verification_code')} {...field} />
+                      {/* Codes are case-sensitive (common.VerifyCodeWithKey compares exactly), so never auto-correct or capitalize. */}
+                      <Input
+                        id="register-verification-code"
+                        autoComplete="one-time-code"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        placeholder={t('auth.register.enter_verification_code')}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -254,7 +284,15 @@ export function RegisterPage() {
                   <FormItem>
                     <FormLabel htmlFor="register-aff-code">{t('auth.register.aff_code')}</FormLabel>
                     <FormControl>
-                      <Input id="register-aff-code" placeholder={t('auth.register.enter_invitation_code')} {...field} />
+                      <Input
+                        id="register-aff-code"
+                        autoComplete="off"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        placeholder={t('auth.register.enter_invitation_code')}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

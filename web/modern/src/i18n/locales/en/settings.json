@@ -134,6 +134,7 @@
   },
   "personal_settings": {
     "access_token": {
+      "copy_failed": "Could not copy to the clipboard. Select the value below and copy it manually.",
       "description": "Generate access tokens and invitation links.",
       "generate_failed": "Failed to generate access token.",
       "generate_token": "Generate Access Token",
@@ -196,6 +197,7 @@
       "email_help": "Changing email requires verification. Send a code to the new address and confirm it below.",
       "email_placeholder": "Enter email",
       "email_required": "Valid email is required",
+      "email_verification_code": "Email verification code",
       "email_verification_code_placeholder": "Enter email verification code",
       "failed": "Update failed",
       "load_failed": "Failed to load profile information",

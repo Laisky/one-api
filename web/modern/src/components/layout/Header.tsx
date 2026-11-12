@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { NavigationDrawer } from '@/components/ui/mobile-drawer';
 import { useResponsive } from '@/hooks/useResponsive';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { useSystemStatus } from '@/hooks/useSystemStatus';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
@@ -34,10 +35,11 @@ import {
   Wrench,
   Zap,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { HeaderNav } from './HeaderNav';
+import { isNavItemActive } from './nav-active';
 
 // Icon mapping for navigation items
 const navigationIcons = {
@@ -56,6 +58,13 @@ const navigationIcons = {
   '/tools': Wrench,
 };
 
+/**
+ * Header renders the sticky site header: brand, primary navigation (inline on desktop, a drawer on
+ * mobile), language and theme switches, and account actions. It also keeps document.title in sync
+ * with the route, since it already owns the system status that supplies the site name.
+ *
+ * @returns The header element plus its logout confirmation dialog.
+ */
 export function Header() {
   const { t } = useTranslation();
   const { user, logout } = useAuthStore();
@@ -66,6 +75,8 @@ export function Header() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const { isMobile } = useResponsive();
   const { systemStatus } = useSystemStatus();
+  const drawerId = useId();
+  usePageTitle(systemStatus.system_name);
 
   const isAdmin = (user?.role ?? 0) >= 10;
 
@@ -101,7 +112,7 @@ export function Header() {
       ...item,
       href: item.to,
       icon: navigationIcons[item.to as keyof typeof navigationIcons],
-      isActive: location.pathname === item.to,
+      isActive: isNavItemActive(location.pathname, item.to),
     }));
 
   const performLogout = async () => {
@@ -188,8 +199,11 @@ export function Header() {
                       onClick={() => setMobileMenuOpen(true)}
                       className="touch-target"
                       aria-label={t('header.open_navigation_menu')}
+                      aria-haspopup="dialog"
+                      aria-expanded={mobileMenuOpen}
+                      aria-controls={mobileMenuOpen ? drawerId : undefined}
                     >
-                      <Menu className="h-5 w-5" />
+                      <Menu className="h-5 w-5" aria-hidden="true" />
                     </Button>
                   )}
                 </>
@@ -204,8 +218,11 @@ export function Header() {
                       onClick={() => setMobileMenuOpen(true)}
                       className="touch-target"
                       aria-label={t('header.open_navigation_menu')}
+                      aria-haspopup="dialog"
+                      aria-expanded={mobileMenuOpen}
+                      aria-controls={mobileMenuOpen ? drawerId : undefined}
                     >
-                      <Menu className="h-5 w-5" />
+                      <Menu className="h-5 w-5" aria-hidden="true" />
                     </Button>
                   ) : (
                     <>
@@ -225,6 +242,7 @@ export function Header() {
 
         {/* Mobile Navigation Drawer */}
         <NavigationDrawer
+          id={drawerId}
           isOpen={mobileMenuOpen}
           onClose={() => setMobileMenuOpen(false)}
           navigationItems={navigationItems}

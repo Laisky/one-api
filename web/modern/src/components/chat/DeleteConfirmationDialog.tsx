@@ -1,7 +1,6 @@
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertTriangle, Trash2 } from 'lucide-react';
-import React from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface DeleteConfirmationDialogProps {
@@ -12,25 +11,22 @@ interface DeleteConfirmationDialogProps {
   messagePreview?: string;
 }
 
+/**
+ * DeleteConfirmationDialog asks the user to confirm deleting one chat message.
+ * It relies on native keyboard behavior: Escape closes the Radix dialog and
+ * Enter activates only the focused button, so Enter on the initially focused
+ * Cancel button never deletes the message.
+ *
+ * @param props - Open state, close and confirm callbacks, the message role, and an optional preview.
+ * @returns The confirmation dialog element.
+ */
 export function DeleteConfirmationDialog({ isOpen, onClose, onConfirm, messageRole, messagePreview }: DeleteConfirmationDialogProps) {
   const { t } = useTranslation();
 
+  /** handleConfirm deletes the message and closes the dialog. */
   const handleConfirm = () => {
     onConfirm();
     onClose();
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    // Confirm on Enter
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleConfirm();
-    }
-    // Cancel on Escape
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      onClose();
-    }
   };
 
   const getRoleDisplayName = () => {
@@ -70,7 +66,7 @@ export function DeleteConfirmationDialog({ isOpen, onClose, onConfirm, messageRo
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-md" onKeyDown={handleKeyDown}>
+      <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <AlertTriangle className="h-4 w-4" />

@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useRef } from 'react';
+import { ReactNode, useEffect, useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -6,10 +6,15 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 
+/** APP_ROOT_ID is the element the React app mounts into; it is made inert while a drawer is open. */
+const APP_ROOT_ID = 'root';
+
 interface MobileDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   children: ReactNode;
+  /** id is placed on the dialog element so a trigger can reference it with aria-controls. */
+  id?: string;
   title?: string;
   position?: 'left' | 'right' | 'bottom' | 'top';
   className?: string;
@@ -19,10 +24,20 @@ interface MobileDrawerProps {
   closeOnEscape?: boolean;
 }
 
+/**
+ * MobileDrawer renders a modal side or edge sheet portaled to document.body. While open it makes the
+ * app root inert (so only the drawer is reachable by keyboard, pointer, and assistive technology),
+ * moves focus into the drawer, contains scroll chaining with overscroll-behavior instead of locking
+ * the page with overflow: hidden, and restores focus to the opener when it closes.
+ *
+ * @param props - See MobileDrawerProps; isOpen controls visibility and onClose requests dismissal.
+ * @returns The portaled drawer while open, otherwise null.
+ */
 export function MobileDrawer({
   isOpen,
   onClose,
   children,
+  id,
   title,
   position = 'left',
   className,
@@ -32,6 +47,7 @@ export function MobileDrawer({
   closeOnEscape = true,
 }: MobileDrawerProps) {
   const drawerRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
   const { t } = useTranslation();
 
   // Handle escape key
@@ -48,29 +64,27 @@ export function MobileDrawer({
     return () => document.removeEventListener('keydown', handleEscape);
   }, [isOpen, onClose, closeOnEscape]);
 
-  // Handle body scroll lock
+  // Modality and focus management: remember the opener, make the app root inert, move focus into the
+  // drawer, and undo all of it when the drawer closes or unmounts. Page scroll is not locked through
+  // <html>/<body> overflow (that removes the scrollbar and shifts layout); the backdrop and the sheet
+  // use overscroll-behavior: contain instead, as a progressive enhancement.
   useEffect(() => {
-    if (isOpen) {
-      const originalStyle = window.getComputedStyle(document.body).overflow;
-      document.body.style.overflow = 'hidden';
+    const drawer = drawerRef.current;
+    if (!isOpen || !drawer) return;
 
-      return () => {
-        document.body.style.overflow = originalStyle;
-      };
-    }
-  }, [isOpen]);
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const appRoot = document.getElementById(APP_ROOT_ID);
+    // The drawer is portaled to document.body, outside the app root; never inert an ancestor of it.
+    const shouldInertRoot = appRoot !== null && !appRoot.contains(drawer) && !appRoot.hasAttribute('inert');
+    if (shouldInertRoot) appRoot.setAttribute('inert', '');
 
-  // Focus management
-  useEffect(() => {
-    if (isOpen && drawerRef.current) {
-      const focusableElements = drawerRef.current.querySelectorAll(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      const firstElement = focusableElements[0] as HTMLElement;
-      if (firstElement) {
-        firstElement.focus();
-      }
-    }
+    const firstElement = drawer.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    firstElement?.focus();
+
+    return () => {
+      if (shouldInertRoot) appRoot.removeAttribute('inert');
+      if (opener?.isConnected) opener.focus({ preventScroll: true });
+    };
   }, [isOpen]);
 
   const sizeClasses = {
@@ -125,8 +139,10 @@ export function MobileDrawer({
   const drawerContent = (
     <>
       {/* Backdrop */}
+      {/* overflow-hidden turns the backdrop into a non-scrollable scroll container so that
+          overscroll-contain keeps wheel and touch scrolling over it from reaching the page. */}
       <div
-        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity duration-300"
+        className="fixed inset-0 z-40 overflow-hidden overscroll-contain bg-black/50 backdrop-blur-sm transition-opacity duration-300 motion-reduce:transition-none"
         onClick={handleBackdropClick}
         aria-hidden="true"
       />
@@ -135,22 +151,23 @@ export function MobileDrawer({
       <div
         ref={drawerRef}
         className={cn(
-          'fixed z-50 bg-background border shadow-lg transition-transform duration-300 ease-in-out',
-          'flex flex-col',
+          'fixed z-50 bg-background border shadow-lg transition-transform duration-300 ease-in-out motion-reduce:transition-none',
+          'flex flex-col overflow-hidden overscroll-contain',
           positionClasses[position],
           sizeClasses[size][position],
           transformClasses[position],
           className
         )}
+        id={id}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={title ? 'drawer-title' : undefined}
+        aria-labelledby={title ? titleId : undefined}
       >
         {/* Header */}
         {(title || showCloseButton) && (
           <div className="flex items-center justify-between p-4 border-b bg-background/95 backdrop-blur-sm">
             {title && (
-              <h2 id="drawer-title" className="text-lg font-semibold">
+              <h2 id={titleId} className="text-lg font-semibold">
                 {title}
               </h2>
             )}
@@ -162,7 +179,7 @@ export function MobileDrawer({
                 className="h-9 w-9 p-0 ml-auto touch-target"
                 aria-label={t('a11y.close_drawer')}
               >
-                <X className="h-4 w-4" />
+                <X className="h-4 w-4" aria-hidden="true" />
               </Button>
             )}
           </div>
@@ -187,20 +204,29 @@ interface NavigationDrawerProps {
   navigationItems: Array<{
     name: string;
     href: string;
-    icon?: React.ComponentType<{ className?: string }>;
+    icon?: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>;
     isActive?: boolean;
   }>;
   title?: string;
   footer?: ReactNode;
+  /** id is forwarded to the drawer's dialog element for the trigger's aria-controls. */
+  id?: string;
 }
 
-export function NavigationDrawer({ isOpen, onClose, navigationItems, title, footer }: NavigationDrawerProps) {
+/**
+ * NavigationDrawer renders the primary site navigation inside a left MobileDrawer, marking the current
+ * page with aria-current plus a non-color underline.
+ *
+ * @param props - See NavigationDrawerProps.
+ * @returns The navigation drawer, rendered only while isOpen is true.
+ */
+export function NavigationDrawer({ isOpen, onClose, navigationItems, title, footer, id }: NavigationDrawerProps) {
   const { t } = useTranslation();
   const drawerTitle = title || t('header.navigation', 'Navigation');
 
   return (
-    <MobileDrawer isOpen={isOpen} onClose={onClose} title={drawerTitle} position="left" size="md">
-      <nav className="space-y-1">
+    <MobileDrawer id={id} isOpen={isOpen} onClose={onClose} title={drawerTitle} position="left" size="md">
+      <nav className="space-y-1" aria-label={t('common.primary_navigation')}>
         {navigationItems.map((item) => (
           <Link
             key={item.href}
@@ -208,11 +234,13 @@ export function NavigationDrawer({ isOpen, onClose, navigationItems, title, foot
             aria-current={item.isActive ? 'page' : undefined}
             className={cn(
               'flex items-center space-x-3 px-3 py-2 rounded-md text-sm font-medium transition-colors',
+              // The current page is also underlined so it is not indicated by color alone.
+              'aria-[current=page]:underline aria-[current=page]:decoration-2 aria-[current=page]:underline-offset-4',
               item.isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
             )}
             onClick={onClose}
           >
-            {item.icon && <item.icon className="h-5 w-5 flex-shrink-0" />}
+            {item.icon && <item.icon className="h-5 w-5 flex-shrink-0" aria-hidden="true" />}
             <span>{item.name}</span>
           </Link>
         ))}

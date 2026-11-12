@@ -21,6 +21,7 @@ import { useForm, useWatch } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import * as z from 'zod';
+import { adminUserPasswordSchema, USER_PASSWORD_MIN_LENGTH, USER_USERNAME_MAX_LENGTH } from './user-password-policy';
 
 // Helper function to render quota with USD conversion (USD only)
 const renderQuotaWithPrompt = (quota: number): string => {
@@ -103,7 +104,7 @@ export function EditUserPage() {
           .min(3, tr('validation.username_min', 'Username must be at least 3 characters'))
           .max(30, tr('validation.username_max', 'Username must be at most 30 characters')),
         display_name: z.string().trim().max(20, tr('validation.display_name_max', 'Display name must be at most 20 characters')).optional(),
-        password: z.string().optional(),
+        password: adminUserPasswordSchema(isEdit, tr),
         email: z
           .string()
           .trim()
@@ -117,7 +118,7 @@ export function EditUserPage() {
         mcp_tool_blacklist: z.array(z.string()).optional().default([]),
         password_locked: z.boolean().default(false),
       }),
-    [tr]
+    [tr, isEdit]
   );
 
   const form = useForm<UserFormInput, unknown, UserForm>({
@@ -347,7 +348,7 @@ export function EditUserPage() {
         <Card className="border-0 shadow-none md:border md:shadow-sm">
           <CardContent className="p-4 sm:p-6">
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6">
+              <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-6" noValidate>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <FormField
                     control={form.control}
@@ -370,6 +371,11 @@ export function EditUserPage() {
                         </div>
                         <FormControl>
                           <Input
+                            autoComplete="off"
+                            autoCapitalize="none"
+                            autoCorrect="off"
+                            spellCheck={false}
+                            maxLength={USER_USERNAME_MAX_LENGTH}
                             placeholder={tr('fields.username.placeholder', 'Enter username')}
                             className={errorClass('username')}
                             {...field}
@@ -489,6 +495,8 @@ export function EditUserPage() {
                         <FormControl>
                           <Input
                             type="password"
+                            autoComplete="new-password"
+                            minLength={USER_PASSWORD_MIN_LENGTH}
                             placeholder={tr('fields.password.placeholder', 'Enter password')}
                             className={errorClass('password')}
                             disabled={!!watchPasswordLocked}

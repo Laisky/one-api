@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { loadSystemStatus, type SystemStatus } from '@/lib/utils';
+import { loadSystemStatus, type LoadSystemStatusOptions, type SystemStatus } from '@/lib/utils';
 
+/** getInitialSystemStatus returns the status cached in localStorage, or an empty object when none is usable. */
 const getInitialSystemStatus = (): SystemStatus => {
   try {
     const cached = localStorage.getItem('status');
@@ -9,17 +10,28 @@ const getInitialSystemStatus = (): SystemStatus => {
       return parsed as SystemStatus;
     }
   } catch (error) {
-    console.error('Failed to parse system status from storage:', error);
+    console.error(`Failed to parse system status from storage: ${error instanceof Error ? error.message : String(error)}`);
   }
   return {} as SystemStatus;
 };
 
+/** UseSystemStatusResult is the public surface of useSystemStatus. */
 export interface UseSystemStatusResult {
+  /** systemStatus is the latest known status, seeded from localStorage on first render. */
   systemStatus: SystemStatus;
+  /** isSystemStatusLoading is true while a load started by this hook is pending. */
   isSystemStatusLoading: boolean;
+  /** refreshSystemStatus forces a fresh /api/status request, bypassing the shared short-lived cache. */
   refreshSystemStatus: () => Promise<SystemStatus | null>;
 }
 
+/**
+ * useSystemStatus exposes the system status to a component. On mount it joins the app-wide shared request
+ * (or reuses a response that is a few seconds old), so Header, Footer and the auth pages no longer each
+ * trigger their own /api/status call; refreshSystemStatus is the explicit path that always asks the server.
+ *
+ * @returns the current status, its loading flag, and a forced refresh function.
+ */
 export const useSystemStatus = (): UseSystemStatusResult => {
   const initialStatusRef = useRef<SystemStatus | null>(null);
   if (initialStatusRef.current === null) {
@@ -33,18 +45,20 @@ export const useSystemStatus = (): UseSystemStatusResult => {
   const isMountedRef = useRef(true);
 
   useEffect(() => {
+    // Re-arm on every mount: StrictMode's simulated unmount would otherwise leave the flag false forever.
+    isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
     };
   }, []);
 
-  const refreshSystemStatus = useCallback(async () => {
+  const runLoad = useCallback(async (options: LoadSystemStatusOptions) => {
     if (!isMountedRef.current) {
       return null;
     }
     setIsSystemStatusLoading(true);
     try {
-      const status = await loadSystemStatus();
+      const status = await loadSystemStatus(options);
       if (status && isMountedRef.current) {
         setSystemStatus(status);
       }
@@ -56,9 +70,11 @@ export const useSystemStatus = (): UseSystemStatusResult => {
     }
   }, []);
 
+  const refreshSystemStatus = useCallback(() => runLoad({ force: true }), [runLoad]);
+
   useEffect(() => {
-    refreshSystemStatus();
-  }, [refreshSystemStatus]);
+    void runLoad({});
+  }, [runLoad]);
 
   return { systemStatus, isSystemStatusLoading, refreshSystemStatus };
 };

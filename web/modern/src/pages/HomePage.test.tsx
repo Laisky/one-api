@@ -1,5 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomePage } from './HomePage';
 
 // Mock api client
@@ -15,10 +15,7 @@ vi.mock('@/lib/api', () => {
 // Import the mocked api after vi.mock so TypeScript can reference it without dynamic import
 import { api } from '@/lib/api';
 
-// Simple localStorage mock helpers
-const setLocalStorage = (key: string, value: string) => {
-  window.localStorage.setItem(key, value);
-};
+// Simple localStorage helper
 const clearLocalStorage = () => {
   window.localStorage.clear();
 };
@@ -34,6 +31,12 @@ const mockApiGet = (homeContent: any, noticeContent: any = '') => {
 };
 
 describe('HomePage', () => {
+  // HomePage renders Markdown through LazyMarkdownRenderer. Load the Markdown chunk once up front so the
+  // first test does not spend its waitFor budget on the module import itself.
+  beforeAll(async () => {
+    await import('@/components/ui/markdown');
+  }, 30_000);
+
   beforeEach(() => {
     vi.resetAllMocks();
     clearLocalStorage();

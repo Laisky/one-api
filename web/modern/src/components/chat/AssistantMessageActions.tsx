@@ -1,3 +1,4 @@
+import { MESSAGE_ACTIONS_REVEAL_CLASS } from '@/components/chat/messageActionReveal';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -17,6 +18,12 @@ interface AssistantMessageActionsProps {
   isStreaming?: boolean;
 }
 
+/**
+ * AssistantMessageActions renders the options menu for an assistant response.
+ *
+ * @param props - Copy callback, optional regenerate, edit and delete callbacks, and the streaming flag that hides regenerate.
+ * @returns The menu trigger, which stays reachable on touch and keyboard as well as on hover.
+ */
 export function AssistantMessageActions({
   onCopyMessage,
   onRegenerateMessage,
@@ -27,7 +34,7 @@ export function AssistantMessageActions({
   const { t } = useTranslation();
 
   return (
-    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+    <div className={MESSAGE_ACTIONS_REVEAL_CLASS}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

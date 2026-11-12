@@ -134,6 +134,7 @@
   },
   "personal_settings": {
     "access_token": {
+      "copy_failed": "Impossible de copier dans le presse-papiers. Sélectionnez la valeur ci-dessous et copiez-la manuellement.",
       "description": "Générez des tokens d'accès et des liens d'invitation.",
       "generate_failed": "Échec de la génération du token d'accès.",
       "generate_token": "Générer un token d'accès",
@@ -196,6 +197,7 @@
       "email_help": "Le changement d’adresse e-mail nécessite une vérification. Envoyez un code à la nouvelle adresse et confirmez-le ci-dessous.",
       "email_placeholder": "Saisissez un e-mail",
       "email_required": "Une adresse e-mail valide est requise",
+      "email_verification_code": "Code de vérification par e-mail",
       "email_verification_code_placeholder": "Saisissez le code de vérification par e-mail",
       "failed": "Échec de la mise à jour",
       "load_failed": "Impossible de charger les informations du profil",

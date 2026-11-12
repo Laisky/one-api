@@ -917,7 +917,9 @@
         },
         "title": "ユーザーを作成",
         "validation": {
+          "password_max": "パスワードは{{count}}文字以内で入力してください。",
           "password_min": "パスワードは{{count}}文字以上で入力してください。",
+          "username_max": "ユーザー名は{{count}}文字以内で入力してください。",
           "username_required": "ユーザー名を入力してください。"
         }
       },
@@ -1060,6 +1062,9 @@
         "error_title": "検証エラー",
         "fix_fields": "ハイライトされたフィールドを修正してください。",
         "group_required": "グループは必須です",
+        "password_max": "パスワードは{{count}}文字以内で入力してください",
+        "password_min": "パスワードは{{count}}文字以上で入力してください",
+        "password_required": "パスワードは必須です",
         "quota_min": "クォータは負にできません",
         "username_max": "ユーザー名は最大30文字です",
         "username_min": "ユーザー名は3文字以上である必要があります"

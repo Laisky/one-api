@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 
@@ -39,9 +39,9 @@ vi.mock('@/lib/api', () => {
   };
 });
 
-const renderHeader = () =>
+const renderHeader = (initialPath = '/') =>
   render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialPath]}>
       <Header />
     </MemoryRouter>
   );
@@ -200,5 +200,106 @@ describe('Header anonymous mobile layout', () => {
 
     expect(loginLink).toHaveAttribute('href', '/login');
     expect(registerLink).toHaveAttribute('href', '/register');
+  });
+});
+
+/** renderHeaderInAppRoot mounts the header inside a #root element, like the real app mount point. */
+const renderHeaderInAppRoot = (initialPath = '/') => {
+  const appRoot = document.createElement('div');
+  appRoot.id = 'root';
+  document.body.appendChild(appRoot);
+  const result = render(
+    <MemoryRouter initialEntries={[initialPath]}>
+      <Header />
+    </MemoryRouter>,
+    { container: appRoot }
+  );
+  return { ...result, appRoot };
+};
+
+describe('Header navigation accessibility', () => {
+  beforeEach(() => {
+    mockUseResponsive.mockReset();
+    responsiveState = {
+      isMobile: false,
+      isTablet: false,
+      isDesktop: true,
+      isLarge: false,
+      currentBreakpoint: 'desktop',
+      width: 1280,
+      height: 800,
+    };
+    mockUseResponsive.mockImplementation(() => responsiveState);
+
+    useAuthStore.setState({
+      user: { id: 1, username: 'demo-user', role: 10 } as any,
+      token: 'token',
+      isAuthenticated: true,
+      login: vi.fn() as any,
+      logout: vi.fn() as any,
+      updateUser: vi.fn() as any,
+    });
+
+    localStorage.clear();
+    localStorage.setItem('system_name', 'OneAPI Test');
+    (api.get as any).mockReset();
+    (api.get as any).mockResolvedValue({ data: { success: true } });
+  });
+
+  afterEach(() => {
+    cleanup();
+    document.getElementById('root')?.remove();
+  });
+
+  it('labels the primary navigation and marks a section active on its sub-pages without relying on color', () => {
+    renderHeader('/tokens/edit/42');
+
+    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    const tokens = within(nav).getByRole('link', { name: 'Tokens' });
+    expect(tokens).toHaveAttribute('aria-current', 'page');
+    expect(tokens.className).toContain('aria-[current=page]:underline');
+    expect(within(nav).getByRole('link', { name: 'Dashboard' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('does not mark a section active for a sibling path that only shares its prefix', () => {
+    renderHeader('/tokensx');
+
+    const nav = screen.getByRole('navigation', { name: 'Primary' });
+    expect(within(nav).getByRole('link', { name: 'Tokens' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('updates the document title for the current route', () => {
+    renderHeader('/logs');
+
+    expect(document.title).toBe('Logs | OneAPI Test');
+  });
+
+  it('reflects the mobile drawer state on the menu button and makes the app inert while it is open', async () => {
+    responsiveState = { ...responsiveState, isMobile: true, isDesktop: false, currentBreakpoint: 'mobile', width: 375 };
+    const user = userEvent.setup();
+    const { appRoot } = renderHeaderInAppRoot('/tokens');
+
+    const menuButton = screen.getByRole('button', { name: /open navigation menu/i });
+    expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+    expect(menuButton).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(menuButton).not.toHaveAttribute('aria-controls');
+
+    await user.click(menuButton);
+
+    const drawer = await screen.findByRole('dialog', { name: 'Navigation' });
+    expect(menuButton).toHaveAttribute('aria-expanded', 'true');
+    expect(menuButton).toHaveAttribute('aria-controls', drawer.id);
+    expect(drawer.id).not.toBe('');
+    expect(appRoot.contains(drawer)).toBe(false);
+    expect(appRoot).toHaveAttribute('inert');
+    expect(drawer).toContainElement(document.activeElement as HTMLElement);
+    expect(within(drawer).getByRole('link', { name: 'Tokens' })).toHaveAttribute('aria-current', 'page');
+
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull());
+    expect(appRoot).not.toHaveAttribute('inert');
+    expect(menuButton).toHaveAttribute('aria-expanded', 'false');
+    expect(document.activeElement).toBe(menuButton);
   });
 });
