@@ -95,7 +95,7 @@ func (a *Adaptor) convertNonStreamingToClaudeResponse(c *gin.Context, resp *http
 		for _, part := range candidate.Content.Parts {
 			if part.Text != "" || (part.FunctionCall == nil && part.InlineData == nil && part.FileData == nil && (part.ThoughtSignature != "" || part.Thought)) {
 				textBuilder.WriteString(part.Text)
-				claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "text", Text: part.Text, ExtraContent: model.GooglePartMetadata(part.ThoughtSignature, part.Thought)})
+				claudeResp.Content = append(claudeResp.Content, model.ClaudeContent{Type: "text", Text: part.Text, ExtraContent: geminiPartExtraContent(part, 0, false)})
 			}
 
 			if geminiOpenaiCompatible.IsGeminiImageGenerationModel(meta.ActualModelName) {

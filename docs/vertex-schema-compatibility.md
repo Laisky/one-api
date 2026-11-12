@@ -58,6 +58,10 @@ The final ordering regression first failed when valid caller positions reversed 
 
 The [dated Vertex model audit](vertexai-model-audit-20261112.md) distinguishes the refreshed advertised catalog from retained legacy routing, protocol support and entitlement.
 
+The final buffered Claude regression distinguishes a signature-only Part from an explicit signed empty text Part. Both buffered and SSE Claude replay retain the original oneof presence using the shared carrier helper. Custom and client-discovery Responses tool-call lowering also retains extra_content for the existing native typed decoder; malformed Google metadata still fails validation, while non-native compatibility conversion retains its existing metadata policy. Actual-controller custom/discovery continuation fixtures exercise those carriers before native transport.
+
+The generic buffered Chat-to-Claude bridge separately restores text/tool block order when every projected block carries a complete, unique gateway position permutation. Missing, duplicate or invalid positions retain its established projection; this bridge does not infer missing ordering information or change its public error contract. The native Vertex converter and its separately tested streaming ordering path remain distinct.
+
 ## Evidence limits
 
 No paid live API calls were made and no credentials were created. Offline mock transport and regression tests establish only the shapes, exclusivity, preservation, controls and response/stream fixtures they exercise. They cannot prove a real model accepts or enforces a keyword. Root qualification exercised actual-controller stateless two-turn JSON/SSE continuation, and adapter qualification exercised actual-controller stateful previous_response_id JSON/SSE continuation. Those passed without state/security implementation changes. Targeted signature, empty-Part, mixed-order and position-validity checks also passed. These fixtures remain narrower than live model qualification. Consult the final PR evidence for broader suites, races, quick checks and vet; this note does not infer their results from targeted passes.

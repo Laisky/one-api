@@ -220,6 +220,8 @@ func chatResponseToClaude(c *gin.Context, r *chatTextResponse) relaymodel.Claude
 			out.Content = append(out.Content, relaymodel.ClaudeContent{Type: claudeBlockThinking, Thinking: thinking})
 		}
 
+		choiceStart := len(out.Content)
+
 		if blocks, native := claudeGoogleTextBlocks(choice.Message); native {
 			out.Content = append(out.Content, blocks...)
 		} else if choice.Message.Content != nil {
@@ -257,6 +259,8 @@ func chatResponseToClaude(c *gin.Context, r *chatTextResponse) relaymodel.Claude
 			}
 		}
 
+		copy(out.Content[choiceStart:], claudePositionedBlocks(out.Content[choiceStart:]))
+
 		if choice.FinishReason != "" {
 			stopReason = ClaudeStopReasonFromChatFinish(choice.FinishReason)
 		}
@@ -264,6 +268,30 @@ func chatResponseToClaude(c *gin.Context, r *chatTextResponse) relaymodel.Claude
 
 	out.StopReason = FinalizeClaudeStopReason(stopReason, ClaudeContentHasToolUse(out.Content))
 	return out
+}
+
+// claudePositionedBlocks restores one choice's text/tool order only for a complete gateway position permutation.
+// Parameters: blocks are the projected content and tool blocks. Returns a reordered copy when
+// every block has one unique position, or the established projection unchanged when metadata
+// is absent, incomplete or invalid. It never infers positions or changes block contents.
+func claudePositionedBlocks(blocks []relaymodel.ClaudeContent) []relaymodel.ClaudeContent {
+	if len(blocks) == 0 {
+		return blocks
+	}
+	if _, present := relaymodel.GeminiPartIndex(blocks[0].ExtraContent); !present {
+		return blocks
+	}
+	ordered := make([]relaymodel.ClaudeContent, len(blocks))
+	seen := make([]bool, len(blocks))
+	for _, block := range blocks {
+		position, present := relaymodel.GeminiPartIndex(block.ExtraContent)
+		if !present || position < 0 || position >= len(blocks) || seen[position] {
+			return blocks
+		}
+		ordered[position] = block
+		seen[position] = true
+	}
+	return ordered
 }
 
 // ConvertOpenAIStreamToClaudeSSE reads an OpenAI-compatible Chat Completions or

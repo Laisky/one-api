@@ -9,16 +9,12 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-const geminiCompleteToolStateKey = "gemini_complete_tool_stream_state"
-
-const vertexPartPositionsKey = "gemini_vertex_part_positions"
-
 // EnableVertexPartPositions enables gateway order metadata for this trusted Vertex request.
-func EnableVertexPartPositions(c *gin.Context) { c.Set(vertexPartPositionsKey, true) }
+func EnableVertexPartPositions(c *gin.Context) { c.Set(ctxkey.GeminiVertexPartPositions, true) }
 
 // geminiVertexPartPositions reports whether this request is using the native Vertex adapter.
 func geminiVertexPartPositions(c *gin.Context) bool {
-	return c != nil && c.GetBool(vertexPartPositionsKey)
+	return c != nil && c.GetBool(ctxkey.GeminiVertexPartPositions)
 }
 
 // geminiBufferedPartPositions preserves positions for Vertex calls or actual signed/thought native parts.
@@ -36,13 +32,13 @@ func geminiBufferedPartPositions(c *gin.Context, candidate *ChatCandidate) bool 
 
 // geminiCompleteToolState returns request-local complete-call counters by candidate.
 func geminiCompleteToolState(c *gin.Context) map[int64]int {
-	if value, ok := c.Get(geminiCompleteToolStateKey); ok {
+	if value, ok := c.Get(ctxkey.GeminiCompleteToolStreamState); ok {
 		if counts, ok := value.(map[int64]int); ok {
 			return counts
 		}
 	}
 	counts := make(map[int64]int)
-	c.Set(geminiCompleteToolStateKey, counts)
+	c.Set(ctxkey.GeminiCompleteToolStreamState, counts)
 	return counts
 }
 
@@ -107,14 +103,13 @@ type geminiPartStreamState struct {
 // Ordinary no-tool text keeps its scalar Chat shape. Late metadata without prior tool context
 // cannot recover earlier scalar boundaries; incomplete replay metadata is rejected rather than guessed.
 func assignGeminiStreamPartPositions(c *gin.Context, response *ChatResponse) {
-	const key = "gemini_native_part_stream_positions"
 	var state *geminiPartStreamState
-	if value, exists := c.Get(key); exists {
+	if value, exists := c.Get(ctxkey.GeminiNativePartStreamPositions); exists {
 		state, _ = value.(*geminiPartStreamState)
 	}
 	if state == nil {
 		state = &geminiPartStreamState{next: map[int64]int{}, positioned: map[int64]bool{}}
-		c.Set(key, state)
+		c.Set(ctxkey.GeminiNativePartStreamPositions, state)
 	}
 	toolCapable := false
 	if value, exists := c.Get(ctxkey.ConvertedRequest); exists {

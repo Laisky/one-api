@@ -141,13 +141,17 @@ func lowerResponseFallbackToolItems(input ResponseAPIInput, catalog *ResponseFal
 // catalog. It returns nil for items with no conversational content.
 func lowerResponseDiscoveryItem(item ResponseToolSearchInputItem, catalog *ResponseFallbackToolCatalog) (map[string]any, error) {
 	var envelope struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
+		ID           string          `json:"id"`
+		Status       string          `json:"status"`
+		ExtraContent json.RawMessage `json:"extra_content"`
 	}
 	if err := json.Unmarshal(item.Raw, &envelope); err != nil {
 		return nil, errors.Wrap(err, "decode discovery item envelope")
 	}
 	fields := map[string]any{"call_id": item.CallID}
+	if len(envelope.ExtraContent) > 0 {
+		fields["extra_content"] = envelope.ExtraContent
+	}
 	if envelope.ID != "" {
 		fields["id"] = envelope.ID
 	}
@@ -293,14 +297,14 @@ func annotateResponseAssistantMessage(item map[string]any, note string) map[stri
 }
 
 // responseLoweredFunctionCall builds a function_call item that keeps the
-// original item and call identifiers so the converter pairs it with its output.
+// original identifiers and metadata so the converter pairs its output and applies provider-scoped typed metadata validation.
 func responseLoweredFunctionCall(item map[string]any, name, arguments string) map[string]any {
 	lowered := map[string]any{
 		"type":      "function_call",
 		"name":      name,
 		"arguments": arguments,
 	}
-	for _, key := range []string{"id", "call_id", "status"} {
+	for _, key := range []string{"id", "call_id", "status", "extra_content"} {
 		if value, ok := item[key]; ok {
 			lowered[key] = value
 		}
