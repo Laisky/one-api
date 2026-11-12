@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { acquirePageScrollLock } from '@/lib/page-scroll-lock';
 import { useTranslation } from 'react-i18next';
 
 /** APP_ROOT_ID is the element the React app mounts into; it is made inert while a drawer is open. */
@@ -27,8 +28,8 @@ interface MobileDrawerProps {
 /**
  * MobileDrawer renders a modal side or edge sheet portaled to document.body. While open it makes the
  * app root inert (so only the drawer is reachable by keyboard, pointer, and assistive technology),
- * moves focus into the drawer, contains scroll chaining with overscroll-behavior instead of locking
- * the page with overflow: hidden, and restores focus to the opener when it closes.
+ * moves focus into the drawer, locks background scrolling independently of overscroll support,
+ * and restores the scroll position and opener focus when it closes.
  *
  * @param props - See MobileDrawerProps; isOpen controls visibility and onClose requests dismissal.
  * @returns The portaled drawer while open, otherwise null.
@@ -65,9 +66,8 @@ export function MobileDrawer({
   }, [isOpen, onClose, closeOnEscape]);
 
   // Modality and focus management: remember the opener, make the app root inert, move focus into the
-  // drawer, and undo all of it when the drawer closes or unmounts. Page scroll is not locked through
-  // <html>/<body> overflow (that removes the scrollbar and shifts layout); the backdrop and the sheet
-  // use overscroll-behavior: contain instead, as a progressive enhancement.
+  // drawer, and undo all of it when the drawer closes or unmounts. The shared lock retains the
+  // background position and scrollbar gap even when overscroll containment is incomplete.
   useEffect(() => {
     const drawer = drawerRef.current;
     if (!isOpen || !drawer) return;
@@ -77,11 +77,13 @@ export function MobileDrawer({
     // The drawer is portaled to document.body, outside the app root; never inert an ancestor of it.
     const shouldInertRoot = appRoot !== null && !appRoot.contains(drawer) && !appRoot.hasAttribute('inert');
     if (shouldInertRoot) appRoot.setAttribute('inert', '');
+    const releaseScrollLock = acquirePageScrollLock();
 
     const firstElement = drawer.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
     firstElement?.focus();
 
     return () => {
+      releaseScrollLock();
       if (shouldInertRoot) appRoot.removeAttribute('inert');
       if (opener?.isConnected) opener.focus({ preventScroll: true });
     };
@@ -139,8 +141,7 @@ export function MobileDrawer({
   const drawerContent = (
     <>
       {/* Backdrop */}
-      {/* overflow-hidden turns the backdrop into a non-scrollable scroll container so that
-          overscroll-contain keeps wheel and touch scrolling over it from reaching the page. */}
+      {/* Containment supplements the page lock; non-scrollable-container support varies by engine. */}
       <div
         className="fixed inset-0 z-40 overflow-hidden overscroll-contain bg-black/50 backdrop-blur-sm transition-opacity duration-300 motion-reduce:transition-none"
         onClick={handleBackdropClick}

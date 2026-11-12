@@ -917,6 +917,7 @@
         },
         "title": "Créer un utilisateur",
         "validation": {
+          "password_max_bytes": "Le mot de passe doit contenir au maximum {{count}} octets en UTF-8",
           "password_max": "Le mot de passe doit contenir au plus {{count}} caractères.",
           "password_min": "Le mot de passe doit contenir au moins {{count}} caractères.",
           "username_max": "Le nom d’utilisateur doit comporter au plus {{count}} caractères.",
@@ -1062,6 +1063,7 @@
         "error_title": "Erreur de validation",
         "fix_fields": "Veuillez corriger les champs mis en évidence.",
         "group_required": "Le groupe est requis",
+        "password_max_bytes": "Le mot de passe doit contenir au maximum {{count}} octets en UTF-8",
         "password_max": "Le mot de passe doit contenir au plus {{count}} caractères",
         "password_min": "Le mot de passe doit contenir au moins {{count}} caractères",
         "password_required": "Le mot de passe est obligatoire",

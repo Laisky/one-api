@@ -72,7 +72,7 @@ describe('Responsive Components', () => {
     expect(container).toBeTruthy();
   });
 
-  it('labels an open MobileDrawer with a unique title id, focuses inside it, and leaves body overflow alone', () => {
+  it('labels an open MobileDrawer with a unique title id, focuses inside it, and locks background scrolling', () => {
     const onClose = vi.fn();
     render(
       <TestWrapper>
@@ -91,8 +91,8 @@ describe('Responsive Components', () => {
     expect(first).toHaveAttribute('aria-modal', 'true');
     expect(first.getAttribute('aria-labelledby')).not.toBe(second.getAttribute('aria-labelledby'));
     expect(document.querySelector('#drawer-title')).toBeNull();
-    // Scroll chaining is contained with overscroll-behavior instead of locking <body>.
-    expect(document.body.style.overflow).toBe('');
+    expect(document.body.style.overflow).toBe('hidden');
+    expect(document.body.style.position).toBe('fixed');
     expect(first.className).toContain('overscroll-contain');
     expect(first.className).toContain('motion-reduce:transition-none');
 

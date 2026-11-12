@@ -95,6 +95,33 @@ describe('UserDialogs localized validation', () => {
     expect(api.post).toHaveBeenCalledWith('/api/user/', { username: 'alice', password: 'abc12345', display_name: 'alice' });
   });
 
+  it('rejects four emoji using the backend code point minimum', async () => {
+    render(<CreateUserDialog open onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('用户名'), { target: { value: 'alice' } });
+    fireEvent.change(screen.getByLabelText('密码'), { target: { value: '😀'.repeat(4) } });
+    fireEvent.click(screen.getByRole('button', { name: '创建' }));
+    expect(await screen.findByText('密码至少需要 8 个字符')).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
+  it.each(['😀'.repeat(18), ' abc123 ', ' '.repeat(8)])('submits valid Unicode or whitespace creation passwords unchanged: %j', async (password) => {
+    vi.mocked(api.post).mockResolvedValueOnce({ data: { success: true } } as any);
+    render(<CreateUserDialog open onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('用户名'), { target: { value: 'alice' } });
+    fireEvent.change(screen.getByLabelText('密码'), { target: { value: password } });
+    fireEvent.click(screen.getByRole('button', { name: '创建' }));
+    await waitFor(() => expect(api.post).toHaveBeenCalledWith('/api/user/', { username: 'alice', password, display_name: 'alice' }));
+  });
+
+  it('rejects a code point-valid password that exceeds bcrypt byte capacity', async () => {
+    render(<CreateUserDialog open onOpenChange={vi.fn()} onCreated={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText('用户名'), { target: { value: 'alice' } });
+    fireEvent.change(screen.getByLabelText('密码'), { target: { value: '😀'.repeat(19) } });
+    fireEvent.click(screen.getByRole('button', { name: '创建' }));
+    expect(await screen.findByText('密码的 UTF-8 编码最多为 72 字节')).toBeInTheDocument();
+    expect(api.post).not.toHaveBeenCalled();
+  });
+
   it('shows a Chinese integer message in the top-up dialog', async () => {
     render(<TopUpDialog open userId={1} username="alice" onOpenChange={vi.fn()} onDone={vi.fn()} />);
 

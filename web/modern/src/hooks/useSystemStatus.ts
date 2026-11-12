@@ -1,3 +1,4 @@
+import { systemStatusState, subscribeSystemStatusClear } from '@/lib/system-status-cache';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { loadSystemStatus, type LoadSystemStatusOptions, type SystemStatus } from '@/lib/utils';
 
@@ -43,12 +44,20 @@ export const useSystemStatus = (): UseSystemStatusResult => {
     () => Object.keys(initialStatusRef.current || {}).length === 0
   );
   const isMountedRef = useRef(true);
+  const loadSequenceRef = useRef(0);
 
   useEffect(() => {
     // Re-arm on every mount: StrictMode's simulated unmount would otherwise leave the flag false forever.
     isMountedRef.current = true;
+    const unsubscribe = subscribeSystemStatusClear(() => {
+      loadSequenceRef.current += 1;
+      setSystemStatus({});
+      setIsSystemStatusLoading(false);
+    });
     return () => {
       isMountedRef.current = false;
+      loadSequenceRef.current += 1;
+      unsubscribe();
     };
   }, []);
 
@@ -56,15 +65,19 @@ export const useSystemStatus = (): UseSystemStatusResult => {
     if (!isMountedRef.current) {
       return null;
     }
+    const sequence = ++loadSequenceRef.current;
     setIsSystemStatusLoading(true);
+    const request = loadSystemStatus(options);
+    const generation = systemStatusState.generation;
     try {
-      const status = await loadSystemStatus(options);
+      const status = await request;
+      if (sequence !== loadSequenceRef.current || generation !== systemStatusState.generation) return null;
       if (status && isMountedRef.current) {
         setSystemStatus(status);
       }
       return status;
     } finally {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && sequence === loadSequenceRef.current) {
         setIsSystemStatusLoading(false);
       }
     }

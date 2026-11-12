@@ -1,6 +1,8 @@
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { api } from './api';
+import { systemStatusState } from './system-status-cache';
+export { invalidateSystemStatusCache } from './system-status-cache';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -264,10 +266,6 @@ export interface LoadSystemStatusOptions {
   force?: boolean;
 }
 
-let systemStatusCache: { data: SystemStatus; serialized: string; fetchedAt: number } | null = null;
-let systemStatusRequest: Promise<SystemStatus | null> | null = null;
-let systemStatusGeneration = 0;
-
 /**
  * describeSystemStatusError renders an unknown failure as a plain string for console logging.
  *
@@ -284,7 +282,7 @@ const describeSystemStatusError = (error: unknown): string => (error instanceof 
  * @param cache - the cached entry to check.
  * @returns true when the entry can be served without a request.
  */
-const isSystemStatusCacheFresh = (cache: NonNullable<typeof systemStatusCache>): boolean => {
+const isSystemStatusCacheFresh = (cache: NonNullable<typeof systemStatusState.cache>): boolean => {
   if (Date.now() - cache.fetchedAt >= SYSTEM_STATUS_CACHE_TTL_MS) {
     return false;
   }
@@ -296,55 +294,43 @@ const isSystemStatusCacheFresh = (cache: NonNullable<typeof systemStatusCache>):
 };
 
 /**
- * invalidateSystemStatusCache drops the cached /api/status result and detaches any in-flight request, so the
- * next load asks the server again. Call it after changing options that /api/status reports.
- */
-export const invalidateSystemStatusCache = (): void => {
-  systemStatusCache = null;
-  systemStatusRequest = null;
-  // Responses to requests issued before the invalidation must not repopulate the cache.
-  systemStatusGeneration += 1;
-};
-
-/**
  * fetchSystemStatus fetches /api/status once for all concurrent callers and reuses a successful response for
  * SYSTEM_STATUS_CACHE_TTL_MS while localStorage still holds the copy it persisted (see isSystemStatusCacheFresh).
  * Successful responses are persisted to localStorage. Failures are never cached.
  *
  * @param options - pass force to skip the cache and any in-flight request.
  * @returns a promise resolving to the server's status, or null when the server answered without success; it
- * rejects when the request itself fails.
+ * returns null if invalidated or superseded, and rejects when the request itself fails.
  */
 export const fetchSystemStatus = (options: LoadSystemStatusOptions = {}): Promise<SystemStatus | null> => {
   if (!options.force) {
-    if (systemStatusCache && isSystemStatusCacheFresh(systemStatusCache)) {
-      return Promise.resolve(systemStatusCache.data);
+    if (systemStatusState.cache && isSystemStatusCacheFresh(systemStatusState.cache)) {
+      return Promise.resolve(systemStatusState.cache.data);
     }
-    if (systemStatusRequest) {
-      return systemStatusRequest;
+    if (systemStatusState.request) {
+      return systemStatusState.request;
     }
   }
 
-  systemStatusGeneration += 1;
-  const generation = systemStatusGeneration;
+  systemStatusState.generation += 1;
+  const generation = systemStatusState.generation;
   const request = (async (): Promise<SystemStatus | null> => {
     const response = await api.get('/api/status');
     const { success, data } = response.data ?? {};
     if (!success || !data) {
       return null;
     }
-    // Only the newest request may update shared state; an older one finishing late would roll it back.
-    if (generation === systemStatusGeneration) {
-      persistSystemStatus(data);
-      systemStatusCache = { data, serialized: JSON.stringify(data), fetchedAt: Date.now() };
-    }
+    // Discard stale data for callers too, so a late response cannot roll React state back.
+    if (generation !== systemStatusState.generation) return null;
+    persistSystemStatus(data);
+    systemStatusState.cache = { data, serialized: JSON.stringify(data), fetchedAt: Date.now() };
     return data as SystemStatus;
   })();
 
-  systemStatusRequest = request;
+  systemStatusState.request = request;
   const release = () => {
-    if (systemStatusRequest === request) {
-      systemStatusRequest = null;
+    if (systemStatusState.request === request) {
+      systemStatusState.request = null;
     }
   };
   request.then(release, release);
@@ -357,15 +343,19 @@ export const fetchSystemStatus = (options: LoadSystemStatusOptions = {}): Promis
  * success it falls back to the copy cached in localStorage so the app stays usable offline.
  *
  * @param options - pass force for an explicit refresh that must not reuse a cached response.
- * @returns a promise resolving to the status, or null when neither the server nor localStorage has one.
+ * @returns a promise resolving to the status, or null after invalidation or when no status is available.
  */
 export const loadSystemStatus = async (options: LoadSystemStatusOptions = {}): Promise<SystemStatus | null> => {
+  const request = fetchSystemStatus(options);
+  const generation = systemStatusState.generation;
   try {
-    const data = await fetchSystemStatus(options);
+    const data = await request;
+    if (generation !== systemStatusState.generation) return null;
     if (data) {
       return data;
     }
   } catch (error) {
+    if (generation !== systemStatusState.generation) return null;
     console.error(`Error fetching system status: ${describeSystemStatusError(error)}`);
   }
 
@@ -390,9 +380,12 @@ export const loadSystemStatus = async (options: LoadSystemStatusOptions = {}): P
  * @returns a promise that settles once the status was stored or the defaults were applied.
  */
 export const initializeSystem = async (): Promise<void> => {
+  const request = fetchSystemStatus();
+  const generation = systemStatusState.generation;
   try {
-    await fetchSystemStatus();
+    await request;
   } catch (error) {
+    if (generation !== systemStatusState.generation) return;
     console.error(`Failed to initialize system settings: ${describeSystemStatusError(error)}`);
     localStorage.setItem('quota_per_unit', '500000');
     localStorage.setItem('display_in_currency', 'true');

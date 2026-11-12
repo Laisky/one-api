@@ -917,6 +917,7 @@
         },
         "title": "创建用户",
         "validation": {
+          "password_max_bytes": "密码的 UTF-8 编码最多为 {{count}} 字节",
           "password_max": "密码最多 {{count}} 个字符",
           "password_min": "密码至少需要 {{count}} 个字符",
           "username_max": "用户名最多 {{count}} 个字符",
@@ -1062,6 +1063,7 @@
         "error_title": "验证错误",
         "fix_fields": "请更正高亮显示的字段。",
         "group_required": "分组是必填项",
+        "password_max_bytes": "密码的 UTF-8 编码最多为 {{count}} 字节",
         "password_max": "密码最多 {{count}} 个字符",
         "password_min": "密码至少需要 {{count}} 个字符",
         "password_required": "密码是必填项",

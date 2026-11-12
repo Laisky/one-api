@@ -9,7 +9,7 @@ import { useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import * as z from 'zod';
-import { USER_CREATE_PASSWORD_MAX_LENGTH, USER_PASSWORD_MIN_LENGTH, USER_USERNAME_MAX_LENGTH } from './user-password-policy';
+import { createUserPasswordSchema, USER_PASSWORD_MIN_LENGTH, USER_USERNAME_MAX_LENGTH } from './user-password-policy';
 
 type CreateUserDialogProps = {
   open: boolean;
@@ -30,7 +30,6 @@ type DialogTranslator = (key: string, defaultValue: string, options?: Record<str
 // Limits mirror dto.UserCreateRequest (username max=30, password min=8,max=30).
 const CREATE_USERNAME_MAX_LENGTH = USER_USERNAME_MAX_LENGTH;
 const CREATE_PASSWORD_MIN_LENGTH = USER_PASSWORD_MIN_LENGTH;
-const CREATE_PASSWORD_MAX_LENGTH = USER_CREATE_PASSWORD_MAX_LENGTH;
 
 /** createUserSchema accepts the create-dialog translator and returns its localized validation schema. */
 const createUserSchema = (tr: DialogTranslator) =>
@@ -41,14 +40,7 @@ const createUserSchema = (tr: DialogTranslator) =>
       .max(CREATE_USERNAME_MAX_LENGTH, {
         error: tr('validation.username_max', 'Username must be at most {{count}} characters.', { count: CREATE_USERNAME_MAX_LENGTH }),
       }),
-    password: z
-      .string()
-      .min(CREATE_PASSWORD_MIN_LENGTH, {
-        error: tr('validation.password_min', 'Password must be at least {{count}} characters.', { count: CREATE_PASSWORD_MIN_LENGTH }),
-      })
-      .max(CREATE_PASSWORD_MAX_LENGTH, {
-        error: tr('validation.password_max', 'Password must be at most {{count}} characters.', { count: CREATE_PASSWORD_MAX_LENGTH }),
-      }),
+    password: createUserPasswordSchema(tr),
     display_name: z.string().optional(),
   });
 

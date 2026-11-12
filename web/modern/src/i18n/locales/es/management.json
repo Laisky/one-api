@@ -917,6 +917,7 @@
         },
         "title": "Crear usuario",
         "validation": {
+          "password_max_bytes": "La contraseña debe ocupar como máximo {{count}} bytes en UTF-8",
           "password_max": "La contraseña debe tener como máximo {{count}} caracteres.",
           "password_min": "La contraseña debe tener al menos {{count}} caracteres.",
           "username_max": "El nombre de usuario debe tener como máximo {{count}} caracteres.",
@@ -1062,6 +1063,7 @@
         "error_title": "Error de validación",
         "fix_fields": "Por favor corrige los campos resaltados.",
         "group_required": "El grupo es obligatorio",
+        "password_max_bytes": "La contraseña debe ocupar como máximo {{count}} bytes en UTF-8",
         "password_max": "La contraseña debe tener como máximo {{count}} caracteres",
         "password_min": "La contraseña debe tener al menos {{count}} caracteres",
         "password_required": "La contraseña es obligatoria",
