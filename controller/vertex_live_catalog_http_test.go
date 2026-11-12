@@ -31,7 +31,9 @@ func TestVertexLiveDashboardModelCatalog(t *testing.T) {
 	require.True(t, body.Success)
 	models := body.Data[fmt.Sprint(channeltype.VertextAI)]
 	require.Contains(t, models, "gemini-3.8-live")
-	require.Contains(t, models, "gemini-3.8-live-extended-thinking")
+	for _, name := range vertexLegacyLiveModelIDs() {
+		require.NotContains(t, models, name, "dashboard suggestions do not determine operator-configured eligibility")
+	}
 	require.Contains(t, models, "gemini-live-2.5-flash-native-audio")
 	require.Contains(t, models, "gemini-3.8-flash")
 }

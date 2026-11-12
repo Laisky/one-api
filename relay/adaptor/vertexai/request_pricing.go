@@ -22,7 +22,7 @@ func requiresClaude52Pricing(name string) bool {
 	return anthropic.IsClaude52(name)
 }
 
-// ValidateRequestPricing requires complete channel-owned tariffs for Claude 5.2.
+// ValidateRequestPricing requires complete channel-owned tariffs for Claude 5.2 and Argon Cyber.
 // It preserves existing channel data and uses billing's request-start window resolver.
 func (a *Adaptor) ValidateRequestPricing(c *gin.Context, m *meta.Meta) error {
 	if m == nil {
@@ -34,7 +34,7 @@ func (a *Adaptor) ValidateRequestPricing(c *gin.Context, m *meta.Meta) error {
 	}
 	if name == "gemini-4-argon-cyber-permissive" {
 		if err := pricing.RequireExplicitTokenPricing(c, m); err != nil {
-			return err
+			return errors.Wrap(err, "validate Vertex Argon Cyber token pricing")
 		}
 		value, _ := c.Get(ctxkey.ChannelModel)
 		channel := value.(*dbmodel.Channel)
