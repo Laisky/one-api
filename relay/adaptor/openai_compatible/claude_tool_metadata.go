@@ -1,8 +1,6 @@
 package openai_compatible
 
 import (
-	"encoding/json"
-
 	"github.com/Laisky/errors/v2"
 
 	"github.com/Laisky/one-api/relay/model"
@@ -16,35 +14,19 @@ func claudeNativePartMetadata(block map[string]any, native bool) *model.ToolExtr
 	if !native {
 		return nil
 	}
-	extra, ok := block["extra_content"].(map[string]any)
-	if !ok {
+	// Native routes run validateClaudeNativeMetadata over every block first and reject a malformed
+	// carrier there, so a decode error cannot occur here; nil keeps the established "no metadata" result.
+	extra, err := model.DecodeToolExtraContent(block["extra_content"])
+	if err != nil || extra == nil {
 		return nil
 	}
-	var result *model.ToolExtraContent
-	if google, ok := extra["google"].(map[string]any); ok {
-		signature, _ := google["thought_signature"].(string)
-		thought, _ := google["thought"].(bool)
-		result = model.GooglePartMetadata(signature, thought)
-	}
-	if oneapi, ok := extra["oneapi"].(map[string]any); ok {
-		if present, ok := oneapi["gemini_text_present"].(bool); ok {
-			result = model.WithGeminiTextPresent(result, present)
+	signature, thought := model.GoogleMetadata(extra)
+	result := model.GooglePartMetadata(signature, thought)
+	if extra.OneAPI != nil {
+		if extra.OneAPI.GeminiTextPresent != nil {
+			result = model.WithGeminiTextPresent(result, *extra.OneAPI.GeminiTextPresent)
 		}
-		if raw, present := oneapi["gemini_part_index"]; present && raw != nil {
-			// The native request validator already checked the typed integer representation.
-			index := -1
-			switch number := raw.(type) {
-			case float64:
-				index = int(number)
-			case int:
-				index = number
-			case int64:
-				index = int(number)
-			case json.Number:
-				if parsed, err := number.Int64(); err == nil {
-					index = int(parsed)
-				}
-			}
+		if index, positioned := model.GeminiPartIndex(extra); positioned {
 			result = model.WithGeminiPartIndex(result, index)
 		}
 	}
@@ -120,16 +102,8 @@ func validateClaudeNativeMetadata(request *model.ClaudeRequest) error {
 			if !ok {
 				continue
 			}
-			raw, present := block["extra_content"]
-			if !present || raw == nil {
-				continue
-			}
-			encoded, err := json.Marshal(raw)
-			if err != nil {
-				return errors.New("validation failed: invalid native Claude provider metadata")
-			}
-			var metadata model.ToolExtraContent
-			if err := json.Unmarshal(encoded, &metadata); err != nil {
+			if _, err := model.DecodeToolExtraContent(block["extra_content"]); err != nil {
+				// Client-facing text stays fixed: decoder details name Go types, never useful to callers.
 				return errors.New("validation failed: invalid native Claude provider metadata")
 			}
 		}

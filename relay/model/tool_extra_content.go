@@ -1,5 +1,11 @@
 package model
 
+import (
+	"encoding/json"
+
+	"github.com/Laisky/errors/v2"
+)
+
 // ToolExtraContent carries documented provider metadata on Chat messages, parts and tool calls.
 // It is deliberately typed so arbitrary upstream fields do not become gateway controls.
 type ToolExtraContent struct {
@@ -90,4 +96,24 @@ func WithGeminiTextPresent(extra *ToolExtraContent, present bool) *ToolExtraCont
 // GeminiTextPresent returns the supplied text-presence marker, or true for ordinary public text content.
 func GeminiTextPresent(extra *ToolExtraContent) bool {
 	return extra == nil || extra.OneAPI == nil || extra.OneAPI.GeminiTextPresent == nil || *extra.OneAPI.GeminiTextPresent
+}
+
+// DecodeToolExtraContent decodes one client-supplied carrier through the typed schema, the single
+// decoder shared by Chat parts, Responses items and Claude blocks.
+// Parameters: value is a decoded JSON value; nil means absent or null. Returns nil for an absent
+// carrier, the typed carrier, or a wrapped error for a malformed one (wrong types, fractional or
+// overflowing positions). Error text never includes opaque signature values.
+func DecodeToolExtraContent(value any) (*ToolExtraContent, error) {
+	if value == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, errors.Wrap(err, "encode provider metadata")
+	}
+	var extra ToolExtraContent
+	if err := json.Unmarshal(encoded, &extra); err != nil {
+		return nil, errors.Wrap(err, "decode provider metadata")
+	}
+	return &extra, nil
 }

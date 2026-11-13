@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/json"
 	stderrors "errors"
 	"fmt"
 	"strings"
@@ -53,14 +52,12 @@ func (m Message) ParseContentChecked() ([]MessageContent, error) {
 				part = parsed[0]
 			}
 			if err == nil {
-				if metadata, exists := object["extra_content"]; exists {
-					encoded, encodeErr := json.Marshal(metadata)
-					if encodeErr != nil {
-						return nil, errors.Wrap(encodeErr, "encode content metadata")
-					}
-					if decodeErr := json.Unmarshal(encoded, &part.ExtraContent); decodeErr != nil {
+				if metadata, exists := object[extraContentKey]; exists {
+					extra, decodeErr := DecodeToolExtraContent(metadata)
+					if decodeErr != nil {
 						return nil, errors.Wrap(decodeErr, "decode content metadata")
 					}
+					part.ExtraContent = extra
 				}
 				err = validateMessagePart(part)
 			}
