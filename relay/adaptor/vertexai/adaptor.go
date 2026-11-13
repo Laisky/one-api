@@ -286,6 +286,15 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	// administrator-owned channel rates rather than fabricated defaults.
 	for name, cfg := range geminiOpenaiCompatible.ModelRatios {
 		if !adaptor.IsLiveOnlyGoogleModel(name) {
+			if name == geminiOpenaiCompatible.Gemini4CarbonModel {
+				// Cloud bills Carbon at its gross Standard tariff. Introductory
+				// account credits do not change the upstream token price.
+				// https://cloud.google.com/model-garden/pricing (2026-11-12).
+				cfg.Ratio = 4.00 * ratio.MilliTokensUsd
+				cfg.CompletionRatio = 20.00 / 4.00
+				cfg.CachedInputRatio = 0.20 * ratio.MilliTokensUsd
+				cfg.TimeWindows = nil
+			}
 			if geminiOpenaiCompatible.IsGeminiNanoBanana21Model(name) {
 				// Vertex prices implicit cache hits at $0.15/1M input tokens;
 				// the Gemini Developer API does not expose caching for this model.

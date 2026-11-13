@@ -1,0 +1,73 @@
+package openai
+
+import (
+	"encoding/json"
+	"slices"
+	"strings"
+
+	"github.com/Laisky/errors/v2"
+
+	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
+	"github.com/Laisky/one-api/relay/model"
+)
+
+// applyGemini4CompatibleReasoning validates the requested effort against the
+// registered upstream model and removes ignored sampling controls in place. It
+// returns an error for unsupported efforts and preserves system instructions.
+func applyGemini4CompatibleReasoning(modelName string, request *model.GeneralOpenAIRequest) error {
+	if request.Thinking != nil {
+		return errors.Errorf("validation failed: Gemini model %q requires reasoning_effort levels instead of provider-specific thinking controls", modelName)
+	}
+	requestedEfforts := []*string{request.ReasoningEffort}
+	if request.Reasoning != nil {
+		requestedEfforts = append(requestedEfforts, request.Reasoning.Effort)
+	}
+	if len(request.OutputConfig) > 0 {
+		var controls struct {
+			Effort *string `json:"effort"`
+		}
+		if err := json.Unmarshal(request.OutputConfig, &controls); err != nil {
+			return errors.Wrap(err, "validation failed: decode Claude output_config reasoning effort for Gemini")
+		}
+		requestedEfforts = append(requestedEfforts, controls.Effort)
+	}
+
+	var effort *string
+	for _, requested := range requestedEfforts {
+		if requested == nil {
+			continue
+		}
+		normalized := strings.ToLower(strings.TrimSpace(*requested))
+		// Google's OpenAI-compatible transport maps minimal to low for Gemini 4,
+		// although native thinkingLevel does not accept minimal.
+		// https://aistudio.google.com/docs/openai#thinking
+		if normalized == "minimal" {
+			normalized = "low"
+		}
+		if normalized == "default" {
+			normalized = ""
+		}
+		if effort != nil && *effort != normalized {
+			return errors.Errorf("validation failed: conflicting reasoning_effort controls for Gemini model %q", modelName)
+		}
+		effort = &normalized
+	}
+	// Omitting the field lets Google select the model-specific default:
+	// medium for Argon/Carbon and high for Hydrogen.
+	if effort != nil && *effort == "" {
+		effort = nil
+	}
+	if effort != nil {
+		config, ok := geminiOpenaiCompatible.ModelRatios[normalizedModelName(modelName)]
+		if !ok || !slices.Contains(config.SupportedReasoningEfforts, *effort) {
+			return errors.Errorf("validation failed: reasoning_effort %q is unsupported by Gemini model %q", *effort, modelName)
+		}
+	}
+
+	request.ReasoningEffort = effort
+	request.Reasoning = nil
+	request.OutputConfig = nil
+	request.Temperature = nil
+	request.TopP = nil
+	return nil
+}

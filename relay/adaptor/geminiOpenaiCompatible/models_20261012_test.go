@@ -39,7 +39,12 @@ func TestGeminiOctoberLifecycle(t *testing.T) {
 	}
 	require.Contains(t, geminiOpenaiCompatible.ModelRatios["gemini-3.1-flash-image"].Description, "no shutdown date announced")
 	require.Contains(t, geminiOpenaiCompatible.ModelRatios["gemini-3.5-flash"].Description, "not a verified current tariff")
-	for _, id := range []string{"gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"} {
-		require.Contains(t, geminiOpenaiCompatible.ModelRatios[id].Description, "not deprecated")
+	// Google's November 2 announcement replaces the October lifecycle status
+	// for these two IDs. Retain the unchanged Flash-Lite control separately.
+	for _, id := range []string{"gemini-2.5-pro", "gemini-2.5-flash"} {
+		require.Contains(t, geminiOpenaiCompatible.ModelRatios[id].Description, "is deprecated in the Gemini Developer API")
+		require.Contains(t, geminiOpenaiCompatible.ModelRatios[id].Description, "December 1, 2026")
+		require.NotContains(t, geminiOpenaiCompatible.ModelRatios[id].Description, "not deprecated")
 	}
+	require.Contains(t, geminiOpenaiCompatible.ModelRatios["gemini-2.5-flash-lite"].Description, "not deprecated")
 }

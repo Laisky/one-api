@@ -20,7 +20,7 @@ var GeminiToolingDefaults = geminiOpenaiCompatible.GeminiToolingDefaults()
 // Keep stable IDs and dated snapshots aligned with the shared model catalog.
 //
 // Sources: https://ai.google.dev/gemini-api/docs/models (verified 2026-09-18)
-// and https://ai.google.dev/gemini-api/docs/latest-model (Argon verified 2026-10-13).
+// and https://aistudio.google.com/docs/models (Gemini 4 verified 2026-11-12).
 var ModelsSupportSystemInstruction = []string{
 	"gemini-2.5-flash", "gemini-2.5-flash-preview",
 	"gemini-2.5-flash-lite", "gemini-2.5-flash-lite-preview",
@@ -36,11 +36,14 @@ var ModelsSupportSystemInstruction = []string{
 	"gemini-3.5-flash", "gemini-3.5-flash-lite",
 	"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash",
 	"gemini-4-argon",
+	geminiOpenaiCompatible.Gemini4CarbonModel, geminiOpenaiCompatible.Gemini4HydrogenModel,
 	"gemini-robotics-er-1.6-preview", "gemini-robotics-er-2-preview",
 }
 
 // IsModelSupportSystemInstruction reports whether model accepts system instructions.
 // Parameters: model is the upstream Gemini model ID. Returns: true when system instructions are supported.
 func IsModelSupportSystemInstruction(model string) bool {
-	return geminiOpenaiCompatible.IsGeminiNanoBanana21Model(model) || slices.Contains(ModelsSupportSystemInstruction, model)
+	return geminiOpenaiCompatible.IsGemini4Model(model) ||
+		geminiOpenaiCompatible.IsGeminiNanoBanana21Model(model) ||
+		slices.Contains(ModelsSupportSystemInstruction, model)
 }

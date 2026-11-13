@@ -323,7 +323,11 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 	}
 	supportsReasoning := isModelSupportedReasoning(actualModel)
 
-	if supportsReasoning {
+	if channelType == channeltype.GeminiOpenAICompatible && geminiOpenaiCompatible.IsGemini4Model(normalizedModelName(actualModel)) {
+		if err := applyGemini4CompatibleReasoning(actualModel, request); err != nil {
+			return err
+		}
+	} else if supportsReasoning {
 		// Sampling depends on the effective effort, not merely on whether the
 		// model is capable of reasoning. Preserve explicit zero values at none.
 		request.ReasoningEffort = normalizeReasoningEffortForModel(actualModel, request.ReasoningEffort)
@@ -484,6 +488,15 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 				zap.String("model", openaiRequest.Model),
 				zap.Int("rewritten_count", rewrites),
 			)
+		}
+	}
+	if metaInfo != nil && metaInfo.ChannelType == channeltype.GeminiOpenAICompatible {
+		metaInfo.EnsureActualModelName(openaiRequest.Model)
+		if geminiOpenaiCompatible.IsGemini4Model(normalizedModelName(metaInfo.ActualModelName)) {
+			openaiRequest.OutputConfig = request.OutputConfig
+			if err := a.applyRequestTransformations(metaInfo, openaiRequest); err != nil {
+				return nil, errors.Wrap(err, "apply Gemini request transformations for Claude conversion")
+			}
 		}
 	}
 	if shouldForceResponseAPI(metaInfo) {
