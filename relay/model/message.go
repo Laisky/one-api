@@ -70,6 +70,9 @@ type Message struct {
 	// that text-only tool message (plus a ToolResultMediaCarrier message);
 	// converters that can place images inside a tool result, such as Claude
 	// tool_result blocks, rebuild the result from these parts instead.
+	// Native Claude lowering also records media-bearing tool_result blocks here
+	// while Content keeps its established flattened text, so a native consumer
+	// that cannot represent the media fails closed instead of sending it as text.
 	ToolResultParts []MessageContent `json:"-"`
 	// ToolResultIsError carries an explicitly declared tool execution failure.
 	ToolResultIsError bool `json:"-"`

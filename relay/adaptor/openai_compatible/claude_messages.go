@@ -146,6 +146,9 @@ func convertClaudeRequest(c *gin.Context, request *model.ClaudeRequest, nativeMe
 						return nil, errors.Wrap(err, "validation failed: Claude media")
 					}
 				}
+				if err := validateClaudeNativeToolResults(blocks); err != nil {
+					return nil, err
+				}
 			}
 		}
 		converted := convertClaudeMessageToOpenAI(msg, nativeMedia)
@@ -313,45 +316,10 @@ func convertClaudeBlocks(role string, blocks []any, nativeMedia ...bool) []model
 				msg.contentParts = append(msg.contentParts, model.MessageContent{Type: model.ContentTypeText, Text: &textCopy, ExtraContent: claudeNativePartMetadata(blockMap, len(nativeMedia) > 0 && nativeMedia[0])})
 			}
 		case "image":
-			if source, exists := blockMap["source"].(map[string]any); exists {
+			if part, ok := claudeImageBlockPart(blockMap); ok {
 				msg := ensurePending()
-				sourceType, _ := source["type"].(string)
-				switch sourceType {
-				case "base64":
-					if mt, ok := source["media_type"].(string); ok {
-						if data, ok := source["data"].(string); ok {
-							url := fmt.Sprintf("data:%s;base64,%s", mt, data)
-							imageURL := model.ImageURL{Url: url}
-							if detail, ok := source["detail"].(string); ok {
-								imageURL.Detail = detail
-							}
-							recordClaudeNativePart(msg, false, nativeMedia...)
-							msg.contentParts = append(msg.contentParts, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &imageURL})
-						}
-					}
-				case "url":
-					if urlStr, ok := source["url"].(string); ok {
-						imageURL := model.ImageURL{Url: urlStr}
-						if detail, ok := source["detail"].(string); ok {
-							imageURL.Detail = detail
-						}
-						recordClaudeNativePart(msg, false, nativeMedia...)
-						msg.contentParts = append(msg.contentParts, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &imageURL})
-					}
-				case "file":
-					fileID, _ := source["file_id"].(string)
-					fileData, _ := source["file_data"].(string)
-					filename, _ := source["filename"].(string)
-					if fileID != "" || fileData != "" {
-						recordClaudeNativePart(msg, false, nativeMedia...)
-						msg.contentParts = append(msg.contentParts, model.MessageContent{
-							Type:     model.ContentTypeFile,
-							FileID:   fileID,
-							FileData: fileData,
-							Filename: filename,
-						})
-					}
-				}
+				recordClaudeNativePart(msg, false, nativeMedia...)
+				msg.contentParts = append(msg.contentParts, part)
 			}
 		case "tool_use":
 			id, _ := blockMap["id"].(string)
@@ -403,7 +371,7 @@ func convertClaudeBlocks(role string, blocks []any, nativeMedia ...bool) []model
 			}
 		case "tool_result":
 			flush()
-			if toolMsg := convertClaudeToolResultBlock(blockMap); toolMsg != nil {
+			if toolMsg := convertClaudeToolResultBlock(blockMap, len(nativeMedia) > 0 && nativeMedia[0]); toolMsg != nil {
 				result = append(result, *toolMsg)
 			}
 		default:
@@ -423,7 +391,12 @@ func convertClaudeBlocks(role string, blocks []any, nativeMedia ...bool) []model
 	return result
 }
 
-func convertClaudeToolResultBlock(block map[string]any) *model.Message {
+// convertClaudeToolResultBlock lowers one Claude tool_result block to a Chat tool message.
+// Parameters: block is the decoded tool_result and native selects native-media routes,
+// which additionally retain media-bearing results as ordered ToolResultParts. Returns
+// the tool message, or nil for a nil block. Content always keeps the established
+// flattened text so non-native consumers observe unchanged behavior.
+func convertClaudeToolResultBlock(block map[string]any, native bool) *model.Message {
 	if block == nil {
 		return nil
 	}
@@ -454,6 +427,9 @@ func convertClaudeToolResultBlock(block map[string]any) *model.Message {
 	}
 	if name, ok := block["name"].(string); ok && name != "" {
 		toolMsg.Name = &name
+	}
+	if native {
+		toolMsg.ToolResultParts = claudeToolResultParts(block["content"])
 	}
 	return &toolMsg
 }
