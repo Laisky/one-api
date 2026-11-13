@@ -12,7 +12,13 @@ import {
 
 export const Form = FormProvider;
 
-type FormFieldContextValue = { error?: FieldError; name?: string; id?: string };
+type FormFieldContextValue = {
+  error?: FieldError;
+  name?: string;
+  id?: string;
+  messageId?: string;
+  registerControlId?: (id: string | undefined) => () => void;
+};
 
 const FormFieldContext = React.createContext<FormFieldContextValue>({});
 
@@ -21,12 +27,11 @@ const NATIVE_CONTROL_TAGS = new Set(['input', 'textarea', 'select', 'button']);
 
 /**
  * useFormField reads the surrounding FormField context.
- * It returns the generated control id, the matching error-message id, the current field error and the field name;
+ * It returns the effective control identity, stable error-message identity, current error, field name and registrar;
  * the ids are undefined outside a FormField so standalone labels and controls keep their explicit wiring.
  */
 function useFormField() {
-  const { error, name, id } = React.useContext(FormFieldContext);
-  return { id, messageId: id ? `${id}-message` : undefined, error, name };
+  return React.useContext(FormFieldContext);
 }
 
 /**
@@ -45,7 +50,7 @@ export function FormItem({ className, ...props }: React.HTMLAttributes<HTMLDivEl
 
 /**
  * FormLabel renders a styled label from the supplied label attributes and returns it.
- * Inside a FormField it points `htmlFor` at the field's generated control id unless an explicit `htmlFor` is given.
+ * Inside a FormField it uses the control's effective id unless an explicit `htmlFor` is given.
  */
 export function FormLabel({ className, htmlFor, ...props }: React.LabelHTMLAttributes<HTMLLabelElement>) {
   const { id } = useFormField();
@@ -54,25 +59,27 @@ export function FormLabel({ className, htmlFor, ...props }: React.LabelHTMLAttri
 
 /**
  * FormControl renders a styled control container from the supplied div attributes and returns it.
- * Inside a FormField it wires its single child control to the field: it adds the generated `id` (keeping an explicit
- * one), `aria-invalid` reflecting the current error, and appends the error-message id to `aria-describedby` only while
+ * Inside a FormField it registers an explicit child id with the shared identity owner before paint, or uses its
+ * generated fallback. It adds `aria-invalid` and appends the stable error-message id to `aria-describedby` only while
  * an error exists. Layout wrappers such as a `div` are left untouched so they keep their explicit wiring.
  */
 export function FormControl({ className, children, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  const { id, messageId, error } = useFormField();
-  let content = children;
+  const { id, messageId, error, registerControlId } = useFormField();
+  const child = React.isValidElement<Record<string, unknown>>(children) ? children : null;
+  const isWireable = Boolean(child && (typeof child.type !== 'string' || NATIVE_CONTROL_TAGS.has(child.type)));
+  const explicitId = child?.props.id as string | undefined;
 
-  if (id && React.isValidElement<Record<string, unknown>>(children)) {
-    const isWireable = typeof children.type !== 'string' || NATIVE_CONTROL_TAGS.has(children.type);
-    if (isWireable) {
-      const childProps = children.props;
-      content = React.cloneElement(children, {
-        id: (childProps.id as string | undefined) ?? id,
-        'aria-invalid': (childProps['aria-invalid'] as boolean | undefined) ?? Boolean(error),
-        'aria-describedby': mergeIdRefs(childProps['aria-describedby'] as string | undefined, error ? messageId : undefined),
-      });
-    }
-  }
+  React.useLayoutEffect(() => {
+    if (isWireable) return registerControlId?.(explicitId);
+  }, [isWireable, explicitId, registerControlId]);
+
+  const content = id && child && isWireable
+    ? React.cloneElement(child, {
+      id: explicitId ?? id,
+      'aria-invalid': (child.props['aria-invalid'] as boolean | undefined) ?? Boolean(error),
+      'aria-describedby': mergeIdRefs(child.props['aria-describedby'] as string | undefined, error ? messageId : undefined),
+    })
+    : children;
 
   return (
     <div className={cn('space-y-2', className)} {...props}>
@@ -109,7 +116,8 @@ type FormFieldProps<
 
 /**
  * FormField binds the supplied field props to an explicit or provider control and returns the controlled field.
- * It also generates a stable id that FormLabel, FormControl and FormMessage use to link the label, control and error.
+ * It owns the effective control id shared by label and control, plus a stable error-message id.
+ * FormControl may register an explicit id without replacing its child ref or changing the error identity.
  */
 export function FormField<
   TFieldValues extends FieldValues = FieldValues,
@@ -119,6 +127,20 @@ export function FormField<
   const formContext = useFormContext<TFieldValues, unknown, TTransformedValues>();
   const resolvedControl = control ?? formContext?.control;
   const id = React.useId();
+  const [controlId, setControlId] = React.useState<string | undefined>();
+  const activeControlRef = React.useRef<symbol | null>(null);
+  /** registerControlId adopts a mounted control's explicit id and returns an ownership-safe cleanup. */
+  const registerControlId = React.useCallback((explicitId: string | undefined) => {
+    const owner = Symbol('form-control');
+    activeControlRef.current = owner;
+    setControlId(explicitId);
+    return () => {
+      if (activeControlRef.current === owner) {
+        activeControlRef.current = null;
+        setControlId(undefined);
+      }
+    };
+  }, []);
 
   if (!resolvedControl) {
     throw new Error('FormField must be used within a Form provider or be given an explicit control');
@@ -129,7 +151,7 @@ export function FormField<
       control={resolvedControl}
       {...props}
       render={(fieldProps) => (
-        <FormFieldContext.Provider value={{ error: fieldProps.fieldState.error, name: props.name, id }}>
+        <FormFieldContext.Provider value={{ error: fieldProps.fieldState.error, name: props.name, id: controlId ?? id, messageId: `${id}-message`, registerControlId }}>
           {render(fieldProps)}
         </FormFieldContext.Provider>
       )}

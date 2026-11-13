@@ -74,18 +74,31 @@ describe('Responsive Components', () => {
 
   it('labels an open MobileDrawer with a unique title id, focuses inside it, and locks background scrolling', () => {
     const onClose = vi.fn();
-    render(
+    const onSecondClose = vi.fn();
+    const { rerender } = render(
       <TestWrapper>
         <MobileDrawer isOpen onClose={onClose} title="First drawer" id="first-drawer">
           <div>First content</div>
         </MobileDrawer>
-        <MobileDrawer isOpen onClose={() => {}} title="Second drawer">
+        <MobileDrawer isOpen={false} onClose={onSecondClose} title="Second drawer">
           <div>Second content</div>
         </MobileDrawer>
       </TestWrapper>
     );
 
-    const first = screen.getByRole('dialog', { name: 'First drawer' });
+    expect(screen.getByRole('dialog', { name: 'First drawer' })).toHaveAttribute('id', 'first-drawer');
+    rerender(
+      <TestWrapper>
+        <MobileDrawer isOpen onClose={onClose} title="First drawer" id="first-drawer">
+          <div>First content</div>
+        </MobileDrawer>
+        <MobileDrawer isOpen onClose={onSecondClose} title="Second drawer">
+          <div>Second content</div>
+        </MobileDrawer>
+      </TestWrapper>
+    );
+    const first = document.getElementById('first-drawer')!;
+    expect(first).toHaveAttribute('inert');
     const second = screen.getByRole('dialog', { name: 'Second drawer' });
     expect(first).toHaveAttribute('id', 'first-drawer');
     expect(first).toHaveAttribute('aria-modal', 'true');
@@ -97,10 +110,11 @@ describe('Responsive Components', () => {
     expect(first.className).toContain('motion-reduce:transition-none');
 
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(onClose).toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onSecondClose).toHaveBeenCalledTimes(1);
   });
 
-  it('restores focus to the opener and clears inert on the app root when a MobileDrawer closes', () => {
+  it('restores focus to the opener and clears inert on the app root when a MobileDrawer closes', async () => {
     const appRoot = document.createElement('div');
     appRoot.id = 'root';
     document.body.appendChild(appRoot);
@@ -131,7 +145,7 @@ describe('Responsive Components', () => {
 
     expect(screen.queryByRole('dialog', { name: 'Menu' })).toBeNull();
     expect(appRoot).not.toHaveAttribute('inert');
-    expect(document.activeElement).toBe(opener);
+    await waitFor(() => expect(document.activeElement).toBe(opener));
     appRoot.remove();
   });
 

@@ -97,6 +97,11 @@ def check_drawer(page, bundle: str, css: str, unsupported: bool, engine: str) ->
         expect(opener).to_be_focused()
     page.evaluate('window.drawerFixture.open()')
     expect(dialog).to_be_visible()
+    page.mouse.click(380, 500)
+    expect(dialog).to_have_count(0)
+    expect(opener).to_be_focused()
+    page.evaluate('window.drawerFixture.open()')
+    expect(dialog).to_be_visible()
     page.evaluate('window.drawerFixture.unmount()')
     expect(dialog).to_have_count(0)
     expect(opener).to_be_focused()
@@ -106,7 +111,7 @@ def check_drawer(page, bundle: str, css: str, unsupported: bool, engine: str) ->
     page.mouse.wheel(0, 350)
     page.wait_for_function('window.scrollY > 400')
     return {'scrollIsolation': True, 'drawerScrolling': True, 'focusReturn': True,
-            'repeatedClose': True, 'unmountCleanup': True, 'nativeTouchInput': engine == 'chromium'}
+            'repeatedClose': True, 'unmountCleanup': True, 'nativeTouchInput': engine == 'chromium', 'backdropClick': True}
 
 
 def main() -> None:

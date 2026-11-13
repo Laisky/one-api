@@ -1,3 +1,5 @@
+import { StrictMode } from 'react';
+import { Input } from './input';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useForm } from 'react-hook-form';
@@ -83,7 +85,9 @@ type LabeledForm = {
 };
 
 /** LabeledHarness renders a labelled FormControl field plus optional wrapper and explicit-id variants. */
-const LabeledHarness = ({ explicitId, describedBy }: { explicitId?: string; describedBy?: string }) => {
+const LabeledHarness = ({ explicitId, describedBy, explicitHtmlFor, forwarded }: {
+  explicitId?: string; describedBy?: string; explicitHtmlFor?: string; forwarded?: boolean;
+}) => {
   const form = useForm<LabeledForm>({ defaultValues: { name: '' } });
 
   return (
@@ -94,9 +98,11 @@ const LabeledHarness = ({ explicitId, describedBy }: { explicitId?: string; desc
           rules={{ required: 'Name is required' }}
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Name</FormLabel>
+              <FormLabel htmlFor={explicitHtmlFor}>Name</FormLabel>
               <FormControl>
-                <input id={explicitId} aria-describedby={describedBy} {...field} />
+                {forwarded
+                  ? <Input id={explicitId} aria-describedby={describedBy} {...field} />
+                  : <input id={explicitId} aria-describedby={describedBy} {...field} />}
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -117,6 +123,51 @@ describe('FormField accessibility wiring', () => {
     expect(input.tagName).toBe('INPUT');
     await user.click(screen.getByText('Name'));
     expect(input).toHaveFocus();
+  });
+
+  it('uses an explicit child id for the default label and its click target', async () => {
+    const user = userEvent.setup();
+    render(<LabeledHarness explicitId="custom-name" />);
+    const input = screen.getByLabelText('Name');
+    expect(input).toHaveAttribute('id', 'custom-name');
+    await user.click(screen.getByText('Name'));
+    expect(input).toHaveFocus();
+  });
+
+  it('preserves existing matching explicit htmlFor callers', async () => {
+    const user = userEvent.setup();
+    render(<LabeledHarness explicitId="custom-name" explicitHtmlFor="custom-name" />);
+    const input = screen.getByLabelText('Name');
+    await user.click(screen.getByText('Name'));
+    expect(input).toHaveAttribute('id', 'custom-name');
+    expect(input).toHaveFocus();
+  });
+
+  it('updates the label when an explicit id changes or is removed without changing error identity', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<LabeledHarness explicitId="custom-name" describedBy="name-hint" />);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const message = await screen.findByText('Name is required');
+    const messageId = message.id;
+    rerender(<LabeledHarness explicitId="next-name" describedBy="name-hint" />);
+    expect(screen.getByLabelText('Name')).toHaveAttribute('id', 'next-name');
+    expect(screen.getByLabelText('Name')).toHaveAttribute('aria-describedby', `name-hint ${messageId}`);
+    expect(message).toHaveAttribute('id', messageId);
+    rerender(<LabeledHarness describedBy="name-hint" />);
+    const generated = screen.getByLabelText('Name');
+    expect(generated.id).toBeTruthy();
+    expect(generated.id).not.toBe('next-name');
+    expect(generated).toHaveAttribute('aria-describedby', `name-hint ${messageId}`);
+  });
+
+  it('keeps forwarded input refs and explicit ids working in StrictMode', async () => {
+    const user = userEvent.setup();
+    render(<StrictMode><LabeledHarness explicitId="forwarded-name" forwarded /></StrictMode>);
+    const input = screen.getByLabelText('Name');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Name is required')).toBeInTheDocument();
+    expect(input).toHaveFocus();
+    expect(input).toHaveAttribute('id', 'forwarded-name');
   });
 
   it('marks the control invalid and links the message only after a failed submit', async () => {
