@@ -95,6 +95,15 @@ type innerAIAdapter interface {
 	DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode)
 }
 
+// UsesNativeGemini reports whether model dispatches through the native Vertex Gemini
+// GenerateContent sub-adaptor, which consumes gateway provider metadata itself.
+// Parameters: model is the actual upstream model name. Returns false for partner,
+// managed open, media and unknown models.
+func UsesNativeGemini(model string) bool {
+	return modelMapping[model] == VertexAIGemini
+}
+
+// GetAdaptor returns the Vertex sub-adaptor registered for model, or nil when none is registered.
 func GetAdaptor(model string) innerAIAdapter {
 	adaptorType := modelMapping[model]
 	switch adaptorType {

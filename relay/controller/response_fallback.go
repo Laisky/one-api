@@ -370,6 +370,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		return execErr
 	}
 
+	scopeChatRequestForDestination(c, meta, chatRequest)
 	convertedRequest, err := preparedGoogleOrConvertRequest(c, meta, chatRequest, requestAdaptor)
 	if err != nil {
 		_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "convert_request_failed")
