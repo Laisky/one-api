@@ -49,9 +49,10 @@ func TestGeminiThoughtSignatureInput(t *testing.T) {
 	require.JSONEq(t, string(before), string(after))
 }
 
-// TestGeminiThoughtSignatureResponse exercises native response parsing and public Chat wire serialization.
+// TestGeminiThoughtSignatureResponse exercises native parsing and negotiated native-Part Chat serialization.
 func TestGeminiThoughtSignatureResponse(t *testing.T) {
 	c, recorder := signatureTestContext()
+	c.Request.Header.Set(NativePartsHeader, "v1") // This test exercises the negotiated native-Part wire contract.
 	body := `{"candidates":[{"content":{"role":"model","parts":[{"functionCall":{"name":"lookup","args":{"q":"a"}},"thoughtSignature":"c2lnLUE="},{"functionCall":{"name":"other","args":{}}}]},"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":3,"totalTokenCount":10}}`
 	failure, usage := Handler(c, &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, 0, "gemini-3.8-flash")
 	require.Nil(t, failure)
@@ -77,6 +78,7 @@ func TestGeminiThoughtSignatureResponse(t *testing.T) {
 // TestGeminiThoughtSignatureStream keeps distinct complete calls at contiguous per-candidate indexes across chunks.
 func TestGeminiThoughtSignatureStream(t *testing.T) {
 	c, recorder := signatureTestContext()
+	c.Request.Header.Set(NativePartsHeader, "v1") // This test exercises the negotiated native-Part wire contract.
 	body := "data: " + `{"candidates":[{"index":0,"content":{"parts":[{"text":"checking"},{"functionCall":{"name":"lookup","args":{"q":"a"}},"thoughtSignature":"c2lnLUE="}]}}]}` + "\n\n" +
 		"data: " + `{"candidates":[{"index":0,"content":{"parts":[{"functionCall":{"name":"lookup","args":{"q":"b"}},"thoughtSignature":"c2lnLUI="}]}},{"index":1,"content":{"parts":[{"functionCall":{"name":"other","args":{}}}]}}]}` + "\n\n" +
 		"data: " + `{"candidates":[{"index":0,"finishReason":"STOP"},{"index":1,"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":7,"candidatesTokenCount":3,"totalTokenCount":10}}` + "\n\n"
@@ -122,6 +124,7 @@ func TestGeminiThoughtSignatureStream(t *testing.T) {
 // TestGeminiThoughtSignatureTextParts preserves signed empty parts and thought markers without merging text.
 func TestGeminiThoughtSignatureTextParts(t *testing.T) {
 	c, recorder := signatureTestContext()
+	c.Request.Header.Set(NativePartsHeader, "v1") // This test exercises the negotiated native-Part wire contract.
 	body := `{"candidates":[{"content":{"role":"model","parts":[{"text":"first","thought":true,"thoughtSignature":"c2lnLUE="},{"text":"answer"},{"text":"","thoughtSignature":"c2lnLUI="}]},"finishReason":"STOP"}]}`
 	failure, _ := Handler(c, &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))}, 0, "gemini-3.8-flash")
 	require.Nil(t, failure)
@@ -146,6 +149,7 @@ func TestGeminiThoughtSignatureTextParts(t *testing.T) {
 // TestGeminiThoughtSignatureEmptyTextStream preserves a signed empty final part through the Chat stream wire.
 func TestGeminiThoughtSignatureEmptyTextStream(t *testing.T) {
 	c, recorder := signatureTestContext()
+	c.Request.Header.Set(NativePartsHeader, "v1") // This test exercises the negotiated native-Part wire contract.
 	body := "data: " + `{"candidates":[{"index":0,"content":{"parts":[{"text":"","thoughtSignature":"c2lnLWZpbmFs"}]},"finishReason":"STOP"}]}` + "\n\n"
 	failure, _, _ := StreamHandler(c, &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))})
 	require.Nil(t, failure)
@@ -226,6 +230,7 @@ func TestGeminiThoughtSignatureCompleteDefaults(t *testing.T) {
 // TestGeminiThoughtSignatureMixedOrder replays gateway-positioned text and function calls in original native order.
 func TestGeminiThoughtSignatureMixedOrder(t *testing.T) {
 	c, recorder := signatureTestContext()
+	c.Request.Header.Set(NativePartsHeader, "v1") // This test exercises the negotiated native-Part wire contract.
 	payload := `{"candidates":[{"content":{"parts":[{"text":"before"},{"functionCall":{"name":"lookup","args":{}},"thoughtSignature":"c2lnLUE="},{"text":"between","thoughtSignature":"c2lnLUI="},{"functionCall":{"name":"other","args":{}}},{"text":"","thoughtSignature":"c2lnLUM="}]},"finishReason":"STOP"}]}`
 	failure, _ := Handler(c, &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(payload))}, 0, "gemini-3.8-flash")
 	require.Nil(t, failure)
@@ -288,6 +293,7 @@ func TestGeminiThoughtSignatureCompleteDefaultsStream(t *testing.T) {
 // TestGeminiThoughtSignatureToolCapableStreamOrder preserves an early unsigned text frame before a later function call.
 func TestGeminiThoughtSignatureToolCapableStreamOrder(t *testing.T) {
 	c, recorder := signatureTestContext()
+	c.Request.Header.Set(NativePartsHeader, "v1") // This test exercises the negotiated native-Part wire contract.
 	EnableVertexPartPositions(c)
 	c.Set(ctxkey.ConvertedRequest, &ChatRequest{Tools: []ChatTools{{}}})
 	body := "data: " + `{"candidates":[{"index":0,"content":{"parts":[{"text":"before"}]}}]}` + "\n\n" +
@@ -325,6 +331,7 @@ func TestGeminiThoughtSignatureToolCapableStreamOrder(t *testing.T) {
 // TestGeminiThoughtSignatureLateNoToolContext reports incomplete positional replay instead of fabricating earlier boundaries.
 func TestGeminiThoughtSignatureLateNoToolContext(t *testing.T) {
 	c, recorder := signatureTestContext()
+	c.Request.Header.Set(NativePartsHeader, "v1") // This test exercises the negotiated native-Part wire contract.
 	body := "data: " + `{"candidates":[{"index":0,"content":{"parts":[{"text":"before"}]}}]}` + "\n\n" +
 		"data: " + `{"candidates":[{"index":0,"content":{"parts":[{"text":"","thoughtSignature":"c2lnLUE="}]},"finishReason":"STOP"}]}` + "\n\n"
 	failure, _, _ := StreamHandler(c, &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body))})

@@ -24,6 +24,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/adaptor/common/structuredjson"
+	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -208,7 +209,11 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 		if execErr == nil {
 			c.Status(http.StatusOK)
-			if err := (render.JSON{Data: response}).Render(c.Writer); err != nil {
+			wireResponse := response
+			if chatProviderMetadataScope(meta) == relaymodel.ProviderMetadataNative {
+				wireResponse = gemini.ChatResponseForWire(c, response)
+			}
+			if err := (render.JSON{Data: wireResponse}).Render(c.Writer); err != nil {
 				execErr = openai.ErrorWrapper(err, "write_mcp_response_failed", http.StatusInternalServerError)
 			}
 		}

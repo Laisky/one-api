@@ -491,7 +491,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			responseText += geminiStreamText(choice.Delta)
 		}
 		counts := countGeminiStreamImages(&geminiResponse)
-		err = openai_compatible.RenderStreamChunkWithBridge(c, response)
+		err = openai_compatible.RenderStreamChunkWithBridge(c, chatStreamResponseForWire(c, response))
 		if rw := openai_compatible.StreamRewriterFromContext(c); rw != nil {
 			if reporter, ok := rw.(interface{ DeliveredImagesInLastChunk() int }); ok {
 				outputImageCount += reporter.DeliveredImagesInLastChunk()
@@ -637,7 +637,7 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	}
 
 	fullTextResponse.Usage = usage
-	jsonResponse, err := json.Marshal(fullTextResponse)
+	jsonResponse, err := json.Marshal(ChatResponseForWire(c, fullTextResponse))
 	if err != nil {
 		return openai.ErrorWrapper(errors.Wrap(err, "marshal_response_body_failed"), "marshal_response_body_failed", http.StatusInternalServerError), nil
 	}

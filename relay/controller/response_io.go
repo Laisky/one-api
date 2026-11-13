@@ -34,6 +34,10 @@ type responseCaptureWriter struct {
 	header http.Header
 }
 
+// PreserveNativeChatParts marks a trusted internal conversion sink, never public Chat output.
+// Responses and MCP consume native boundaries before choosing their final wire representation.
+func (w *responseCaptureWriter) PreserveNativeChatParts() bool { return true }
+
 // newResponseCaptureWriter creates a capture writer over w whose headers are
 // kept apart from w until copyHeadersTo publishes them.
 func newResponseCaptureWriter(w gin.ResponseWriter) *responseCaptureWriter {
