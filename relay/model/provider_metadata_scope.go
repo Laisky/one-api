@@ -1,6 +1,9 @@
 package model
 
-import "slices"
+import (
+	"maps"
+	"slices"
+)
 
 // ProviderMetadataScope names which gateway provider-metadata carriers ("extra_content") a
 // destination wire accepts. The gateway emits these carriers to clients for Google turns, and
@@ -143,28 +146,34 @@ func scopeMessageProviderMetadata(message Message, scope ProviderMetadataScope) 
 			if !ok {
 				continue
 			}
-			key, present := carrierKey(object)
-			if !present {
-				continue
+			var clone map[string]any
+			// Use the same carrier recognition and canonical-only wire policy as raw scoping.
+			// Native scope returns before this path; other scopes must remove every alias.
+			for _, key := range carrierKeys(object) {
+				var scoped any
+				keep := false
+				if key == extraContentKey {
+					scoped, keep = scopeDecodedCarrier(object[key], scope)
+				}
+				if keep && scoped == nil {
+					continue
+				}
+				if clone == nil {
+					clone = maps.Clone(object)
+				}
+				if keep {
+					clone[key] = scoped
+				} else {
+					delete(clone, key)
+				}
+				changed++
 			}
-			scoped, keep := scopeDecodedCarrier(object[key], scope)
-			if keep && scoped == nil {
-				continue
+			if clone != nil {
+				if parts == nil {
+					parts = slices.Clone(content)
+				}
+				parts[i] = clone
 			}
-			if parts == nil {
-				parts = slices.Clone(content)
-			}
-			clone := make(map[string]any, len(object))
-			for key, field := range object {
-				clone[key] = field
-			}
-			if keep {
-				clone[key] = scoped
-			} else {
-				delete(clone, key)
-			}
-			parts[i] = clone
-			changed++
 		}
 		if parts != nil {
 			message.Content = parts

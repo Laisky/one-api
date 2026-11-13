@@ -67,19 +67,6 @@ func carrierKeys[V any](object map[string]V) []string {
 	return keys
 }
 
-// carrierKey returns the single key an untyped part binds to extra_content, preferring the canonical
-// spelling exactly as the typed decoder does.
-func carrierKey[V any](object map[string]V) (string, bool) {
-	if _, present := object[extraContentKey]; present {
-		return extraContentKey, true
-	}
-	keys := carrierKeys(object)
-	if len(keys) == 0 {
-		return "", false
-	}
-	return keys[0], true
-}
-
 // mayHoldCarrier is a conservative prefilter: false only when raw cannot contain a carrier key, so
 // carrier-free subtrees are never decoded or re-encoded. It matches the key case-insensitively and
 // treats any \u00XX escape (which could spell an ASCII key letter) as a possible carrier.
