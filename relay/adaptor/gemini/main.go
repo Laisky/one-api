@@ -407,6 +407,8 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
+	// Select public response headers before a waiting upstream read can emit a heartbeat.
+	preserveNativeChatParts(c)
 
 	// Wrap the reader with heartbeats to prevent reverse-proxy timeouts (e.g. Cloudflare 524).
 	hbr := render.NewHeartbeatLineReader(c, lineReader, render.DefaultHeartbeatInterval)

@@ -350,3 +350,38 @@ func TestGeminiChatPartsNegotiationHeaders(t *testing.T) {
 		})
 	}
 }
+
+// chatWireHeaderReader observes headers before any upstream read can wait for a heartbeat.
+type chatWireHeaderReader struct {
+	io.Reader
+	header   http.Header
+	observed chan http.Header
+	first    bool
+}
+
+func (r *chatWireHeaderReader) Read(p []byte) (int, error) {
+	if !r.first {
+		r.first = true
+		r.observed <- r.header.Clone()
+	}
+	return r.Reader.Read(p)
+}
+
+// TestGeminiChatPartsHeadersPrecedeUpstreamRead prevents a heartbeat from committing
+// headers before native-Part negotiation has been acknowledged.
+func TestGeminiChatPartsHeadersPrecedeUpstreamRead(t *testing.T) {
+	c, recorder := signatureTestContext()
+	c.Request.Header.Set(NativePartsHeader, "v1")
+	observations := make(chan http.Header, 1)
+	body := "data: " + `{"candidates":[{"index":0,"content":{"parts":[{"text":"hello"}]},"finishReason":"STOP"}]}` + "\n\n"
+	reader := &chatWireHeaderReader{Reader: strings.NewReader(body), header: recorder.Header(), observed: observations}
+	failure, _, _ := StreamHandler(c, &http.Response{StatusCode: 200, Body: io.NopCloser(reader)})
+	require.Nil(t, failure)
+	select {
+	case headers := <-observations:
+		require.Equal(t, "v1", headers.Get(NativePartsHeader))
+		require.Contains(t, strings.Join(headers.Values("Vary"), ","), NativePartsHeader)
+	default:
+		t.Fatal("upstream read was not observed")
+	}
+}
