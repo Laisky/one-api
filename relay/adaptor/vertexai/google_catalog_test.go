@@ -102,8 +102,10 @@ func TestVertexGoogleIndependentCatalog(t *testing.T) {
 	for _, name := range vertexGoogleModels {
 		require.NotNil(t, GetAdaptor(name))
 		switch name {
-		case geminiOpenaiCompatible.Gemini4CarbonModel, geminiOpenaiCompatible.Gemini4HydrogenModel, "gemini-3.8-flash-cyber":
+		case geminiOpenaiCompatible.Gemini4CarbonModel, geminiOpenaiCompatible.Gemini4HydrogenModel:
 			require.Contains(t, geminiOpenaiCompatible.ModelRatios, name, "published Developer IDs remain shared")
+		case "gemini-3.8-flash-cyber":
+			// Preserve the existing exception: Developer discovery is managed independently.
 		default:
 			require.NotContains(t, geminiOpenaiCompatible.ModelRatios, name, "Vertex-only variants must not leak into Developer discovery")
 		}
