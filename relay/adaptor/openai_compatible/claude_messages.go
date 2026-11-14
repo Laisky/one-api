@@ -1,6 +1,7 @@
 package openai_compatible
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -78,8 +79,23 @@ func convertClaudeRequest(c *gin.Context, request *model.ClaudeRequest, nativeMe
 			metaInfo = meta.GetByContext(c)
 		}
 	}
+	if isGemini4ClaudeDestination(metaInfo, request) {
+		// MCP planning consumes this canonical DTO directly, so carry native
+		// controls here before either dispatch path performs provider lowering.
+		openaiRequest.OutputConfig = bytes.Clone(request.OutputConfig)
+		openaiRequest.Thinking = request.Thinking
+	}
 	if promoteStructured && (nativeMedia || structuredPromotionDisabled(metaInfo)) {
 		promoteStructured = false
+	}
+	if promoteStructured {
+		explicitFormat, err := hasExplicitGemini4OutputFormat(metaInfo, request)
+		if err != nil {
+			return nil, errors.Wrap(err, "decide Claude structured tool promotion")
+		}
+		// Keep real tools and the forced choice when a native format already
+		// specifies output constraints; implicit promotion would erase both.
+		promoteStructured = !explicitFormat
 	}
 	if promoteStructured {
 		strict := true
@@ -167,6 +183,8 @@ func convertClaudeRequest(c *gin.Context, request *model.ClaudeRequest, nativeMe
 			if !ok {
 				parameters = map[string]any{}
 			}
+			// Downstream normalization owns its map; retain caller tool schemas.
+			parameters = deepCopyMapAny(parameters)
 			tool := model.Tool{
 				Type: "function",
 				Function: &model.Function{

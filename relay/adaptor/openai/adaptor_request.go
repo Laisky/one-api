@@ -498,7 +498,6 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	if metaInfo != nil && metaInfo.ChannelType == channeltype.GeminiOpenAICompatible {
 		metaInfo.EnsureActualModelName(openaiRequest.Model)
 		if geminiOpenaiCompatible.IsGemini4Model(normalizedModelName(metaInfo.ActualModelName)) {
-			openaiRequest.OutputConfig = request.OutputConfig
 			if err := a.applyRequestTransformations(metaInfo, openaiRequest); err != nil {
 				return nil, errors.Wrap(err, "apply Gemini request transformations for Claude conversion")
 			}

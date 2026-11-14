@@ -217,3 +217,50 @@ recorded in the PR description and local evidence; this follow-up does not relab
 its assertions. FileIO remains unavailable: no history search/save or verified
 retrieval is claimed for `one-api`, `622`, `Gemini4`, `output_config`,
 `MCP repeated conversion`, `schema sanitizer`, or `thinkingLevel`.
+
+## Follow-up: explicit Claude format and forced tools — November 14
+
+Review `discussion_r4574337002` was reproduced on `3017d790`. Single forced-tool
+promotion synthesized an implicit response format before Gemini 4 lowered the
+caller's native format, producing a false conflict for Argon, Carbon and
+Hydrogen. An equivalent-format control succeeded but silently removed the tool
+and forced choice. Omitted/effort-only formats, legacy Gemini and unrelated
+channels retained their established promotion behavior.
+
+The shared promotion decision now respects an explicit native format for the
+effective Gemini 4 compatible destination. It resolves aliases without mutating
+shared metadata and recognizes format fields with the same case folding as the
+validator. Promotion is suppressed before tools or choices are removed.
+Malformed formats and genuine explicit format conflicts still fail validation.
+
+Actual HTTP ingress qualification exposed additional gaps in that same path:
+normal tool normalization mutated caller-owned tool schemas; Claude dispatch
+used `/messages`; and Claude MCP's shared DTO omitted native format and effort
+while retaining the incoming Messages path. Each was behaviorally reproduced.
+
+The canonical shared conversion now carries independently owned native controls
+for Gemini 4 before normal or MCP dispatch. Tool schema maps are copied before
+normalization, preserving source data and existing wire normalization policy.
+The Gemini compatible URL builder selects `/chat/completions` for translated
+Claude Messages, including internal Chat-mode MCP requests still carrying the
+Messages path. Proxy, embedding and ordinary Chat paths remain unchanged.
+This protocol correction also covers legacy Gemini compatible models.
+
+Local HTTP tests cover alias-to-Hydrogen ingress, exact schema bounds and effort,
+named function/choice, Claude tool-use response and quota settlement. A second
+test covers actual Claude MCP detection and two provider rounds with one MCP
+invocation, checking endpoint, format and effort independently in both rounds.
+Previous schema-provenance and native enum regressions remain in qualification.
+
+[Google's compatible endpoint documentation](https://aistudio.google.com/docs/openai)
+was rechecked November 14. Tools and structured output are documented, but the
+combined named-tool/schema behavior on every compatible model/region/account is
+not live-qualified by these local mocks. Supported caller controls are preserved
+instead of fabricating conflicts or discarding one of them.
+
+Existing limits remain: no paid/live calls, full database/race matrix or frontend
+qualification; provenance is internal and does not persist through JSON
+reconstruction; the earlier unexplained DeepSeek result is retained without
+calling it a proven flake. FileIO is unavailable: no history search/save/retrieval
+is claimed for `one-api`, `622`, `Claude tool promotion`,
+`output_config.format`, `conflicting response_format` or `Gemini4`.
