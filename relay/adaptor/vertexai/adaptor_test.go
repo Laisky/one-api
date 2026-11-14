@@ -29,20 +29,19 @@ func TestGetDefaultModelPricingIncludesGeminiEmbeddingPreview(t *testing.T) {
 	require.Equal(t, geminiOpenaiCompatible.ModelRatios["gemini-embedding-2-preview"], cfg)
 }
 
-func TestGetModelListIncludesGeminiEmbeddingPreviewOnce(t *testing.T) {
+// TestGetModelListExcludesUnqualifiedEmbeddingPreviewPreservesCompatibility
+// separates suggestions from historical embedding registration and pricing.
+// Parameters: t owns assertions. Returns: none.
+func TestGetModelListExcludesUnqualifiedEmbeddingPreviewPreservesCompatibility(t *testing.T) {
 	t.Parallel()
-
 	a := &Adaptor{}
-	models := a.GetModelList()
-
-	count := 0
-	for _, model := range models {
-		if model == "gemini-embedding-2-preview" {
-			count++
-		}
-	}
-
-	require.Equal(t, 1, count, "expected gemini-embedding-2-preview exactly once in Vertex AI model list")
+	const id = "gemini-embedding-2-preview"
+	require.NotContains(t, a.GetModelList(), id, "Vertex embedding transport is not qualified")
+	require.Contains(t, a.GetModelList(), "gemini-3.8-flash", "qualified chat positive control")
+	require.NotNil(t, GetAdaptor(id), "legacy embedding dispatch must remain registered")
+	cfg, ok := a.GetDefaultModelPricing()[id]
+	require.True(t, ok, "catalog filtering must not delete historical pricing")
+	require.Equal(t, geminiOpenaiCompatible.ModelRatios[id], cfg)
 }
 
 func TestGetDefaultModelPricingIncludesLatestVertexMaaSModels(t *testing.T) {

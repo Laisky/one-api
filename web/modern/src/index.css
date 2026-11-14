@@ -7,10 +7,17 @@
 @custom-variant portrait (@media (orientation: portrait));
 @custom-variant landscape (@media (orientation: landscape));
 @custom-variant reduce-motion (@media (prefers-reduced-motion: reduce));
-@custom-variant high-contrast (@media (prefers-contrast: high));
 
 @layer base {
   :root {
+    /* The theme is class-driven (ThemeProvider + the index.html boot script put .light or .dark on
+       <html>), so the root declares one scheme per class. This themes native UI (canvas,
+       scrollbars, form controls, date-picker icons) to match the page. */
+    color-scheme: light;
+    /* Browser-generated controls (checkboxes, radios, range, progress) use the brand color; it
+       inherits, and .dark swaps --primary, so it follows the active theme. */
+    accent-color: hsl(var(--primary));
+
     /* Slate & Teal — clean, modern, data-forward */
     --background: 220 10% 98%;
     --foreground: 220 15% 10%;
@@ -67,6 +74,8 @@
   }
 
   .dark {
+    color-scheme: dark;
+
     /* Slate & Teal — dark mode */
     --background: 220 12% 8%;
     --foreground: 220 8% 92%;
@@ -145,6 +154,23 @@
     text-autospace: normal;
   }
 
+  /* Balanced wrapping for short heading text; pretty wrapping avoids one-word last lines in body
+     copy. Both are progressive enhancements and fall back to normal wrapping. Keep these scoped:
+     they are more expensive than the default greedy line breaking. */
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    text-wrap: balance;
+  }
+
+  p,
+  blockquote {
+    text-wrap: pretty;
+  }
+
   input,
   select,
   textarea {
@@ -198,83 +224,56 @@
   }
 }
 
-/* Enhanced data table styles */
+/* Shared component classes */
 @layer components {
-  .data-table {
-    @apply w-full border-collapse;
+  /* Skip-to-content link (WCAG 2.4.1 Bypass Blocks). Render it as the first focusable child of the
+     app layout, pointing at the main landmark. It is absolutely positioned so it never takes layout
+     space, stays in the accessibility tree, and is translated out of view until it receives focus. */
+  .skip-link {
+    position: absolute;
+    inset-inline-start: 1rem;
+    inset-block-start: 0.5rem;
+    z-index: 100;
+    translate: 0 -200%;
+    @apply rounded-md border bg-background px-4 py-2 text-sm font-medium text-foreground shadow-md;
   }
 
-  .data-table th {
-    @apply bg-muted/50 font-medium text-left px-4 py-3 border-b;
+  .skip-link:focus {
+    translate: 0 0;
   }
 
-  .data-table td {
-    @apply px-4 py-3 border-b;
+  /* An outline (not a box-shadow ring) so the indicator survives forced-colors mode. */
+  .skip-link:focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
   }
 
-  .data-table tbody tr:hover {
-    @apply bg-muted/30;
-  }
-
-}
-
-/* Form enhancements */
-@layer components {
-  .form-grid {
-    @apply grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4;
-  }
-
-  .form-row {
-    @apply flex flex-col md:flex-row gap-4;
-  }
-
-  .form-actions {
-    @apply flex flex-col md:flex-row gap-2 pt-4;
-  }
-
-  .json-editor {
-    @apply font-mono text-sm bg-muted/20 border rounded-md p-3;
-  }
-
-  .json-valid {
-    @apply border-success-border bg-success-muted;
-  }
-
-  .json-invalid {
-    @apply border-destructive/30 bg-destructive/5;
-  }
-
-  /* Date picker icon fixes for dark theme */
-  .dark input[type='date']::-webkit-calendar-picker-indicator {
-    filter: invert(1);
-    opacity: 0.8;
-  }
-
-  .dark input[type='time']::-webkit-calendar-picker-indicator {
-    filter: invert(1);
-    opacity: 0.8;
-  }
-
-  .dark input[type='datetime-local']::-webkit-calendar-picker-indicator {
-    filter: invert(1);
-    opacity: 0.8;
-  }
-
-  /* Firefox date picker icon fix for dark theme */
-  @supports (-moz-appearance: none) {
-    .dark input[type='date'],
-    .dark input[type='time'],
-    .dark input[type='datetime-local'] {
-      color-scheme: dark;
+  @media (prefers-reduced-motion: no-preference) {
+    .skip-link {
+      transition: translate 150ms ease-out;
     }
   }
 
-  /* Prevent absolutely-positioned descendants (e.g., injected inputs) from stretching document height */
-  .bounded-abs *[style*='position: absolute'],
-  .bounded-abs input[type='checkbox'][style*='position: absolute'] {
-    position: absolute !important;
-    inset: auto auto auto auto;
-    /* do not push layout */
+  /* Deferred rendering for chat messages: the browser skips layout/paint while a message is far
+     off-screen. contain-intrinsic-size reserves an estimated 12rem block size (width is left to
+     layout) and `auto` remembers the real size once rendered, so scrolling does not jump. Apply it
+     only to messages outside the initial viewport (e.g. older history), not the latest visible
+     ones, and keep keyboard navigation across off-screen messages verified. */
+  .chat-message-deferred {
+    content-visibility: auto;
+    contain-intrinsic-size: auto none auto 12rem;
+    /* content-visibility implies paint containment, which clips at the box edge; let message
+       shadows and focus rings paint past it (ignored where unsupported). */
+    overflow-clip-margin: 0.75rem;
+  }
+
+  /* Deferred rendering for heavy below-the-fold sections (e.g. dashboard charts and tables). Same
+     contract as .chat-message-deferred with a 28rem block-size estimate; never apply it to
+     sections that are visible on initial load. */
+  .deferred-section {
+    content-visibility: auto;
+    contain-intrinsic-size: auto none auto 28rem;
+    overflow-clip-margin: 0.75rem;
   }
 }
 
@@ -286,5 +285,17 @@
 
   to {
     transform: scaleX(0);
+  }
+}
+
+/* Forced colors (Windows High Contrast): menu, select and command items show their highlighted
+   state with a background color only, and forced colors can flatten that. Draw a system-colored
+   outline instead. Unlayered on purpose so it wins over the items' layered `outline-none`
+   utilities. Radix menu/select items set [data-highlighted]; cmdk items set data-selected="true". */
+@media (forced-colors: active) {
+  :is([role^='menuitem'], [role='option'])[data-highlighted],
+  [cmdk-item][data-selected='true'] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
 }

@@ -20,7 +20,12 @@ func TestClaude52VertexPricingGate(t *testing.T) {
 	for _, name := range []string{"claude-fable-5-2", "claude-mythos-5-2"} {
 		t.Run(name, func(t *testing.T) {
 			a := &Adaptor{}
-			require.Contains(t, a.GetModelList(), name)
+			if name == "claude-fable-5-2" {
+				require.Contains(t, a.GetModelList(), name, "corroborated Vertex catalog control")
+			} else {
+				require.NotContains(t, a.GetModelList(), name, "uncorroborated Mythos is not suggested")
+			}
+			require.NotNil(t, GetAdaptor(name), "explicit legacy configuration must retain dispatch")
 			_, hasDefault := a.GetDefaultModelPricing()[name]
 			require.False(t, hasDefault, "unexpected unverified Vertex default for %s", name)
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())

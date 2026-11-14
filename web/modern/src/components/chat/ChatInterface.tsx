@@ -1,4 +1,5 @@
 import { ImageAttachmentComponent, ImageAttachment as ImageAttachmentType } from '@/components/chat/ImageAttachment';
+import { ChatStreamingStatus } from '@/components/chat/ChatStreamingStatus';
 import { MessageList } from '@/components/chat/MessageList';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -8,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { useIsTouchDevice, useResponsive } from '@/hooks/useResponsive';
 import { Message } from '@/lib/utils';
 import { Activity, Bot, Download, Eye, EyeOff, Send, Settings, Trash2, X } from 'lucide-react';
-import React from 'react';
+import React, { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface ChatInterfaceProps {
@@ -63,6 +64,14 @@ interface ChatInterfaceProps {
   onToggleEventLog?: () => void;
 }
 
+/**
+ * ChatInterface renders the playground chat: header actions, the message list,
+ * the markdown preview, and the labelled message input with Send/Stop controls.
+ * Streaming start and completion are announced through a polite status region.
+ *
+ * @param props - Conversation, input, streaming, attachment, preview, reasoning, focus mode, and event log state with their callbacks.
+ * @returns The chat interface element.
+ */
 export function ChatInterface({
   messages,
   onClearConversation,
@@ -96,6 +105,8 @@ export function ChatInterface({
   const { t } = useTranslation();
   const { isMobile, isTablet } = useResponsive();
   const isTouchDevice = useIsTouchDevice();
+  const inputId = useId();
+  const isCompactLayout = isMobile || isTablet;
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
@@ -123,6 +134,9 @@ export function ChatInterface({
 
   return (
     <div className="flex-1 flex flex-col bg-background/50 min-h-0 p-3 space-y-3">
+      {/* Announces generation start and completion; streamed content itself is not a live region. */}
+      <ChatStreamingStatus isStreaming={isStreaming} />
+
       {/* Header Card */}
       <Card className="flex-shrink-0">
         <CardHeader className="pb-3">
@@ -131,8 +145,14 @@ export function ChatInterface({
             <div className="flex items-center justify-between gap-2">
               <div className="flex items-center gap-2 min-w-0 flex-1">
                 {/* Mobile menu button */}
-                <Button variant="ghost" size="sm" onClick={onMobileMenuToggle} className="lg:hidden p-2 flex-shrink-0">
-                  <Settings className="h-4 w-4" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onMobileMenuToggle}
+                  className="lg:hidden p-2 flex-shrink-0"
+                  aria-label={t('playground.parameters.title')}
+                >
+                  <Settings className="h-4 w-4" aria-hidden="true" />
                 </Button>
 
                 <div className="flex items-center gap-2 flex-shrink-0">
@@ -306,7 +326,11 @@ export function ChatInterface({
             )}
 
             <div className="relative">
+              <label htmlFor={inputId} className="sr-only">
+                {t('playground.chat.input.label')}
+              </label>
               <Textarea
+                id={inputId}
                 value={currentMessage}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyPress}
@@ -337,6 +361,7 @@ export function ChatInterface({
                 {isStreaming ? (
                   <Button
                     onClick={onStopGeneration}
+                    aria-label={isCompactLayout ? t('playground.chat.input.stop') : undefined}
                     variant="outline"
                     size={isMobile || isTablet ? 'sm' : 'md'}
                     className={`
@@ -344,26 +369,27 @@ export function ChatInterface({
                       hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50
                       bg-background/95 border-border/50
                       ${isTouchDevice ? 'active:scale-95' : ''}
-                      transition-all duration-200
+                      transition-all duration-200 motion-reduce:transition-none
                     `}
                   >
-                    {isMobile || isTablet ? <X className="h-4 w-4" /> : t('playground.chat.input.stop')}
+                    {isCompactLayout ? <X className="h-4 w-4" aria-hidden="true" /> : t('playground.chat.input.stop')}
                   </Button>
                 ) : (
                   <Button
                     onClick={handleSendMessage}
+                    aria-label={isCompactLayout ? t('playground.chat.input.send') : undefined}
                     disabled={(!currentMessage.trim() && attachedImages.length === 0) || !selectedModel || !selectedToken}
                     size={isMobile || isTablet ? 'sm' : 'md'}
                     className={`
                       ${isMobile || isTablet ? 'h-10 w-10 p-0' : 'h-10 w-12 px-3'}
                       bg-primary hover:bg-primary/90 disabled:opacity-50
                       ${isTouchDevice ? 'active:scale-95' : ''}
-                      transition-all duration-200
+                      transition-all duration-200 motion-reduce:transition-none
                       shadow-sm
                     `}
                   >
-                    {isMobile || isTablet ? (
-                      <Send className="h-4 w-4" />
+                    {isCompactLayout ? (
+                      <Send className="h-4 w-4" aria-hidden="true" />
                     ) : (
                       <>
                         <Send className="h-4 w-4 mr-1" />

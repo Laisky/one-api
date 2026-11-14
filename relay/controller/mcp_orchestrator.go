@@ -533,6 +533,7 @@ func doChatRequestOnce(c *gin.Context, meta *metalib.Meta, adaptorInstance adapt
 	if len(preparedBody) > 0 && len(preparedBody[0]) > 0 {
 		jsonData = preparedBody[0]
 	} else {
+		scopeChatRequestForDestination(c, meta, request)
 		convertedRequest, err := adaptorInstance.ConvertRequest(c, meta.Mode, request)
 		if err != nil {
 			return nil, nil, openai.ErrorWrapper(err, "convert_request_failed", 500)
@@ -691,6 +692,7 @@ func executeMCPToolCalls(c *gin.Context, registry *mcpToolRegistry, calls []rela
 // is the canonical round. Returns: exact provider bytes or a preparation error;
 // dispatch reuses the bytes without repeating conversion.
 func prepareMCPChatRound(c *gin.Context, meta *metalib.Meta, adaptorInstance adaptor.Adaptor, request *relaymodel.GeneralOpenAIRequest) ([]byte, *relaymodel.ErrorWithStatusCode) {
+	scopeChatRequestForDestination(c, meta, request)
 	converted, err := adaptorInstance.ConvertRequest(c, meta.Mode, request)
 	if err != nil {
 		return nil, openai.ErrorWrapper(err, "convert_request_failed", 500)

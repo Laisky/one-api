@@ -53,4 +53,27 @@ describe('ThinkingBubble with browser-translated status text', () => {
     unmount();
     expect(onCaughtError).not.toHaveBeenCalled();
   });
+
+  it('exposes the toggle as a disclosure button that controls the reasoning region', () => {
+    const content = 'Consider the available options.';
+    const { container, rerender } = render(<ThinkingBubble content={content} isStreaming isExpanded={false} onToggle={vi.fn()} />);
+
+    const toggle = screen.getByRole('button', { name: /Reasoning/ });
+    expect(toggle).toHaveAttribute('type', 'button');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    const region = document.getElementById(toggle.getAttribute('aria-controls') ?? '');
+    expect(region).not.toBeNull();
+    expect(region).not.toBeVisible();
+
+    const dots = container.querySelectorAll('.animate-pulse.rounded-full');
+    expect(dots).toHaveLength(3);
+    expect(dots[0].parentElement).toHaveAttribute('aria-hidden', 'true');
+    expect(container.querySelector('[style]')).toBeNull();
+
+    rerender(<ThinkingBubble content={content} isStreaming={false} isExpanded onToggle={vi.fn()} />);
+
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(region).toBeVisible();
+    expect(region).toHaveTextContent(content);
+  });
 });

@@ -25,7 +25,7 @@ export function ThemeToggle() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label={t('theme.toggle')} className="h-9 w-9">
+        <Button variant="ghost" size="icon" aria-label={t('theme.toggle')} className="h-9 w-9 touch-target">
           <ActiveIcon className="h-[1.2rem] w-[1.2rem]" aria-hidden="true" />
           <span className="sr-only">{t('theme.toggle')}</span>
         </Button>

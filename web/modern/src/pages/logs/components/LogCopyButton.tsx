@@ -1,6 +1,4 @@
-import { Button } from '@/components/ui/button';
-import { Copy } from 'lucide-react';
-import type { MouseEvent } from 'react';
+import { CopyButton } from '@/components/ui/copy-button';
 
 /** LogCopyButtonProps supplies clipboard text and an accessible label to the log-table copy action. */
 interface LogCopyButtonProps {
@@ -8,19 +6,22 @@ interface LogCopyButtonProps {
   label: string;
 }
 
-/** LogCopyButton accepts clipboard text and a label, then returns an isolated, accessible copy control. */
-export function LogCopyButton({ text, label }: LogCopyButtonProps) {
-  /** handleCopy accepts a button click, stops row propagation, starts the copy, and returns no value. */
-  const handleCopy = (event: MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    void navigator.clipboard.writeText(text).catch(() => {
-      console.error('Failed to copy log reference');
-    });
-  };
+/**
+ * logCopyFailed records a failed log reference copy as a plain string; the
+ * shared CopyButton already shows and announces the failure to the user.
+ */
+function logCopyFailed() {
+  console.error('Failed to copy log reference');
+}
 
-  return (
-    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" aria-label={label} title={label} onClick={handleCopy}>
-      <Copy className="h-3 w-3" />
-    </Button>
-  );
+/**
+ * LogCopyButton renders the log-table copy action on top of the shared
+ * CopyButton, so the copy uses the plain-HTTP-safe clipboard helper, never
+ * propagates to the row, and both success and failure are shown and announced.
+ *
+ * @param props - The text to copy and the caller-localized accessible label.
+ * @returns The isolated, accessible copy control.
+ */
+export function LogCopyButton({ text, label }: LogCopyButtonProps) {
+  return <CopyButton text={text} label={label} className="h-6 w-6 p-0" onCopyError={logCopyFailed} />;
 }

@@ -10,7 +10,6 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/gemini"
-	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -63,6 +62,20 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		if err != nil {
 			return nil, errors.Wrap(err, "convert native Vertex Gemini request")
 		}
+		configureJSONSchemas(geminiRequest, request)
+		effectiveModel := request.Model
+		if value, ok := c.Get(ctxkey.Meta); ok {
+			if requestMeta, ok := value.(*meta.Meta); ok && requestMeta.ActualModelName != "" {
+				effectiveModel = requestMeta.ActualModelName
+			}
+		}
+		if err := configureToolChoice(geminiRequest, request, effectiveModel); err != nil {
+			return nil, errors.Wrap(err, "configure Vertex function selection")
+		}
+		if err := configureToolHistory(geminiRequest, request, effectiveModel); err != nil {
+			return nil, errors.Wrap(err, "configure Vertex function history")
+		}
+		gemini.EnableVertexPartPositions(c)
 		convertedRequest = geminiRequest
 	}
 
@@ -94,14 +107,14 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	var parameterTypes []string
 	if geminiRequest != nil {
 		for _, tool := range geminiRequest.Tools {
-			functions, ok := tool.FunctionDeclarations.([]model.Function)
+			functions, ok := tool.FunctionDeclarations.([]functionDeclaration)
 			if !ok {
 				continue
 			}
 
 			for _, fn := range functions {
 				functionNames = append(functionNames, fn.Name)
-				if params, ok := fn.Parameters.(map[string]any); ok {
+				if params, ok := fn.ParametersJSONSchema.(map[string]any); ok {
 					if typeVal, ok := params["type"].(string); ok {
 						parameterTypes = append(parameterTypes, typeVal)
 						continue
@@ -129,7 +142,7 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
-	if c.GetBool(ctxkey.ClaudeMessagesConversion) && geminiOpenaiCompatible.IsGeminiImageGenerationModel(meta.ActualModelName) {
+	if c.GetBool(ctxkey.ClaudeMessagesConversion) {
 		return (&gemini.Adaptor{}).DoResponse(c, resp, meta)
 	}
 	if meta.IsStream {

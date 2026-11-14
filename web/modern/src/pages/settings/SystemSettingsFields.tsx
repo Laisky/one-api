@@ -185,6 +185,12 @@ export function OptionItem({
         ) : (
           <Input
             type={isSensitive ? 'password' : undefined}
+            // Secrets here are provider credentials, not the admin's sign-in password. Browsers ignore
+            // autocomplete="off" on password fields, so "new-password" keeps saved login passwords out of them.
+            autoComplete={isSensitive ? 'new-password' : undefined}
+            autoCapitalize={isSensitive ? 'none' : undefined}
+            autoCorrect={isSensitive ? 'off' : undefined}
+            spellCheck={isSensitive ? false : undefined}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             className="flex-1"
@@ -298,11 +304,16 @@ export function EmailDomainWhitelistItem({ option, description, onSave }: EmailD
     }
   }, [domains, initialDomains, isSaving, onSave, option.key]);
 
+  /**
+   * handleKeyDown adds the typed domain when Enter is pressed in the domain input.
+   * It takes the keyboard event and returns nothing; an Enter that confirms an IME composition is ignored.
+   */
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      handleAdd();
-    }
+    if (e.key !== 'Enter') return;
+    // Enter also confirms an IME candidate (isComposing, or keyCode 229 in Safari's out-of-order case).
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    handleAdd();
   };
 
   return (

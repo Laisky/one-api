@@ -4,7 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { NotificationsProvider } from '@/components/ui/notifications';
 import { api } from '@/lib/api';
+import { invalidateSystemStatusCache } from '@/lib/utils';
 import { SystemSettings } from '../SystemSettings';
+
+vi.mock('@/lib/utils', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/utils')>()),
+  invalidateSystemStatusCache: vi.fn(),
+}));
 
 // These tests cover the sensitive-secret hardening: the plaintext secret must
 // never be rendered visibly nor round-tripped back into the input after a save,
@@ -12,6 +18,7 @@ import { SystemSettings } from '../SystemSettings';
 describe('SystemSettings sensitive secret handling', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.mocked(invalidateSystemStatusCache).mockClear();
   });
 
   it('renders a sensitive field as a password input and never repopulates the secret', async () => {
@@ -45,6 +52,8 @@ describe('SystemSettings sensitive secret handling', () => {
       })
     );
     expect(putMock).not.toHaveBeenCalledWith('/api/option/', expect.objectContaining({ clear: true }));
+    // /api/status is cached briefly, so a successful save must drop the cached copy.
+    expect(invalidateSystemStatusCache).toHaveBeenCalled();
 
     // The parent → child prop sync must not push the plaintext secret back in.
     expect(input.value).toBe('');
@@ -129,6 +138,31 @@ describe('SystemSettings sensitive secret handling', () => {
     const input = (await screen.findByLabelText('TurnstileSecretKey value')) as HTMLInputElement;
     expect(input.type).toBe('password');
     expect(await screen.findByLabelText('Clear TurnstileSecretKey')).toBeInTheDocument();
+  });
+
+  it('keeps saved sign-in passwords and text correction out of secret fields', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        success: true,
+        data: [{ key: 'SMTPServer', value: 'smtp.example.com' }],
+      },
+    });
+
+    render(
+      <NotificationsProvider>
+        <SystemSettings />
+      </NotificationsProvider>
+    );
+
+    const secret = await screen.findByLabelText('SMTPToken value');
+    // Browsers ignore autocomplete="off" on password fields; "new-password" stops them filling the admin's own password.
+    expect(secret).toHaveAttribute('autocomplete', 'new-password');
+    expect(secret).toHaveAttribute('autocapitalize', 'none');
+    expect(secret).toHaveAttribute('autocorrect', 'off');
+    expect(secret).toHaveAttribute('spellcheck', 'false');
+
+    const plain = screen.getByLabelText('SMTPServer value');
+    expect(plain).not.toHaveAttribute('autocomplete');
   });
 
   it('maps an empty EmailProvider to the Auto option', async () => {

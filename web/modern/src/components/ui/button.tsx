@@ -12,8 +12,10 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 /** Button renders the supplied action props and ref with stable boundaries around translatable text children. */
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, children, variant = 'default', size = 'md', asChild = false, ...props }, ref) => {
+    // outline-hidden (not outline-none) keeps a transparent outline that forced-colors mode makes
+    // visible, since the box-shadow focus ring is removed there.
     const base =
-      'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
+      'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none';
     const variants: Record<string, string> = {
       // Use CSS variable-based foregrounds for proper contrast in dark mode
       default: 'bg-primary text-primary-foreground hover:opacity-90',

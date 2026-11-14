@@ -14,6 +14,12 @@ import { UsageCharts } from './components/UsageCharts';
 import { useDashboardCharts } from './hooks/useDashboardCharts';
 import { useDashboardData } from './hooks/useDashboardData';
 
+/**
+ * DashboardPage renders the usage dashboard: filters, overview cards and charts, with the heavy tool-usage
+ * charts and cache heatmaps deferred via content-visibility because they start far below the fold.
+ *
+ * @returns the dashboard route content, or a sign-in notice when no user is loaded.
+ */
 export function DashboardPage() {
   const { t } = useTranslation();
   const { user } = useAuthStore();
@@ -31,9 +37,8 @@ export function DashboardPage() {
       active.blur();
     }
 
-    if (!filtersReady) {
-      requestAnimationFrame(() => setFiltersReady(true));
-    }
+    // Runs once on mount, while filtersReady is still false.
+    requestAnimationFrame(() => setFiltersReady(true));
   }, []);
 
   const {
@@ -168,23 +173,35 @@ export function DashboardPage() {
           setStatisticsMetric={setStatisticsMetric}
         />
 
-        <ToolUsageCharts
-          toolStackedData={toolStackedData}
-          toolKeys={toolKeys}
-          toolUserStackedData={toolUserStackedData}
-          toolUserKeys={toolUserKeys}
-          toolTokenStackedData={toolTokenStackedData}
-          toolTokenKeys={toolTokenKeys}
-          toolStatisticsMetric={toolStatisticsMetric}
-          setToolStatisticsMetric={setToolStatisticsMetric}
-        />
+        {/* The tool-usage charts and cache heatmaps sit far below the fold, so .deferred-section
+            (content-visibility: auto) lets the browser skip their layout and paint until they scroll near
+            the viewport; they stay in the DOM, the accessibility tree and the tab order. Recharts'
+            ResponsiveContainer still sizes correctly: its width comes from this wrapper and its
+            ResizeObserver fires once the section is laid out. The intrinsic-size overrides refine the
+            28rem default from the content (`auto` then remembers the real size after the first render):
+            three chart cards of ~27rem each (300px chart + header + padding), and the heatmap header plus
+            three cards averaging ~22rem (about eight 24px rows each). */}
+        <div className="deferred-section [contain-intrinsic-size:auto_none_auto_81rem]" data-testid="dashboard-tool-usage-section">
+          <ToolUsageCharts
+            toolStackedData={toolStackedData}
+            toolKeys={toolKeys}
+            toolUserStackedData={toolUserStackedData}
+            toolUserKeys={toolUserKeys}
+            toolTokenStackedData={toolTokenStackedData}
+            toolTokenKeys={toolTokenKeys}
+            toolStatisticsMetric={toolStatisticsMetric}
+            setToolStatisticsMetric={setToolStatisticsMetric}
+          />
+        </div>
 
-        <CacheHeatmaps
-          modelHeatmap={modelHeatmap}
-          userHeatmap={userHeatmap}
-          tokenHeatmap={tokenHeatmap}
-          statisticsMetric={statisticsMetric}
-        />
+        <div className="deferred-section [contain-intrinsic-size:auto_none_auto_70rem]" data-testid="dashboard-cache-heatmaps-section">
+          <CacheHeatmaps
+            modelHeatmap={modelHeatmap}
+            userHeatmap={userHeatmap}
+            tokenHeatmap={tokenHeatmap}
+            statisticsMetric={statisticsMetric}
+          />
+        </div>
       </div>
     </ResponsivePageContainer>
   );

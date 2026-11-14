@@ -7,6 +7,7 @@ import { useNotifications } from '@/components/ui/notifications';
 import { Separator } from '@/components/ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
+import { invalidateSystemStatusCache } from '@/lib/utils';
 import { zodResolver } from '@/lib/zod-resolver';
 import { Info } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -141,6 +142,8 @@ export function OperationSettings() {
       if (!response.data?.success) {
         throw new Error(response.data?.message || t('operation_settings.save_failed_generic'));
       }
+      // /api/status is cached briefly; drop it so the saved option shows up immediately.
+      invalidateSystemStatusCache();
     } catch (error) {
       console.error(`Error updating ${key}: ${error instanceof Error ? error.message : String(error)}`);
       throw error;

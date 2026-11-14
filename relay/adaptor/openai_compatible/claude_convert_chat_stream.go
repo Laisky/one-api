@@ -15,11 +15,12 @@ import (
 // started only once the function name is known, because content_block_start
 // must carry the name; argument fragments that arrive earlier are buffered.
 type claudeChatTool struct {
-	upstreamID string
-	name       string
-	index      int
-	started    bool
-	pending    strings.Builder
+	upstreamID   string
+	name         string
+	index        int
+	started      bool
+	pending      strings.Builder
+	extraContent *relaymodel.ToolExtraContent
 }
 
 // claudeChatStreamTranslator converts OpenAI Chat Completions stream chunks
@@ -91,7 +92,14 @@ func (t *claudeChatStreamTranslator) consume(chunk *ChatCompletionsStreamRespons
 		if choice.Delta.Signature != nil && *choice.Delta.Signature != "" {
 			t.em.SignatureDelta(t.ensureBlock(claudeBlockThinking), *choice.Delta.Signature)
 		}
-		if text := choice.Delta.StringContent(); text != "" {
+		if blocks, native := claudeGoogleTextBlocks(choice.Delta); native {
+			t.closeCurrent()
+			for _, block := range blocks {
+				index := t.em.StartBlock(block)
+				t.em.TextDelta(index, block.Text)
+				t.em.StopBlock(index)
+			}
+		} else if text := choice.Delta.StringContent(); text != "" {
 			t.em.TextDelta(t.ensureBlock(claudeBlockText), text)
 		}
 		if len(choice.Delta.ToolCalls) > 0 {
@@ -160,6 +168,9 @@ func (t *claudeChatStreamTranslator) consumeToolCall(tc *relaymodel.Tool) {
 	if tool.name == "" && tc.Function != nil {
 		tool.name = tc.Function.Name
 	}
+	if tc.ExtraContent != nil {
+		tool.extraContent = tc.ExtraContent
+	}
 	args := chatToolArguments(tc)
 	if !tool.started {
 		tool.pending.WriteString(args)
@@ -175,7 +186,7 @@ func (t *claudeChatStreamTranslator) consumeToolCall(tc *relaymodel.Tool) {
 func (t *claudeChatStreamTranslator) startTool(tool *claudeChatTool) {
 	t.closeCurrent()
 	tool.started = true
-	tool.index = t.em.StartBlock(relaymodel.ClaudeContent{Type: claudeBlockToolUse, ID: t.ids.Allocate(tool.upstreamID), Name: tool.name})
+	tool.index = t.em.StartBlock(relaymodel.ClaudeContent{Type: claudeBlockToolUse, ID: t.ids.Allocate(tool.upstreamID), Name: tool.name, ExtraContent: tool.extraContent})
 	if tool.pending.Len() > 0 {
 		t.em.InputJSONDelta(tool.index, tool.pending.String())
 		tool.pending.Reset()

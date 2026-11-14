@@ -25,6 +25,25 @@ func ConvertResponseAPIToChatCompletionRequest(request *ResponseAPIRequest, nati
 // of request, or nil to build it here; nativeMedia marks native Google
 // channels. Returns the Chat request or a wrapped validation error.
 func ConvertResponseAPIToChatCompletionRequestWithCatalog(request *ResponseAPIRequest, catalog *ResponseFallbackToolCatalog, nativeMedia ...bool) (*model.GeneralOpenAIRequest, error) {
+	options := ResponseFallbackConversionOptions{}
+	if len(nativeMedia) > 0 {
+		options.NativeMedia = nativeMedia[0]
+	}
+	return ConvertResponseAPIToChatCompletionRequestWithOptions(request, catalog, options)
+}
+
+// ResponseFallbackConversionOptions selects trusted provider capabilities independently of caller strictness.
+type ResponseFallbackConversionOptions struct {
+	RequireToolResultPairing bool
+	NativeMedia              bool
+	PreserveJSONSchema       bool
+}
+
+// ConvertResponseAPIToChatCompletionRequestWithOptions lowers a request using the supplied provider capabilities and matching catalog.
+// It returns a Chat request or a wrapped validation error, without mutating caller schemas.
+func ConvertResponseAPIToChatCompletionRequestWithOptions(request *ResponseAPIRequest, catalog *ResponseFallbackToolCatalog, options ResponseFallbackConversionOptions) (*model.GeneralOpenAIRequest, error) {
+	nativeMedia := []bool{options.NativeMedia}
+
 	if request == nil {
 		return nil, errors.New("response api request is nil")
 	}
@@ -52,11 +71,14 @@ func ConvertResponseAPIToChatCompletionRequestWithCatalog(request *ResponseAPIRe
 	// flattened into one reversible tool list; history items that reference
 	// them are lowered onto that list before the Chat message loop below.
 	if catalog == nil {
-		built, err := BuildResponseFallbackToolCatalog(request)
+		built, err := BuildResponseFallbackToolCatalog(request, options.PreserveJSONSchema)
 		if err != nil {
 			return nil, errors.Wrap(err, "build response fallback tool catalog")
 		}
 		catalog = built
+	}
+	if catalog.preserveJSONSchema != options.PreserveJSONSchema {
+		return nil, errors.New("response fallback catalog schema policy does not match provider")
 	}
 	input, effortOverride, err := lowerResponseFallbackToolItems(request.Input, catalog)
 	if err != nil {
@@ -101,7 +123,7 @@ func ConvertResponseAPIToChatCompletionRequestWithCatalog(request *ResponseAPIRe
 			// Explicit strict opts into preserving the requested schema semantics.
 			// Omitted strict retains the established cross-provider sanitizer.
 			schema := any(request.Text.Format.Schema)
-			if request.Text.Format.Strict == nil {
+			if request.Text.Format.Strict == nil && !options.PreserveJSONSchema {
 				schema = sanitizeResponseAPIJSONSchema(schema)
 			} else {
 				schema = cloneResponseAPIJSONValue(schema)
@@ -290,6 +312,12 @@ func ConvertResponseAPIToChatCompletionRequestWithCatalog(request *ResponseAPIRe
 						},
 					}
 
+					if options.NativeMedia {
+						if err := restoreGoogleCallMetadata(&toolCall, v["extra_content"]); err != nil {
+							return nil, errors.Wrap(err, "restore Google function call metadata")
+						}
+					}
+
 					// This tool call is now in-flight and may be answered by an adjacent
 					// function_call_output later in the input.
 					if normalizedID != "" {
@@ -383,6 +411,10 @@ func ConvertResponseAPIToChatCompletionRequestWithCatalog(request *ResponseAPIRe
 						}
 						chatReq.Messages = append(chatReq.Messages, toolMessage)
 						continue
+					}
+
+					if options.RequireToolResultPairing {
+						return nil, errors.New("validation failed: native Vertex function_call_output has no matching pending function call")
 					}
 
 					if output == "" {
@@ -539,12 +571,19 @@ func responseContentItemToMessage(item map[string]any, nativeMedia ...bool) (*mo
 		namePtr = &name
 	}
 
+	message := &model.Message{Role: role, Name: namePtr}
+	if len(nativeMedia) > 0 && nativeMedia[0] {
+		extra, err := responseGoogleMetadata(item["extra_content"])
+		if err != nil {
+			return nil, errors.Wrap(err, "restore Google message metadata")
+		}
+		message.ExtraContent = extra
+	}
 	contentVal, ok := item["content"]
 	if !ok {
-		return &model.Message{Role: role, Name: namePtr, Content: ""}, nil
+		message.Content = ""
+		return message, nil
 	}
-
-	message := &model.Message{Role: role, Name: namePtr}
 
 	switch content := contentVal.(type) {
 	case nil:
@@ -560,6 +599,7 @@ func responseContentItemToMessage(item map[string]any, nativeMedia ...bool) (*mo
 			if !ok {
 				continue
 			}
+			beforeParts := len(parts)
 			typeStr, _ := partMap["type"].(string)
 			switch typeStr {
 			case "", "text", "input_text", "output_text":
@@ -623,6 +663,18 @@ func responseContentItemToMessage(item map[string]any, nativeMedia ...bool) (*mo
 					textSections = append(textSections, text)
 				} else {
 					hasNonText = true
+				}
+			}
+			if len(nativeMedia) > 0 && nativeMedia[0] && len(parts) > beforeParts {
+				extra, err := responseGoogleMetadata(partMap["extra_content"])
+				if err != nil {
+					return nil, errors.Wrap(err, "restore Google content metadata")
+				}
+				if extra != nil {
+					hasNonText = true
+					for i := beforeParts; i < len(parts); i++ {
+						parts[i].ExtraContent = extra
+					}
 				}
 			}
 		}

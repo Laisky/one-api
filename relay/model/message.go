@@ -27,7 +27,10 @@ const (
 )
 
 type Message struct {
-	Role string `json:"role,omitempty"`
+	// NativePartOrder preserves original ordered content and function-call parts within native conversions.
+	NativePartOrder []NativePartReference `json:"-"`
+	ExtraContent    *ToolExtraContent     `json:"extra_content,omitempty"`
+	Role            string                `json:"role,omitempty"`
 	// Content is a string or a list of objects
 	Content    any              `json:"content,omitempty"`
 	Name       *string          `json:"name,omitempty"`
@@ -67,7 +70,12 @@ type Message struct {
 	// that text-only tool message (plus a ToolResultMediaCarrier message);
 	// converters that can place images inside a tool result, such as Claude
 	// tool_result blocks, rebuild the result from these parts instead.
+	// Native Claude lowering also records media-bearing tool_result blocks here
+	// while Content keeps its established flattened text, so a native consumer
+	// that cannot represent the media fails closed instead of sending it as text.
 	ToolResultParts []MessageContent `json:"-"`
+	// ToolResultIsError carries an explicitly declared tool execution failure.
+	ToolResultIsError bool `json:"-"`
 	// ToolResultMediaCarrier marks a synthetic user message that only
 	// re-delivers the images held in the ToolResultParts of the directly
 	// preceding run of tool messages. Converters that consume ToolResultParts
@@ -318,6 +326,7 @@ type ImageURL struct {
 }
 
 type MessageContent struct {
+	ExtraContent *ToolExtraContent `json:"extra_content,omitempty"`
 	// Type identifies text, image_url, video_url, file, or input_audio.
 	Type       string      `json:"type,omitempty"`
 	Text       *string     `json:"text,omitempty"`

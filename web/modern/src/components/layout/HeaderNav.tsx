@@ -3,13 +3,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { cn } from '@/lib/utils';
 import { ChevronDown, MoreHorizontal } from 'lucide-react';
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
 interface NavItem {
   name: string;
   to: string;
   href: string;
-  icon?: React.ComponentType<{ className?: string }>;
+  icon?: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>;
   isActive: boolean;
 }
 
@@ -18,7 +19,22 @@ interface HeaderNavProps {
   className?: string;
 }
 
+/**
+ * ACTIVE_LINK_INDICATOR marks the current page with an underline as well as color, so the state is not
+ * conveyed by color alone and survives forced-colors mode, where backgrounds are removed.
+ */
+export const ACTIVE_LINK_INDICATOR = 'aria-[current=page]:underline aria-[current=page]:decoration-2 aria-[current=page]:underline-offset-4';
+
+/**
+ * HeaderNav renders the desktop primary navigation. Links that do not fit the available width collapse
+ * into a "More" dropdown, measured with a ResizeObserver.
+ *
+ * @param props.items - The navigation items, in display order.
+ * @param props.className - Optional extra classes for the measuring container.
+ * @returns The labelled primary navigation landmark.
+ */
 export function HeaderNav({ items, className }: HeaderNavProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const [visibleCount, setVisibleCount] = useState(items.length);
   const itemsRef = useRef<(HTMLAnchorElement | null)[]>([]);
@@ -95,7 +111,7 @@ export function HeaderNav({ items, className }: HeaderNavProps) {
 
   return (
     <div ref={containerRef} className={cn('flex items-center flex-1 min-w-0 overflow-hidden', className)}>
-      <nav className="flex items-center space-x-1 min-w-0">
+      <nav className="flex items-center space-x-1 min-w-0" aria-label={t('common.primary_navigation')}>
         {items.map((item, index) => (
           <Link
             key={item.to}
@@ -104,6 +120,7 @@ export function HeaderNav({ items, className }: HeaderNavProps) {
             aria-current={item.isActive ? 'page' : undefined}
             className={cn(
               'px-3 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap flex-shrink-0',
+              ACTIVE_LINK_INDICATOR,
               item.isActive ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground hover:bg-muted',
               index >= visibleCount && 'hidden'
             )}
@@ -115,16 +132,25 @@ export function HeaderNav({ items, className }: HeaderNavProps) {
         {hiddenItems.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="px-2 h-9 gap-1 text-muted-foreground">
-                <MoreHorizontal className="h-4 w-4" />
-                <ChevronDown className="h-4 w-4" />
+              <Button
+                variant="ghost"
+                size="sm"
+                className="px-2 h-9 gap-1 text-muted-foreground"
+                aria-label={t('common.more_navigation')}
+              >
+                <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
+                <ChevronDown className="h-4 w-4" aria-hidden="true" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               {hiddenItems.map((item) => (
                 <DropdownMenuItem key={item.to} asChild>
-                  <Link to={item.to} className={cn('flex items-center gap-2 w-full', item.isActive && 'bg-muted font-medium')}>
-                    {item.icon && <item.icon className="h-4 w-4" />}
+                  <Link
+                    to={item.to}
+                    aria-current={item.isActive ? 'page' : undefined}
+                    className={cn('flex items-center gap-2 w-full', ACTIVE_LINK_INDICATOR, item.isActive && 'bg-muted font-medium')}
+                  >
+                    {item.icon && <item.icon className="h-4 w-4" aria-hidden="true" />}
                     {item.name}
                   </Link>
                 </DropdownMenuItem>

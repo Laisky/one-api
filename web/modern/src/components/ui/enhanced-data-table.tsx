@@ -56,6 +56,8 @@ export interface EnhancedDataTableProps<TData extends RowData, TValue = unknown>
   emptyMessage?: string;
   /** paginationSlot preserves custom controls such as keyset traversal instead of assuming arbitrary page access. */
   paginationSlot?: React.ReactNode;
+  /** ariaLabel names the keyboard-scrollable table region; it defaults to a generic "Data table" label. */
+  ariaLabel?: string;
 }
 
 /** EnhancedDataTable renders searchable desktop tables and the same compact mobile records as DataTable. */
@@ -100,6 +102,7 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
   className,
   paginationSlot,
   emptyMessage,
+  ariaLabel,
 }: EnhancedDataTableProps<TData, TValue>) {
   const { t } = useTranslation();
   const selectable = useSelectableTable({
@@ -307,30 +310,41 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
             })}
           />
         ) : (
-          <div className="rounded-md border overflow-x-auto" inert={loading}>
-            <div className="overflow-x-auto w-full">
-              <Table className={cn('min-w-max', loading && 'pointer-events-none opacity-60')}>
-                <TableHeader>
-                  {table.getHeaderGroups().map((headerGroup) => (
-                    <TableRow key={headerGroup.id}>
-                      {headerGroup.headers.map((header) => {
-                        if (isHiddenColumn(header.column.columnDef)) return null;
-                        return (
-                          <TableHead
-                            key={header.id}
-                            className={cn(compactMode ? 'px-2 py-2' : 'px-4 py-3')}
-                            aria-sort={onSortChange && header.column.id === sortBy ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
-                          >
-                            {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                          </TableHead>
-                        );
-                      })}
-                    </TableRow>
-                  ))}
-                </TableHeader>
-                <TableBody>
-                  {table.getRowModel().rows?.length ? (
-                    table.getRowModel().rows.map((row) => (
+          // One focusable, named scroll region (not two nested scrollers) lets keyboard users scroll wide
+          // tables; .table-scroll adds scroll shadows that show which edge has more columns.
+          <div
+            className="table-scroll rounded-md border"
+            inert={loading}
+            tabIndex={0}
+            role="region"
+            aria-label={ariaLabel ?? t('common.data_table')}
+          >
+            <Table className={cn('min-w-max', loading && 'pointer-events-none opacity-60')}>
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => {
+                      if (isHiddenColumn(header.column.columnDef)) return null;
+                      return (
+                        <TableHead
+                          key={header.id}
+                          className={cn(compactMode ? 'px-2 py-2' : 'px-4 py-3')}
+                          aria-sort={onSortChange && header.column.id === sortBy ? (sortOrder === 'asc' ? 'ascending' : 'descending') : undefined}
+                        >
+                          {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                        </TableHead>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {table.getRowModel().rows?.length ? (
+                  table.getRowModel().rows.map((row) => {
+                    const cells = row.getVisibleCells().filter((cell) => !isHiddenColumn(cell.column.columnDef));
+                    // The keyboard "open" control goes in the first data cell, after any selection checkbox.
+                    const openCellId = (cells.find((cell) => cell.column.id !== '__selection__') ?? cells[0])?.id;
+                    return (
                       <TableRow
                         key={row.id}
                         data-state={selectable.isSelected(row.original) ? 'selected' : undefined}
@@ -342,26 +356,39 @@ export function EnhancedDataTable<TData extends RowData, TValue = unknown>({
                         onMouseMove={(event) => handleRowMouseMove(event, row.original)}
                         onMouseLeave={handleRowMouseLeave}
                       >
-                        {row.getVisibleCells().map((cell) => {
-                          if (isHiddenColumn(cell.column.columnDef)) return null;
+                        {cells.map((cell) => {
+                          // Row clicks are pointer-only, so the first cell carries a keyboard-reachable
+                          // button that is visually hidden until it receives keyboard focus. The row
+                          // handler ignores clicks from buttons, so activating it opens the record once.
+                          const openButton = onRowClick && cell.id === openCellId ? (
+                            <button
+                              type="button"
+                              className="table-row-open"
+                              disabled={loading}
+                              onClick={() => onRowClick(row.original)}
+                            >
+                              {t('mobile_table.open_record', 'Open record')}
+                            </button>
+                          ) : null;
                           return (
-                            <TableCell key={cell.id} className={cn(compactMode ? 'px-2 py-2' : 'px-4 py-3')}>
+                            <TableCell key={cell.id} className={cn(compactMode ? 'px-2 py-2' : 'px-4 py-3', openButton && 'relative')}>
+                              {openButton}
                               {flexRender(cell.column.columnDef.cell, cell.getContext())}
                             </TableCell>
                           );
                         })}
                       </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell colSpan={visibleColumns.length} className="h-24 text-center">
-                        {loading ? t('common.loading', 'Loading...') : effectiveEmptyMessage}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
+                    );
+                  })
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={visibleColumns.length} className="h-24 text-center">
+                      {loading ? t('common.loading', 'Loading...') : effectiveEmptyMessage}
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </div>
         )}
       </div>

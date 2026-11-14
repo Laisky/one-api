@@ -397,6 +397,18 @@ const (
 	// automatic pre-consume refunds once forwarding has started.
 	UpstreamRequestPossiblyForwarded = "upstream_request_possibly_forwarded"
 
+	// GeminiCompleteToolStreamState stores per-candidate complete tool-call counters.
+	// Set/read in: Gemini streaming response conversion on the request goroutine.
+	GeminiCompleteToolStreamState = "gemini_complete_tool_stream_state"
+
+	// GeminiVertexPartPositions enables native Vertex Part order projection.
+	// Set in: Vertex Gemini request conversion. Read in: Gemini response conversion.
+	GeminiVertexPartPositions = "gemini_vertex_part_positions"
+
+	// GeminiNativePartStreamPositions stores cumulative per-candidate Part offsets.
+	// Set/read in: Gemini streaming response conversion on the request goroutine.
+	GeminiNativePartStreamPositions = "gemini_native_part_stream_positions"
+
 	// GeminiOutputIncomplete means not all upstream image output was represented downstream.
 	GeminiOutputIncomplete = "gemini_output_incomplete"
 

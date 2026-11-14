@@ -1,9 +1,9 @@
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { Layout } from '@/components/layout/Layout';
+import { PageLoader } from '@/components/layout/PageLoader';
 import { ThemeProvider } from '@/components/theme-provider';
 import { NotificationsProvider } from '@/components/ui/notifications';
-import { api } from '@/lib/api';
-import { persistSystemStatus } from '@/lib/utils';
+import { initializeSystem } from '@/lib/utils';
 import { Suspense, lazy, useEffect } from 'react';
 import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom';
 
@@ -50,37 +50,15 @@ const PlaygroundPage = lazy(() => import('@/pages/chat/PlaygroundPage'));
 const ResponsiveDebugger = lazy(() => import('@/components/dev/responsive-debugger').then((m) => ({ default: m.ResponsiveDebugger })));
 const ResponsiveValidator = lazy(() => import('@/components/dev/responsive-validator').then((m) => ({ default: m.ResponsiveValidator })));
 
-// Minimal loading fallback — keeps layout stable during chunk load
-function PageLoader() {
-  return (
-    <div className="flex items-center justify-center min-h-[50vh]">
-      <span className="h-8 w-8 animate-spin rounded-full border-4 border-primary/20 border-t-primary" />
-    </div>
-  );
-}
-
-// Initialize system settings from backend
-const initializeSystem = async () => {
-  try {
-    // Unified API call - complete URL with /api prefix
-    const response = await api.get('/api/status');
-    const { success, data } = response.data;
-
-    if (success && data) {
-      persistSystemStatus(data);
-    }
-  } catch (error) {
-    console.error('Failed to initialize system settings:', error);
-    // Set defaults
-    localStorage.setItem('quota_per_unit', '500000');
-    localStorage.setItem('display_in_currency', 'true');
-    localStorage.setItem('system_name', 'One API');
-  }
-};
-
+/**
+ * App wires providers and routes. On boot it initializes the system status through the shared loader, so it
+ * joins the /api/status request that Header and Footer start instead of issuing its own.
+ *
+ * @returns the application root element.
+ */
 function App() {
   useEffect(() => {
-    initializeSystem();
+    void initializeSystem();
   }, []);
 
   return (

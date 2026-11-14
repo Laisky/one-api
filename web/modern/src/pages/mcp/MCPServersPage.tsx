@@ -429,6 +429,7 @@ export function MCPServersPage() {
     >
       <ListTableCard>
         <EnhancedDataTable
+          ariaLabel={t('mcp.list.title')}
           selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
           selectionDisabled={searchKeyword.trim() !== appliedKeyword}
           columns={columns}

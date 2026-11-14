@@ -18,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // responseCaptureWriter is a gin.ResponseWriter that captures the response body and status code
@@ -32,6 +33,10 @@ type responseCaptureWriter struct {
 	// renders a different Responses body instead.
 	header http.Header
 }
+
+// PreserveNativeChatParts marks a trusted internal conversion sink, never public Chat output.
+// Responses and MCP consume native boundaries before choosing their final wire representation.
+func (w *responseCaptureWriter) PreserveNativeChatParts() bool { return true }
 
 // newResponseCaptureWriter creates a capture writer over w whose headers are
 // kept apart from w until copyHeadersTo publishes them.
@@ -151,6 +156,7 @@ func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRe
 			zap.Int("reasoning_summary_fixed", stats.ReasoningSummaryFixed),
 			zap.Int("embedded_image_dataurl_redacted", stats.DataURLRedacted),
 			zap.Int("embedded_image_dataurl_redacted_bytes", stats.DataURLRedactedBytes),
+			zap.Int("provider_metadata_removed", stats.ProviderMetadataRemoved),
 		)
 	}
 
@@ -328,6 +334,20 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 		}
 		root["extra_body"] = extraBody
 		changed = true
+	}
+
+	// Clients replay the extra_content carriers the gateway emits for Gemini turns; native
+	// Responses providers define no such field on input items and reject unknown parameters.
+	if rawInput, ok := root["input"]; ok && len(rawInput) > 0 {
+		scopedInput, removed, err := relaymodel.StripResponsesInputProviderMetadata(rawInput)
+		if err != nil {
+			return nil, stats, false, errors.Wrap(err, "strip gateway provider metadata from response input")
+		}
+		if removed > 0 {
+			root["input"] = scopedInput
+			stats.ProviderMetadataRemoved += removed
+			changed = true
+		}
 	}
 
 	// Backward-compat: normalize historical assistant/user message content item types.

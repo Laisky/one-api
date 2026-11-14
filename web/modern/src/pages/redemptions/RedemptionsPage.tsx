@@ -274,6 +274,7 @@ export function RedemptionsPage() {
       <Card className="border-0 md:border shadow-none md:shadow-sm">
         <CardContent className={cn(isMobile ? 'p-3' : 'p-6')}>
           <DataTable
+            ariaLabel={t('common.redemptions')}
             searchControl={
               <SearchableDropdown
                 value={searchKeyword}

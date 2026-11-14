@@ -1,33 +1,10 @@
-/* Enhanced Mobile-responsive table styles */
+/* Mobile label/value table cells (DataTable cells and legacy action renderers carry .mobile-table-cell) */
 @media (max-width: 768px) {
-  /* Hide table headers on mobile — scoped to .mobile-table only */
-  .mobile-table thead {
-    display: none;
-  }
-
-  /* Convert table rows to cards on mobile */
-  .mobile-table tbody tr,
-  .mobile-table-row {
-    display: block;
-    margin-bottom: 1rem;
-    padding: 1rem;
-    border: 1px solid hsl(var(--border));
-    border-radius: 0.5rem;
-    background-color: hsl(var(--card));
-    box-shadow: 0 1px 3px 0 hsl(0 0% 0% / 0.1);
-    transition: box-shadow 0.2s ease-in-out;
-  }
-
-  .mobile-table tbody tr:hover,
-  .mobile-table-row:hover {
-    box-shadow: 0 4px 12px 0 hsl(0 0% 0% / 0.15);
-  }
-
-  /* Style table cells as label-value pairs */
-  .mobile-table tbody td,
+  /* Style table cells as label-value pairs. These rules are unlayered, so they already win over
+     Tailwind's layered utilities (e.g. text-align/display classes) without !important. */
   .mobile-table-cell {
     display: block;
-    text-align: left !important;
+    text-align: left;
     padding: 0.5rem 0;
     border: none;
     position: relative;
@@ -35,7 +12,6 @@
   }
 
   /* Add labels before content using data-label attribute */
-  .mobile-table tbody td:before,
   .mobile-table-cell:before {
     content: attr(data-label) ': ';
     font-weight: 600;
@@ -47,88 +23,34 @@
   }
 
   /* Special handling for action buttons */
-  .mobile-table tbody td:last-child,
   .mobile-table-cell:last-child {
     padding-top: 1rem;
     margin-top: 0.5rem;
     border-top: 1px solid hsl(var(--border));
   }
 
-  .mobile-table tbody td:last-child:before,
   .mobile-table-cell:last-child:before {
     content: '';
     display: none;
   }
 
   /* Enhanced action buttons layout */
-  .mobile-table .actions-grid,
   .mobile-table-cell .space-x-2,
   .mobile-table-cell .flex.gap-1,
   .mobile-table-cell .flex.gap-2 {
-    display: grid !important;
+    display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.5rem;
     width: 100%;
   }
 
-  .mobile-table .actions-grid .primary-action,
-  .mobile-table-cell .primary-action {
-    grid-column: span 2;
-  }
-
   /* Touch-friendly button sizing */
-  .mobile-table button,
   .mobile-table-cell button {
     min-height: 44px;
     min-width: 44px;
     font-size: 0.875rem;
     padding: 0.5rem 0.75rem;
     border-radius: 0.375rem;
-  }
-
-  /* Compact buttons for mobile */
-  .mobile-table button.btn-compact,
-  .mobile-table-cell button.btn-compact {
-    min-height: 36px;
-    font-size: 0.75rem;
-    padding: 0.25rem 0.5rem;
-  }
-
-  /* Responsive pagination */
-  .pagination-mobile {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: stretch;
-  }
-
-  .pagination-mobile .pagination-info {
-    text-align: center;
-    order: 1;
-    font-size: 0.75rem;
-  }
-
-  .pagination-mobile .pagination-controls {
-    justify-content: center;
-    order: 2;
-  }
-
-  .pagination-mobile .pagination-size {
-    justify-content: center;
-    order: 3;
-  }
-
-  /* Enhanced pagination button spacing */
-  .pagination-mobile .pagination-controls button {
-    min-height: 44px;
-    min-width: 44px;
-  }
-
-  /* Hide some pagination buttons on small screens */
-  @media (max-width: 480px) {
-    .pagination-mobile .pagination-controls button:first-child,
-    .pagination-mobile .pagination-controls button:last-child {
-      display: none;
-    }
   }
 }
 
@@ -146,14 +68,10 @@
   input,
   select,
   textarea {
-    font-size: 16px;
+    /* 1rem (16px by default) keeps iOS from zooming on focus while honoring the user's font size. */
+    font-size: 1rem;
     min-height: 44px;
     line-height: 1.5;
-  }
-
-  .touch-friendly {
-    padding: 0.75rem;
-    touch-action: manipulation;
   }
 
   /* Larger tap targets for small interactive elements */
@@ -172,122 +90,39 @@
     outline-offset: 2px;
   }
 
-  /* Enhanced active states for better feedback */
-  button:active,
-  [role='button']:active {
-    transform: scale(0.98);
-    transition: transform 0.1s ease-in-out;
+  /* Press feedback scales the control, so it is opt-in for users without a reduced-motion preference. */
+  @media (prefers-reduced-motion: no-preference) {
+    button:active,
+    [role='button']:active {
+      transform: scale(0.98);
+      transition: transform 0.1s ease-in-out;
+    }
   }
 }
 
-/* Search dropdown mobile styles */
-@media (max-width: 768px) {
-  .search-dropdown {
-    position: fixed !important;
-    top: 0 !important;
-    left: 0 !important;
-    right: 0 !important;
-    bottom: 0 !important;
-    width: 100vw !important;
-    /* Use dynamic viewport height to avoid iOS/Android address bar issues creating extra scroll space */
-    height: 100dvh !important;
-    /* Fallback for older browsers */
-    min-height: 100vh !important;
-    max-height: none !important;
-    border-radius: 0 !important;
-    z-index: 50;
-  }
-
-  .search-dropdown .search-content {
-    height: 100%;
-    overflow-y: auto;
-    padding: 1rem;
-  }
-
-  .search-dropdown .search-close {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    z-index: 51;
-  }
-}
-
-/* Form improvements for mobile */
-@media (max-width: 768px) {
-  .form-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  .form-row {
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .form-actions {
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-
-  .form-actions button {
-    width: 100%;
-  }
-
-  /* JSON editor improvements */
-  .json-editor {
-    font-size: 0.75rem;
-    line-height: 1.4;
-  }
-
-  /* Model selection improvements */
-  .model-grid {
-    max-height: 200px;
-    overflow-y: auto;
-  }
-
-  .model-item {
-    padding: 0.75rem;
-    margin: 0.25rem 0;
-  }
-}
-
-/* Loading states */
-.loading-skeleton {
-  background: linear-gradient(90deg, hsl(var(--muted)) 25%, hsl(var(--border)) 50%, hsl(var(--muted)) 75%);
-  background-size: 200% 100%;
-  animation: loading 1.5s infinite;
-}
-
-@keyframes loading {
-  0% {
-    background-position: 200% 0;
-  }
-
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-/* Accessibility improvements */
+/* Reduced motion: adjust motion case by case instead of globally zeroing every animation and
+   transition (which makes some effects more jarring and breaks spinners' "still working" signal).
+   Unlayered on purpose so these overrides win over Tailwind's layered theme and utilities. */
 @media (prefers-reduced-motion: reduce) {
-  * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* High contrast mode support */
-@media (prefers-contrast: high) {
-  .card {
-    border: 2px solid;
+  /* Tailwind's animate-spin resolves to `animation: var(--animate-spin)`. Slow the spinner down
+     rather than stopping it, so loading indicators still show that work is in progress. */
+  :root {
+    --animate-spin: spin 6s linear infinite;
   }
 
-  button {
-    border: 2px solid;
-  }
-
-  .badge {
-    border: 1px solid;
+  /* tailwindcss-animate (animate-in / animate-out with slide-*, zoom-* and spin-* modifiers):
+     drop the spatial movement but keep the opacity fade. The animation still runs, so Radix
+     presence still receives animationend and unmounts closed content. */
+  [class*='animate-in'],
+  [class*='animate-out'] {
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-enter-scale: 1;
+    --tw-enter-rotate: 0;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
+    --tw-exit-scale: 1;
+    --tw-exit-rotate: 0;
   }
 }
 
@@ -298,210 +133,4 @@ select:focus-visible,
 textarea:focus-visible {
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
-}
-
-/* Dark mode adjustments — uses class-based dark mode to match ThemeProvider */
-.dark .mobile-table tbody tr {
-  background-color: hsl(var(--card));
-  border-color: hsl(var(--border));
-}
-
-.dark .mobile-table tbody td:before {
-  color: hsl(var(--muted-foreground));
-}
-
-.dark .mobile-table tbody td:last-child {
-  border-top-color: hsl(var(--border));
-}
-
-/* Additional responsive utilities */
-@layer utilities {
-  /* Responsive text sizing */
-  .text-responsive-xs {
-    font-size: 0.75rem;
-    line-height: 1rem;
-  }
-
-  @media (min-width: 768px) {
-    .text-responsive-xs {
-      font-size: 0.875rem;
-      line-height: 1.25rem;
-    }
-  }
-
-  .text-responsive-sm {
-    font-size: 0.875rem;
-    line-height: 1.25rem;
-  }
-
-  @media (min-width: 768px) {
-    .text-responsive-sm {
-      font-size: 1rem;
-      line-height: 1.5rem;
-    }
-  }
-
-  .text-responsive-base {
-    font-size: 1rem;
-    line-height: 1.5rem;
-  }
-
-  @media (min-width: 768px) {
-    .text-responsive-base {
-      font-size: 1.125rem;
-      line-height: 1.75rem;
-    }
-  }
-
-  .text-responsive-lg {
-    font-size: 1.125rem;
-    line-height: 1.75rem;
-  }
-
-  @media (min-width: 768px) {
-    .text-responsive-lg {
-      font-size: 1.25rem;
-      line-height: 1.75rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .text-responsive-lg {
-      font-size: 1.5rem;
-      line-height: 2rem;
-    }
-  }
-
-  /* Responsive spacing utilities */
-  .space-responsive-y > * + * {
-    margin-top: 1rem;
-  }
-
-  @media (min-width: 768px) {
-    .space-responsive-y > * + * {
-      margin-top: 1.5rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .space-responsive-y > * + * {
-      margin-top: 2rem;
-    }
-  }
-
-  .space-responsive-x > * + * {
-    margin-left: 0.5rem;
-  }
-
-  @media (min-width: 768px) {
-    .space-responsive-x > * + * {
-      margin-left: 1rem;
-    }
-  }
-
-  /* Responsive padding utilities */
-  .p-responsive {
-    padding: 1rem;
-  }
-
-  @media (min-width: 768px) {
-    .p-responsive {
-      padding: 1.5rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .p-responsive {
-      padding: 2rem;
-    }
-  }
-
-  .px-responsive {
-    padding-left: 1rem;
-    padding-right: 1rem;
-  }
-
-  @media (min-width: 768px) {
-    .px-responsive {
-      padding-left: 1.5rem;
-      padding-right: 1.5rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .px-responsive {
-      padding-left: 2rem;
-      padding-right: 2rem;
-    }
-  }
-
-  .py-responsive {
-    padding-top: 1rem;
-    padding-bottom: 1rem;
-  }
-
-  @media (min-width: 768px) {
-    .py-responsive {
-      padding-top: 1.5rem;
-      padding-bottom: 1.5rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .py-responsive {
-      padding-top: 2rem;
-      padding-bottom: 2rem;
-    }
-  }
-
-  /* Responsive margin utilities */
-  .m-responsive {
-    margin: 1rem;
-  }
-
-  @media (min-width: 768px) {
-    .m-responsive {
-      margin: 1.5rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .m-responsive {
-      margin: 2rem;
-    }
-  }
-
-  /* Responsive gap utilities */
-  .gap-responsive {
-    gap: 0.5rem;
-  }
-
-  @media (min-width: 768px) {
-    .gap-responsive {
-      gap: 1rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .gap-responsive {
-      gap: 1.5rem;
-    }
-  }
-
-  /* Responsive border radius */
-  .rounded-responsive {
-    border-radius: 0.375rem;
-  }
-
-  @media (min-width: 768px) {
-    .rounded-responsive {
-      border-radius: 0.5rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .rounded-responsive {
-      border-radius: 0.75rem;
-    }
-  }
 }

@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type MouseEvent } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { Copy, Check } from 'lucide-react';
-import { copyToClipboard } from '@/lib/utils';
+import { Copy, Check, X } from 'lucide-react';
+import { cn, copyToClipboard } from '@/lib/utils';
 import { useTranslation } from 'react-i18next';
 
 /**
@@ -20,9 +20,21 @@ interface CopyButtonProps {
   onCopyError?: (error: Error) => void;
 }
 
+/** CopyStatus is the visible and announced outcome of the latest copy attempt. */
+type CopyStatus = 'idle' | 'copied' | 'failed';
+
+/** COPY_FEEDBACK_MS is how long the copied/failed feedback stays visible and announced. */
+const COPY_FEEDBACK_MS = 2000;
+
 /**
- * CopyButton renders an icon button that copies text to the clipboard and
- * returns immediate visual feedback through its icon and tooltip.
+ * CopyButton renders an icon button that copies text to the clipboard. It
+ * reports both success and failure through the icon, a tooltip bubble, and an
+ * always-mounted polite live region placed outside the button, so sighted and
+ * screen reader users get the same message. The button is never disabled while
+ * feedback shows, and repeated clicks restart a single feedback timer.
+ *
+ * @param props - The text to copy, the accessible label, styling options, and outcome callbacks.
+ * @returns The copy button with its tooltip and status live region.
  */
 export function CopyButton({
   text,
@@ -35,92 +47,124 @@ export function CopyButton({
   onCopyError,
 }: CopyButtonProps) {
   const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-  const [copying, setCopying] = useState(false);
+  const [status, setStatus] = useState<CopyStatus>('idle');
+  const [announcement, setAnnouncement] = useState('');
   const [tooltipOpen, setTooltipOpen] = useState(false);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const reportCountRef = useRef(0);
+  const mountedRef = useRef(true);
 
-  // Effect to manage icon revert timer and tooltip
   useEffect(() => {
-    if (copied) {
-      // Clear any existing timeout
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-
-      // Show tooltip immediately when copied
-      setTooltipOpen(true);
-
-      // Set new timeout to revert icon back to copy and hide tooltip after 2 seconds
-      timeoutRef.current = setTimeout(() => {
-        setCopied(false);
-        setTooltipOpen(false);
-        timeoutRef.current = null;
-      }, 2000);
-    }
-
-    // Cleanup function to clear timeout on unmount or when copied state changes
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
     };
-  }, [copied]);
+  }, []);
 
-  const handleCopy = async (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent row selection or other parent click handlers
+  const accessibleLabel = label ?? t('common.copy_to_clipboard', 'Copy to clipboard');
+  const copiedMessage = successMessage ?? t('common.copied', 'Copied!');
+  const failedMessage = t('common.copy_failed', 'Copy failed');
 
-    if (copying || copied) return;
-
-    setCopying(true);
-    try {
-      await copyToClipboard(text);
-
-      // Show success icon immediately after successful copy
-      setCopied(true);
-
-      onCopySuccess?.();
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
-      onCopyError?.(error instanceof Error ? error : new Error(t('common.copy_failed', 'Copy failed')));
-    } finally {
-      setCopying(false);
+  /**
+   * report shows the outcome of one copy attempt and restarts the single feedback timer.
+   * Consecutive messages alternate a trailing no-break space so assistive technologies
+   * that skip an identical repeated message (VoiceOver) still announce a repeat copy.
+   *
+   * @param ok - True when the text reached the clipboard.
+   */
+  const report = (ok: boolean) => {
+    if (!mountedRef.current) return;
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
     }
+    reportCountRef.current += 1;
+    const message = ok ? copiedMessage : failedMessage;
+    setAnnouncement(reportCountRef.current % 2 === 0 ? `${message}\u00A0` : message);
+    setStatus(ok ? 'copied' : 'failed');
+    setTooltipOpen(true);
+    timeoutRef.current = setTimeout(() => {
+      setStatus('idle');
+      setAnnouncement('');
+      setTooltipOpen(false);
+      timeoutRef.current = null;
+    }, COPY_FEEDBACK_MS);
   };
 
+  /**
+   * handleCopy copies the text and reports the outcome; it stops propagation so
+   * parent row handlers never fire.
+   *
+   * @param event - The click event from the copy button.
+   */
+  const handleCopy = async (event: MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation(); // Prevent row selection or other parent click handlers
+
+    try {
+      await copyToClipboard(text);
+    } catch (error) {
+      report(false);
+      if (onCopyError) {
+        onCopyError(error instanceof Error ? error : new Error(failedMessage));
+      } else {
+        console.error(`Failed to copy to clipboard: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      return;
+    }
+
+    report(true);
+    onCopySuccess?.();
+  };
+
+  const StatusIcon = status === 'copied' ? Check : status === 'failed' ? X : Copy;
+
   return (
-    <TooltipProvider>
-      <Tooltip
-        open={tooltipOpen}
-        onOpenChange={(open) => {
-          // Only allow closing the tooltip, not opening it manually
-          // Tooltip should only open programmatically when copy succeeds
-          if (!open) {
-            setTooltipOpen(false);
-          }
-        }}
-      >
-        <TooltipTrigger asChild>
-          <Button
-            variant={variant}
-            size={size}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={handleCopy}
-            className={`${className} transition-colors duration-200 ${copied ? 'text-success hover:text-success/80' : ''}`}
-            disabled={copying}
-            title={label ?? t('common.copy_to_clipboard', 'Copy to clipboard')}
-            aria-label={label ?? t('common.copy_to_clipboard', 'Copy to clipboard')}
-          >
-            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent className="flex items-center gap-1">
-          <Check className="h-3 w-3" />
-          {successMessage ?? t('common.copied', 'Copied!')}
-        </TooltipContent>
-      </Tooltip>
-    </TooltipProvider>
+    <>
+      <TooltipProvider>
+        <Tooltip
+          open={tooltipOpen}
+          onOpenChange={(open) => {
+            // Only allow closing the tooltip; it opens programmatically after a copy attempt.
+            if (!open) {
+              setTooltipOpen(false);
+            }
+          }}
+        >
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant={variant}
+              size={size}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={handleCopy}
+              className={cn(
+                className,
+                'transition-colors duration-200',
+                status === 'copied' && 'text-success hover:text-success/80',
+                status === 'failed' && 'text-destructive hover:text-destructive/80'
+              )}
+              data-copied={status === 'copied' ? '' : undefined}
+              data-failed={status === 'failed' ? '' : undefined}
+              title={accessibleLabel}
+              aria-label={accessibleLabel}
+            >
+              <StatusIcon className="h-3 w-3" aria-hidden="true" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="flex items-center gap-1">
+            {status === 'failed' ? <X className="h-3 w-3" aria-hidden="true" /> : <Check className="h-3 w-3" aria-hidden="true" />}
+            {status === 'failed' ? failedMessage : copiedMessage}
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+      {/* The live region stays mounted and outside the button: button children are presentational. */}
+      <span role="status" className="sr-only">
+        {announcement}
+      </span>
+    </>
   );
 }
 

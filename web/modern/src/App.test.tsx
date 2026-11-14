@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { Outlet } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { initializeSystem } from '@/lib/utils';
 import App from './App';
 
 vi.mock('@/components/layout/Layout', () => ({
@@ -21,6 +22,7 @@ vi.mock('@/lib/api', () => ({
 
 vi.mock('@/lib/utils', () => ({
   persistSystemStatus: vi.fn(),
+  initializeSystem: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/lib/stores/auth', () => ({
@@ -53,5 +55,18 @@ describe('App public routes', () => {
     });
     expect(window.location.pathname).toBe('/about');
     expect(screen.queryByTestId('login-page')).not.toBeInTheDocument();
+  });
+
+  it('initializes the system status once through the shared loader', async () => {
+    vi.mocked(initializeSystem).mockClear();
+    window.history.pushState({}, '', '/about');
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('about-page')).toBeInTheDocument();
+    });
+    // App delegates to the shared loader instead of issuing its own /api/status request.
+    expect(initializeSystem).toHaveBeenCalledTimes(1);
   });
 });

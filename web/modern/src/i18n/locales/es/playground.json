@@ -70,6 +70,7 @@
       "input": {
         "hint_no_model": "Selecciona un modelo en la barra lateral para comenzar",
         "hint_no_token": "Selecciona un token API en la barra lateral para comenzar",
+        "label": "Mensaje",
         "placeholder_default": "Escribe tu mensaje... (Shift+Enter para nueva línea)",
         "placeholder_generating": "Generando respuesta...",
         "placeholder_no_model": "Selecciona un modelo para comenzar a chatear...",
@@ -80,7 +81,8 @@
       "model_label": "Modelo:",
       "preview": "Vista previa",
       "preview_desc": "Así se mostrará tu mensaje",
-      "processing": "se está procesando..."
+      "processing": "se está procesando...",
+      "response_complete": "Respuesta completada"
     },
     "delete": {
       "cancel": "Cancelar",

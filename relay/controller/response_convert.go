@@ -232,7 +232,9 @@ func buildResponseOutput(lg glog.Logger, choices []openai_compatible.TextRespons
 			}
 			// The catalog restores namespaced, custom and tool_search identities
 			// that fallback flattened into ordinary Chat function tools.
-			output = append(output, catalog.ResponseFallbackToolCallItem(callID, name, arguments))
+			item := catalog.ResponseFallbackToolCallItem(callID, name, arguments)
+			item.ExtraContent = tool.ExtraContent
+			output = append(output, item)
 		}
 		appendBlocks(func(relaymodel.ClaudeThinkingBlock) bool { return true })
 	}
@@ -263,8 +265,9 @@ func buildRequiredActionToolCalls(choices []openai_compatible.TextResponseChoice
 				}
 			}
 			toolCalls = append(toolCalls, openai.ResponseAPIToolCall{
-				Id:   callID,
-				Type: "function",
+				ExtraContent: tool.ExtraContent,
+				Id:           callID,
+				Type:         "function",
 				Function: &openai.ResponseAPIFunctionCall{
 					Name:      tool.Function.Name,
 					Arguments: arguments,
@@ -294,17 +297,21 @@ func ensureResponseAPICallID(originalID string) string {
 func convertMessageContent(msg relaymodel.Message) []openai.OutputContent {
 	var contents []openai.OutputContent
 	if msg.IsStringContent() {
-		if text := strings.TrimSpace(msg.StringContent()); text != "" {
-			contents = append(contents, openai.OutputContent{Type: "output_text", Text: text})
+		text := strings.TrimSpace(msg.StringContent())
+		if msg.ExtraContent != nil {
+			text = msg.StringContent()
+		}
+		if text != "" || msg.ExtraContent != nil {
+			contents = append(contents, openai.OutputContent{Type: "output_text", Text: text, ExtraContent: msg.ExtraContent})
 		}
 		return contents
 	}
 
-	for _, part := range msg.ParseContent() {
+	for _, part := range responseGoogleTextParts(msg) {
 		switch part.Type {
 		case relaymodel.ContentTypeText:
-			if part.Text != nil && *part.Text != "" {
-				contents = append(contents, openai.OutputContent{Type: "output_text", Text: *part.Text})
+			if part.Text != nil && (*part.Text != "" || part.ExtraContent != nil) {
+				contents = append(contents, openai.OutputContent{Type: "output_text", Text: *part.Text, ExtraContent: part.ExtraContent})
 			}
 		case relaymodel.ContentTypeImageURL:
 			if part.ImageURL != nil && part.ImageURL.Url != "" {

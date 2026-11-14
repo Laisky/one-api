@@ -1,3 +1,4 @@
+import { MESSAGE_ACTIONS_REVEAL_CLASS } from '@/components/chat/messageActionReveal';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -15,11 +16,17 @@ interface UserMessageActionsProps {
   onDeleteMessage?: () => void;
 }
 
+/**
+ * UserMessageActions renders the options menu for a user message.
+ *
+ * @param props - Copy callback plus optional edit and delete callbacks; omitted callbacks hide their items.
+ * @returns The menu trigger, which stays reachable on touch and keyboard as well as on hover.
+ */
 export function UserMessageActions({ onCopyMessage, onEditMessage, onDeleteMessage }: UserMessageActionsProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+    <div className={MESSAGE_ACTIONS_REVEAL_CLASS}>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button

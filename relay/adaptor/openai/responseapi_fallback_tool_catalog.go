@@ -60,9 +60,10 @@ type responseToolIdentity struct {
 // The mapping is a pure function of the request, so the request converter and
 // the response renderers rebuild identical bindings without shared state.
 type ResponseFallbackToolCatalog struct {
-	byFlat     map[string]ResponseFallbackToolBinding
-	byIdentity map[responseToolIdentity]string
-	tools      []model.Tool
+	preserveJSONSchema bool
+	byFlat             map[string]ResponseFallbackToolBinding
+	byIdentity         map[responseToolIdentity]string
+	tools              []model.Tool
 	// discovery caches the decoded discovery items of the request input the
 	// catalog was built from, so history lowering need not decode them again.
 	discovery         []ResponseToolSearchInputItem
@@ -75,10 +76,14 @@ type ResponseFallbackToolCatalog struct {
 // catalogs and tool_search_output catalogs in input order, so the upstream tool
 // prefix stays byte-stable while discovery appends definitions. It returns an
 // error when a definition cannot be represented faithfully on fallback.
-func BuildResponseFallbackToolCatalog(request *ResponseAPIRequest) (*ResponseFallbackToolCatalog, error) {
+// Optional preserveJSONSchema selects lossless function schemas for a trusted capable provider; omission retains legacy sanitation.
+func BuildResponseFallbackToolCatalog(request *ResponseAPIRequest, preserveJSONSchema ...bool) (*ResponseFallbackToolCatalog, error) {
 	catalog := &ResponseFallbackToolCatalog{
 		byFlat:     make(map[string]ResponseFallbackToolBinding),
 		byIdentity: make(map[responseToolIdentity]string),
+	}
+	if len(preserveJSONSchema) > 0 {
+		catalog.preserveJSONSchema = preserveJSONSchema[0]
 	}
 	if request == nil {
 		return catalog, nil
@@ -192,7 +197,7 @@ func (c *ResponseFallbackToolCatalog) addTools(tools []ResponseAPITool, allowSea
 			if !allowSearch || !strings.EqualFold(strings.TrimSpace(tool.Execution), "client") {
 				return errors.Wrap(ErrResponseFallbackNotRepresentable, "only a root client-executed tool_search can be emulated")
 			}
-			if err := c.register(responseToolIdentity{search: true}, ResponseFallbackToolSearch, responseSearchToolToChat(tool)); err != nil {
+			if err := c.register(responseToolIdentity{search: true}, ResponseFallbackToolSearch, responseSearchToolToChat(tool, c.preserveJSONSchema)); err != nil {
 				return err
 			}
 		default:
@@ -251,7 +256,7 @@ func (c *ResponseFallbackToolCatalog) addCallable(namespace, namespaceDescriptio
 		kind = ResponseFallbackToolCustom
 		chatTool = responseCustomToolToChat(tool)
 	} else {
-		chatTool = responseFunctionToolToChat(tool)
+		chatTool = responseFunctionToolToChat(tool, c.preserveJSONSchema)
 	}
 	if chatTool == nil {
 		return nil

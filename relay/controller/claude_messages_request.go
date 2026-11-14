@@ -11,6 +11,7 @@ import (
 
 	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 // sanitizeClaudeMessagesRequest enforces parameter constraints required by upstream providers.
@@ -212,6 +213,20 @@ func rewriteAndSanitizeClaudeRequestBody(raw []byte, request *ClaudeMessagesRequ
 		}
 	}
 
+	// --- scope phase (gateway provider metadata) ---
+	// Clients replay the extra_content carriers the gateway emits for Gemini turns; every
+	// Anthropic Messages wire (Anthropic, Bedrock, Vertex Claude, compatible hosts) rejects them.
+	if rawMessages, hasMessages := obj["messages"]; hasMessages {
+		scopedMessages, removed, err := relaymodel.StripClaudeMessagesProviderMetadata(rawMessages)
+		if err != nil {
+			return nil, stats, errors.Wrap(err, "strip gateway provider metadata from Claude messages")
+		}
+		if removed > 0 {
+			obj["messages"] = scopedMessages
+			stats.RemovedProviderMetadata = removed
+		}
+	}
+
 	// --- encode final result ---
 	result, err := encodeClaudeRawJSONObject(obj)
 	if err != nil {
@@ -247,6 +262,8 @@ type claudeUnsignedThinkingStats struct {
 	RemovedThinkingBlocks    int
 	RemovedAssistantMessages int
 	Locations                []string
+	// RemovedProviderMetadata counts gateway extra_content carriers removed before an Anthropic wire.
+	RemovedProviderMetadata int
 }
 
 // encodeClaudeRawJSONArray marshals an array of raw JSON values without altering retained elements.

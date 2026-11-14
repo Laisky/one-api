@@ -28,7 +28,7 @@ func prepareResponseFallbackInput(ctx context.Context, c *gin.Context, meta *met
 	// fallback tool catalog, which keeps qualified call identities reversible.
 	// Validate that the catalog is representable before state hydration or
 	// quota reservation so an unrepresentable definition never reserves quota.
-	if _, unsupported := buildResponseFallbackToolCatalog(request); unsupported != nil {
+	if _, unsupported := buildResponseFallbackToolCatalog(request, responseFallbackConversionOptions(meta).PreserveJSONSchema); unsupported != nil {
 		return nil, nil, unsupported
 	}
 	if err := openai.ValidateResponseAPIFallbackInput(request.Input); err != nil {
@@ -52,7 +52,7 @@ func prepareResponseFallbackInput(ctx context.Context, c *gin.Context, meta *met
 	}
 	// Hydration can add discovery history, so the catalog conversion and
 	// rendering use is built once from the hydrated request.
-	catalog, unsupported := buildResponseFallbackToolCatalog(hydrated)
+	catalog, unsupported := buildResponseFallbackToolCatalog(hydrated, responseFallbackConversionOptions(meta).PreserveJSONSchema)
 	if unsupported != nil {
 		return nil, nil, unsupported
 	}

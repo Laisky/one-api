@@ -1,7 +1,15 @@
 import React from 'react';
-import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import katex from 'katex';
+
+const mocks = vi.hoisted(() => ({ copy: vi.fn<(text: string) => Promise<void>>() }));
+
+vi.mock('@/lib/utils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/utils')>();
+  return { ...actual, copyToClipboard: mocks.copy };
+});
+
 import { MarkdownRenderer } from './markdown';
 
 afterEach(cleanup);
@@ -40,5 +48,52 @@ describe('Markdown dependency compatibility and renderer trust', () => {
       if (descriptor) Object.defineProperty(Object.prototype, 'trust', descriptor);
       else Reflect.deleteProperty(Object.prototype, 'trust');
     }
+  });
+});
+
+// Compact chat rendering must add soft line breaks to prose without rewriting code or math.
+describe('Markdown compact line breaks', () => {
+  const content = ['First line', 'second line', '', '```python', 'def greet():', '    return "hi"', '```'].join('\n');
+
+  it('keeps fenced code free of trailing spaces in compact mode', () => {
+    const { container } = render(<MarkdownRenderer content={content} />);
+    const code = container.querySelector('pre code');
+    expect(code).not.toBeNull();
+    expect(code!.textContent).toContain('def greet():\n    return "hi"');
+    expect(code!.textContent).not.toMatch(/ +\n/);
+  });
+
+  it('copies fenced code without trailing spaces', async () => {
+    mocks.copy.mockResolvedValue(undefined);
+    render(<MarkdownRenderer content={content} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy to clipboard' }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(mocks.copy).toHaveBeenCalledOnce();
+    const copied = mocks.copy.mock.calls[0][0];
+    expect(copied).toContain('def greet():\n    return "hi"');
+    expect(copied).not.toMatch(/ +\n/);
+  });
+
+  it('still turns single newlines in compact paragraphs into line breaks', () => {
+    const { container } = render(<MarkdownRenderer content={content} />);
+    const paragraph = container.querySelector('p');
+    expect(paragraph).not.toBeNull();
+    expect(paragraph!.querySelectorAll('br')).toHaveLength(1);
+    expect(paragraph!.textContent).toMatch(/^First line\s*second line$/);
+  });
+
+  it('keeps single newlines soft when compact mode is disabled', () => {
+    const { container } = render(<MarkdownRenderer compact={false} content={'First line\nsecond line'} />);
+    expect(container.querySelector('p br')).toBeNull();
+  });
+
+  it('keeps display math intact in compact mode', () => {
+    const { container } = render(<MarkdownRenderer content={'Before\n\n$$\n\\frac{1}{2}\n$$'} />);
+    expect(container.querySelectorAll('.katex-display')).toHaveLength(1);
+    expect(container.querySelector('.katex-error')).toBeNull();
   });
 });

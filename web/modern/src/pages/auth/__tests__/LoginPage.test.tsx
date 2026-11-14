@@ -78,6 +78,34 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
   });
 
+  it('exposes sign-in autofill hints and required constraints on the credential fields', async () => {
+    renderLoginPage();
+
+    const usernameInput = await screen.findByLabelText(/username/i);
+    expect(usernameInput).toHaveAttribute('autocomplete', 'username');
+    expect(usernameInput).toHaveAttribute('autocapitalize', 'none');
+    expect(usernameInput).toHaveAttribute('autocorrect', 'off');
+    expect(usernameInput).toHaveAttribute('spellcheck', 'false');
+    expect(usernameInput).toBeRequired();
+
+    const passwordInput = screen.getByLabelText(/password/i);
+    expect(passwordInput).toHaveAttribute('type', 'password');
+    expect(passwordInput).toHaveAttribute('autocomplete', 'current-password');
+    expect(passwordInput).toBeRequired();
+  });
+
+  it('shows the localized required messages and focuses the first invalid field on an empty submit', async () => {
+    renderLoginPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: /sign in/i }));
+
+    const usernameInput = screen.getByLabelText(/username/i);
+    await waitFor(() => expect(usernameInput).toHaveAttribute('aria-invalid', 'true'));
+    expect(usernameInput).toHaveFocus();
+    expect(usernameInput).toHaveAccessibleDescription(/username is required/i);
+    expect(vi.mocked(api.post)).not.toHaveBeenCalled();
+  });
+
   // TODO: Fix this test - it has mocking issues with the current setup
   it.skip('handles redirect_to parameter correctly on successful login', async () => {
     // This test is skipped due to mocking issues. If you want to enable it, ensure the mock is set up before importing the component.
@@ -340,7 +368,8 @@ describe('LoginPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'WeChat' }));
     const codeInput = await screen.findByPlaceholderText('Verification code');
     fireEvent.change(codeInput, { target: { value: 'a&b=c' } });
-    fireEvent.keyDown(codeInput, { key: 'Enter' });
+    // The code dialog is a real form now (IME-safe native implicit submission), so submit it directly.
+    fireEvent.submit(screen.getByTestId('wechat-code-form'));
 
     await waitFor(() => {
       expect(screen.getByText('wechat rejected')).toBeInTheDocument();
@@ -349,6 +378,32 @@ describe('LoginPage', () => {
     // WeChat code login is a state-changing POST; the legacy GET now returns 405.
     expect(mockApiPost).toHaveBeenCalledWith('/api/oauth/wechat?code=a%26b%3Dc');
     expect(mockApiGet).not.toHaveBeenCalledWith(expect.stringContaining('/api/oauth/wechat'));
+  });
+
+  it('labels the WeChat code input and ignores an IME-composing Enter keydown', async () => {
+    const mockApiPost = vi.mocked(api.post);
+    mockApiPost.mockReset();
+    mockApiGet.mockReset();
+    mockApiGet.mockResolvedValue({
+      data: {
+        success: true,
+        data: { system_name: 'Test API', turnstile_check: false, wechat_login: true },
+      },
+    } as any);
+    mockLocalStorage.getItem.mockReturnValue(JSON.stringify({ system_name: 'Test API', wechat_login: true }));
+
+    renderLoginPage();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'WeChat' }));
+    const codeInput = await screen.findByLabelText('Verification code');
+    expect(codeInput).toHaveAttribute('spellcheck', 'false');
+    expect(codeInput).toHaveAttribute('autocapitalize', 'none');
+    fireEvent.change(codeInput, { target: { value: '验证' } });
+    // Enter confirms the IME candidate here; it must not submit the half-composed code.
+    fireEvent.keyDown(codeInput, { key: 'Enter', isComposing: true, keyCode: 229 });
+
+    expect(mockApiPost).not.toHaveBeenCalled();
+    expect(screen.getByTestId('wechat-code-form')).toContainElement(screen.getByRole('button', { name: /sign in/i, hidden: false }));
   });
 
   it('prompts for TOTP in the WeChat modal and completes the login without resending the consumed code', async () => {
@@ -387,7 +442,8 @@ describe('LoginPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'WeChat' }));
     const codeInput = await screen.findByPlaceholderText('Verification code');
     fireEvent.change(codeInput, { target: { value: 'wx-code' } });
-    fireEvent.keyDown(codeInput, { key: 'Enter' });
+    // The code dialog is a real form now (IME-safe native implicit submission), so submit it directly.
+    fireEvent.submit(screen.getByTestId('wechat-code-form'));
 
     // The modal swaps the consumed WeChat code input for the TOTP prompt.
     expect(await screen.findByTestId('oauth-totp-prompt')).toBeInTheDocument();
@@ -439,7 +495,8 @@ describe('LoginPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'WeChat' }));
     const codeInput = await screen.findByPlaceholderText('Verification code');
     fireEvent.change(codeInput, { target: { value: 'wx-code' } });
-    fireEvent.keyDown(codeInput, { key: 'Enter' });
+    // The code dialog is a real form now (IME-safe native implicit submission), so submit it directly.
+    fireEvent.submit(screen.getByTestId('wechat-code-form'));
 
     expect(await screen.findByText('dashboard-page')).toBeInTheDocument();
     expect(mockLogin).toHaveBeenCalledWith(user, '');

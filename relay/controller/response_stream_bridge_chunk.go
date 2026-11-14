@@ -1,12 +1,14 @@
 package controller
 
 import (
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/streaming"
-	"github.com/gin-gonic/gin"
-	"net/http"
 )
 
 // HandleChunk converts chat stream content and tool deltas into Responses events.
@@ -42,11 +44,11 @@ func (h *chatToResponseStreamBridge) HandleChunk(c *gin.Context, chunk *openai_c
 			return true, true
 		}
 		if choice.Delta.IsStringContent() {
-			if delta := choice.Delta.StringContent(); delta != "" {
-				h.appendChoiceText(c, state, delta)
+			if delta := choice.Delta.StringContent(); delta != "" || choice.Delta.ExtraContent != nil {
+				h.appendChoiceMetadataText(c, state, delta, choice.Delta.ExtraContent)
 			}
 		} else {
-			for _, part := range choice.Delta.ParseContent() {
+			for _, part := range responseGoogleTextParts(choice.Delta) {
 				var text string
 				image := false
 				switch part.Type {
@@ -68,7 +70,7 @@ func (h *chatToResponseStreamBridge) HandleChunk(c *gin.Context, chunk *openai_c
 						text = part.InputAudio.Data
 					}
 				}
-				if h.appendChoiceText(c, state, text) && image {
+				if h.appendChoiceMetadataText(c, state, text, part.ExtraContent) && image {
 					h.deliveredImages++
 				}
 				if h.writeErr != nil {

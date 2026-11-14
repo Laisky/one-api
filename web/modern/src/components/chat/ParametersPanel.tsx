@@ -331,7 +331,7 @@ export function ParametersPanel({
       lg:translate-x-0 lg:relative fixed inset-y-0 left-0 z-40
       w-80 lg:w-80 xl:w-96 border-r bg-card/95 lg:bg-card/50 backdrop-blur-sm
       p-4 space-y-4 overflow-y-auto h-screen pt-20 lg:pt-4
-      transition-transform duration-300 ease-in-out
+      transition-transform duration-300 ease-in-out motion-reduce:transition-none
       lg:transition-none
     `}
     >

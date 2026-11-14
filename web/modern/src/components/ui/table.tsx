@@ -13,9 +13,17 @@ export function TableBody({ className, ...props }: React.HTMLAttributes<HTMLTabl
 export function TableRow({ className, ...props }: React.HTMLAttributes<HTMLTableRowElement>) {
   return <tr className={cn('border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted', className)} {...props} />;
 }
+/**
+ * TableHead renders a column header cell. It defaults to scope="col" so assistive technology associates
+ * it with its column's cells; callers can pass another scope (for example "row") to override it.
+ *
+ * @param props - Standard th attributes plus optional extra classes.
+ * @returns The th element.
+ */
 export function TableHead({ className, ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) {
   return (
     <th
+      scope="col"
       className={cn(
         // Default keep headers compact on desktop, but allow wrapping on mobile to avoid overflow
         'h-10 px-4 text-left align-middle font-medium text-muted-foreground whitespace-nowrap mobile:whitespace-normal mobile:break-words',

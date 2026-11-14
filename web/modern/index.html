@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
     <meta
       name="description"
       content="Laisky One API is the agent-friendly AI gateway at oneapi.laisky.com for OpenAI Chat Completions, OpenAI Responses, Claude Messages, MCP tools, and multi-provider model routing."
@@ -22,8 +23,57 @@
     <link rel="sitemap" type="application/xml" href="/sitemap.xml" />
     <link rel="api-catalog" type="application/linkset+json" href="/.well-known/api-catalog" />
     <link rel="alternate" type="application/json" href="/.well-known/ai-catalog.json" />
-    <meta name="theme-color" content="hsl(192, 40%, 24%)" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="hsl(186, 38%, 52%)" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="hsl(192, 40%, 24%)" media="(prefers-color-scheme: light)" data-scheme="light" />
+    <meta name="theme-color" content="hsl(186, 38%, 52%)" media="(prefers-color-scheme: dark)" data-scheme="dark" />
+    <script>
+      // Theme boot script: applies the saved theme before the first paint so a manual theme choice
+      // (or the OS scheme) never flashes the wrong colors while the app bundle loads. It must stay
+      // classic, synchronous, ES5-only, and placed after the color-scheme/theme-color metas it
+      // updates. It mirrors src/components/theme-provider.tsx exactly: localStorage key
+      // 'one-api-theme' holds a raw 'light' | 'dark' | 'system' string (anything else means the App's
+      // default, 'system'); the resolved scheme becomes the <html> class and the color-scheme meta
+      // content; theme-color metas keep their media query for 'system' and are forced to 'all' /
+      // 'not all' for a manual choice. ThemeProvider re-applies the same state after it mounts.
+      (function () {
+        try {
+          var preference = null;
+          try {
+            preference = window.localStorage.getItem('one-api-theme');
+          } catch (storageError) {
+            // Storage can be blocked (privacy modes, sandboxed frames); fall back to 'system'.
+            preference = null;
+          }
+          if (preference !== 'light' && preference !== 'dark') {
+            preference = 'system';
+          }
+          var resolved = preference;
+          if (preference === 'system') {
+            resolved = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          }
+          var root = document.documentElement;
+          root.classList.remove('light', 'dark');
+          root.classList.add(resolved);
+          var schemeMeta = document.querySelector('meta[name="color-scheme"]');
+          if (schemeMeta) {
+            schemeMeta.setAttribute('content', resolved);
+          }
+          var themeColors = document.querySelectorAll('meta[name="theme-color"][data-scheme]');
+          for (var i = 0; i < themeColors.length; i++) {
+            var scheme = themeColors[i].getAttribute('data-scheme');
+            if (preference === 'system') {
+              themeColors[i].setAttribute('media', '(prefers-color-scheme: ' + scheme + ')');
+            } else {
+              themeColors[i].setAttribute('media', scheme === resolved ? 'all' : 'not all');
+            }
+          }
+        } catch (error) {
+          // Never block page load; ThemeProvider applies the theme once the app mounts.
+          if (window.console && window.console.warn) {
+            window.console.warn('theme boot script failed: ' + String(error));
+          }
+        }
+      })();
+    </script>
     <link
       rel="icon"
       type="image/svg+xml"
