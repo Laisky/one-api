@@ -322,10 +322,13 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 		request.ServiceTier = stringRef("default")
 	}
 	supportsReasoning := isModelSupportedReasoning(actualModel)
+	preserveGemini4OutputSchema := false
 
 	if channelType == channeltype.GeminiOpenAICompatible && geminiOpenaiCompatible.IsGemini4Model(normalizedModelName(actualModel)) {
-		if err := applyGemini4CompatibleReasoning(actualModel, request); err != nil {
-			return err
+		var err error
+		preserveGemini4OutputSchema, err = applyGemini4CompatibleReasoning(actualModel, request)
+		if err != nil {
+			return errors.Wrap(err, "apply Gemini compatible controls")
 		}
 	} else if supportsReasoning {
 		// Sampling depends on the effective effort, not merely on whether the
@@ -390,7 +393,8 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 		request.ToolChoice = normalized
 	}
 
-	if request.ResponseFormat != nil && request.ResponseFormat.JsonSchema != nil && request.ResponseFormat.JsonSchema.Schema != nil {
+	// Native output_config constraints must not pass through the legacy lossy sanitizer.
+	if !preserveGemini4OutputSchema && request.ResponseFormat != nil && request.ResponseFormat.JsonSchema != nil && request.ResponseFormat.JsonSchema.Schema != nil {
 		if normalized, changed := NormalizeStructuredJSONSchema(request.ResponseFormat.JsonSchema.Schema, channelType); changed {
 			request.ResponseFormat.JsonSchema.Schema = normalized
 		}
