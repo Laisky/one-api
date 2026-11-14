@@ -10,11 +10,15 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import * as z from 'zod';
 
+// RESET_PASSWORD_MIN_LENGTH mirrors the 8-character minimum the account password policy (model.User) enforces.
+const RESET_PASSWORD_MIN_LENGTH = 8;
+
+/** resetConfirmSchema builds the localized new-password validator for the reset confirmation form and returns it. */
 const resetConfirmSchema = (t: (key: string) => string) =>
   z
     .object({
-      password: z.string().min(8, t('auth.reset_confirm.password_min_length')),
-      password2: z.string().min(8, t('auth.reset_confirm.password_confirm_required')),
+      password: z.string().min(RESET_PASSWORD_MIN_LENGTH, t('auth.reset_confirm.password_min_length')),
+      password2: z.string().min(RESET_PASSWORD_MIN_LENGTH, t('auth.reset_confirm.password_confirm_required')),
     })
     .refine((data) => data.password === data.password2, {
       message: t('auth.reset_confirm.passwords_mismatch'),
@@ -23,6 +27,7 @@ const resetConfirmSchema = (t: (key: string) => string) =>
 
 type ResetConfirmForm = z.infer<ReturnType<typeof resetConfirmSchema>>;
 
+/** PasswordResetConfirmPage renders the new-password form for a reset link and returns the page, or null while redirecting. */
 export function PasswordResetConfirmPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [searchParams] = useSearchParams();
@@ -89,7 +94,8 @@ export function PasswordResetConfirmPage() {
         </CardHeader>
         <CardContent>
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {/* noValidate keeps the localized zod messages in charge while minLength/required describe the fields. */}
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
               <FormField
                 control={form.control}
                 name="password"
@@ -97,7 +103,14 @@ export function PasswordResetConfirmPage() {
                   <FormItem>
                     <FormLabel>{t('auth.reset_confirm.new_password')}</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder={t('auth.reset_confirm.enter_password')} {...field} />
+                      <Input
+                        type="password"
+                        autoComplete="new-password"
+                        minLength={RESET_PASSWORD_MIN_LENGTH}
+                        required
+                        placeholder={t('auth.reset_confirm.enter_password')}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -111,14 +124,25 @@ export function PasswordResetConfirmPage() {
                   <FormItem>
                     <FormLabel>{t('auth.reset_confirm.confirm_password')}</FormLabel>
                     <FormControl>
-                      <Input type="password" placeholder={t('auth.reset_confirm.enter_confirm_password')} {...field} />
+                      <Input
+                        type="password"
+                        autoComplete="new-password"
+                        minLength={RESET_PASSWORD_MIN_LENGTH}
+                        required
+                        placeholder={t('auth.reset_confirm.enter_confirm_password')}
+                        {...field}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
 
-              {form.formState.errors.root && <div className="text-sm text-destructive">{form.formState.errors.root.message}</div>}
+              {form.formState.errors.root && (
+                <div role="alert" className="text-sm text-destructive">
+                  {form.formState.errors.root.message}
+                </div>
+              )}
 
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? t('auth.reset_confirm.updating') : t('auth.reset_confirm.update')}

@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { useSystemStatus } from '@/hooks/useSystemStatus';
 import { api, isSafeInternalPath } from '@/lib/api';
@@ -13,11 +14,12 @@ import { isTotpRequiredResponse, type OAuthLoginUser } from '@/lib/oauth-totp';
 import { useAuthStore } from '@/lib/stores/auth';
 import { zodResolver } from '@/lib/zod-resolver';
 import { browserSupportsWebAuthn, startAuthentication } from '@simplewebauthn/browser';
-import { useEffect, useRef, useState } from 'react';
+import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import * as z from 'zod';
+import { isPasskeyCeremonyCancelled } from './passkey-errors';
 
 const loginSchema = (t: (key: string) => string) =>
   z.object({
@@ -64,6 +66,7 @@ export function LoginPage() {
   const [wechatCode, setWechatCode] = useState('');
   const [wechatLoading, setWechatLoading] = useState(false);
   const [wechatError, setWechatError] = useState('');
+  const wechatCodeId = useId();
   // Set when the WeChat code resolved to a two-factor account; the code is consumed, so the modal
   // switches to the TOTP prompt instead of letting the user resend it.
   const [wechatTotpRequired, setWechatTotpRequired] = useState(false);
@@ -110,10 +113,11 @@ export function LoginPage() {
         form.setError('root', { message: message || t('auth.login.passkey_failed') });
       }
     } catch (error: unknown) {
-      const msg = error instanceof Error ? error.message : t('auth.login.passkey_failed');
-      // Don't show error if user cancelled
-      if (!msg.includes('cancelled') && !msg.includes('AbortError')) {
-        form.setError('root', { message: msg });
+      // A dismissed or timed-out prompt (NotAllowedError) or an aborted ceremony (AbortError) is a
+      // cancellation, not a failure. SimpleWebAuthn keeps the DOMException name but passes the
+      // browser's message through, so detect it by name rather than by message text.
+      if (!isPasskeyCeremonyCancelled(error)) {
+        form.setError('root', { message: error instanceof Error && error.message ? error.message : t('auth.login.passkey_failed') });
       }
     } finally {
       setPasskeyLoading(false);
@@ -222,7 +226,12 @@ export function LoginPage() {
     navigate('/dashboard');
   };
 
-  const onWeChatSubmit = async () => {
+  /**
+   * onWeChatSubmit validates and submits the WeChat verification code from the modal form.
+   * It takes the optional submit event, prevents the native navigation, and returns once the login attempt settles.
+   */
+  const onWeChatSubmit = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
     const code = wechatCode.trim();
     if (!code) {
       setWechatError(t('auth.login.wechat_code_required'));
@@ -394,7 +403,10 @@ export function LoginPage() {
             </div>
           )}
           <Form {...form}>
-            <form data-testid="login-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            {/* noValidate: the native required constraints describe the fields to browsers, password managers and
+                assistive technology, while the localized zod messages (with focus on the first invalid field)
+                own the validation UX instead of untranslated browser bubbles. */}
+            <form data-testid="login-form" onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" noValidate>
               <FormField
                 control={form.control}
                 name="username"
@@ -402,7 +414,16 @@ export function LoginPage() {
                   <FormItem>
                     <FormLabel htmlFor="login-username">{t('common.username')}</FormLabel>
                     <FormControl>
-                      <Input id="login-username" {...field} disabled={totpRequired} />
+                      <Input
+                        id="login-username"
+                        autoComplete="username"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        spellCheck={false}
+                        required
+                        {...field}
+                        disabled={totpRequired}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -415,7 +436,14 @@ export function LoginPage() {
                   <FormItem>
                     <FormLabel htmlFor="login-password">{t('common.password')}</FormLabel>
                     <FormControl>
-                      <Input id="login-password" type="password" {...field} disabled={totpRequired} />
+                      <Input
+                        id="login-password"
+                        type="password"
+                        autoComplete="current-password"
+                        required
+                        {...field}
+                        disabled={totpRequired}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -427,9 +455,12 @@ export function LoginPage() {
                   name="totp_code"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>{t('auth.login.totp_label')}</FormLabel>
+                      <FormLabel htmlFor="login-totp">{t('auth.login.totp_label')}</FormLabel>
                       <FormControl>
                         <Input
+                          id="login-totp"
+                          autoComplete="one-time-code"
+                          enterKeyHint="done"
                           maxLength={6}
                           placeholder={t('auth.login.totp_placeholder')}
                           {...field}
@@ -453,7 +484,7 @@ export function LoginPage() {
                 </div>
               )}
               {form.formState.errors.root && (
-                <div className="text-sm text-destructive">
+                <div role="alert" className="text-sm text-destructive">
                   {totpRequired ? t('auth.login.totp_required') : form.formState.errors.root.message}
                 </div>
               )}
@@ -615,36 +646,48 @@ export function LoginPage() {
           {wechatTotpRequired ? (
             <OAuthTotpPrompt onSuccess={completeWeChatLogin} onBackToLogin={closeWeChat} />
           ) : (
-            <>
+            // A real form: Enter submits through native implicit submission, which browsers suppress while an
+            // IME composition is confirming text, so no custom keydown handler is needed.
+            <form data-testid="wechat-code-form" className="space-y-4" onSubmit={(event) => void onWeChatSubmit(event)} noValidate>
               <div className="flex flex-col items-center gap-3">
                 {systemStatus.wechat_qrcode && (
                   <img src={systemStatus.wechat_qrcode} alt={t('auth.login.wechat_qr_alt')} className="max-h-64 w-auto rounded-md border" />
                 )}
+                <Label htmlFor={wechatCodeId} className="sr-only">
+                  {t('auth.login.wechat_code_placeholder')}
+                </Label>
                 <Input
+                  id={wechatCodeId}
+                  name="wechat_code"
                   type="text"
                   autoFocus
+                  autoComplete="one-time-code"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  enterKeyHint="done"
                   value={wechatCode}
                   placeholder={t('auth.login.wechat_code_placeholder')}
                   disabled={wechatLoading}
+                  aria-invalid={wechatError ? true : undefined}
+                  aria-describedby={wechatError ? `${wechatCodeId}-error` : undefined}
                   onChange={(e) => {
                     setWechatCode(e.target.value);
                     if (wechatError) setWechatError('');
                   }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      void onWeChatSubmit();
-                    }
-                  }}
                 />
-                {wechatError && <p className="text-sm text-destructive w-full">{wechatError}</p>}
+                {wechatError && (
+                  <p id={`${wechatCodeId}-error`} role="alert" className="text-sm text-destructive w-full">
+                    {wechatError}
+                  </p>
+                )}
               </div>
               <DialogFooter>
-                <Button type="button" onClick={() => void onWeChatSubmit()} disabled={wechatLoading}>
+                <Button type="submit" disabled={wechatLoading}>
                   {wechatLoading ? t('auth.login.signing_in') : t('auth.login.title')}
                 </Button>
               </DialogFooter>
-            </>
+            </form>
           )}
         </DialogContent>
       </Dialog>

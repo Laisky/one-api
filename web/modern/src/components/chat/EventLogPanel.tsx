@@ -18,12 +18,23 @@ interface EventLogPanelProps {
   className?: string;
 }
 
+/**
+ * EventLogPanel lists realtime/SSE protocol events with expandable payloads.
+ * New events keep the panel's own scroll viewport at its end without scrolling the page.
+ *
+ * @param props - Events, the expanded event ids, expand and clear callbacks, the mobile flag, and an optional class.
+ * @returns The event log card.
+ */
 export function EventLogPanel({ events, expandedEvents, onToggleExpand, onClear, isMobile = false, className }: EventLogPanelProps) {
   const { t } = useTranslation();
-  const eventsEndRef = useRef<HTMLDivElement | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
+  // Scroll only the panel's viewport; scrollIntoView could also scroll the page around it.
   useEffect(() => {
-    eventsEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    const viewport = scrollAreaRef.current?.querySelector<HTMLElement>('[data-radix-scroll-area-viewport]');
+    if (viewport) {
+      viewport.scrollTop = viewport.scrollHeight;
+    }
   }, [events.length]);
 
   return (
@@ -43,7 +54,7 @@ export function EventLogPanel({ events, expandedEvents, onToggleExpand, onClear,
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        <ScrollArea style={{ height: isMobile ? '250px' : '300px' }}>
+        <ScrollArea ref={scrollAreaRef} className={isMobile ? 'h-[250px]' : 'h-[300px]'}>
           {events.length === 0 ? (
             <div className="flex items-center justify-center py-12">
               <p className="text-sm text-muted-foreground">{t('playground.realtime.events')}</p>
@@ -93,7 +104,6 @@ export function EventLogPanel({ events, expandedEvents, onToggleExpand, onClear,
                   </div>
                 );
               })}
-              <div ref={eventsEndRef} />
             </div>
           )}
         </ScrollArea>

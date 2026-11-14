@@ -5,7 +5,7 @@ import type { ImageAttachment as ImageAttachmentType } from '@/components/chat/I
 import { useNotifications } from '@/components/ui/notifications';
 import { usePlaygroundChat } from '@/hooks/usePlaygroundChat';
 import { useAuthStore } from '@/lib/stores/auth';
-import type { Message } from '@/lib/utils';
+import { copyToClipboard, type Message } from '@/lib/utils';
 
 import { useConversationPersistence } from './useConversationPersistence';
 import { type UseModelAndTokenBrowserResult, useModelAndTokenBrowser } from './useModelAndTokenBrowser';
@@ -122,10 +122,11 @@ export const usePlaygroundViewModel = (): UsePlaygroundViewModelResult => {
     [sendMessage]
   );
 
+  /** handleCopyMessage copies one message through the shared clipboard helper and toasts the real outcome. */
   const handleCopyMessage = useCallback(
     async (_index: number, content: string) => {
       try {
-        await navigator.clipboard.writeText(content);
+        await copyToClipboard(content);
         notify({
           title: t('playground.notifications.copied_title'),
           message: t('playground.notifications.copied_message'),

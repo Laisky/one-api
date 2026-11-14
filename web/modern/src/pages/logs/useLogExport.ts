@@ -1,7 +1,8 @@
 import { useNotifications } from '@/components/ui/notifications';
 import { api } from '@/lib/api';
-import { buildCsv, mapWithConcurrency } from '@/lib/export';
+import { buildCsvChunked, mapWithConcurrency } from '@/lib/export';
 import { formatTimestamp, renderQuota } from '@/lib/utils';
+import { mapInChunks } from '@/lib/yield';
 import { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -20,7 +21,8 @@ export interface UseLogExportResult {
 }
 
 /**
- * useLogExport builds and downloads a CSV of the selected log snapshot.
+ * useLogExport builds and downloads a CSV of the selected log snapshot. Row formatting and CSV
+ * serialization run in time-boxed slices that yield to the main thread, so large exports stay responsive.
  *
  * @param options - the filtered set to export.
  * @returns the export state and its trigger.
@@ -93,7 +95,9 @@ export function useLogExport(options: UseLogExportOptions): UseLogExportResult {
         t('logs.details.metadata'),
         t('logs.details.tracing'),
       ];
-      const csvData = exportData.map((log) => {
+      // Up to 10,000 rows are formatted and serialized here; both passes yield to the main thread on a
+      // 50ms budget so the page stays responsive while the CSV is assembled.
+      const csvData = await mapInChunks(exportData, (log) => {
         const { fiveMinute, oneHour } = getCacheWriteSummaries(log.metadata);
         const totalTokens = (log.prompt_tokens ?? 0) + (log.completion_tokens ?? 0);
         const tracePayload = tracesByLogId.get(logRef(log)) ?? null;
@@ -125,7 +129,7 @@ export function useLogExport(options: UseLogExportOptions): UseLogExportResult {
         ];
       });
 
-      const csv = buildCsv([csvHeaders, ...csvData]);
+      const csv = await buildCsvChunked([csvHeaders, ...csvData]);
       const blob = new Blob([csv], { type: 'text/csv' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

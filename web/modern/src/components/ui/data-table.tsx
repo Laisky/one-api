@@ -26,6 +26,8 @@ export interface DataTableProps<TData extends RowData, TValue = unknown>
   sortOrder?: 'asc' | 'desc';
   onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void;
   loading?: boolean;
+  /** ariaLabel names the keyboard-scrollable table region; it defaults to a generic "Data table" label. */
+  ariaLabel?: string;
 }
 
 /** DataTable renders the same cell definitions as a desktop table or a progressively disclosed mobile list. */
@@ -55,6 +57,7 @@ export function DataTable<TData extends RowData, TValue = unknown>({
   batchActions,
   batchActionsDisabled,
   batchActionsBusy,
+  ariaLabel,
 }: DataTableProps<TData, TValue>) {
   const { t } = useTranslation();
   const selectable = useSelectableTable({
@@ -171,7 +174,14 @@ export function DataTable<TData extends RowData, TValue = unknown>({
             })}
           />
         ) : (
-          <div className="rounded-md border overflow-x-auto" inert={loading}>
+          // A focusable, named region lets keyboard users scroll wide tables; .table-scroll adds scroll shadows.
+          <div
+            className="table-scroll rounded-md border"
+            inert={loading}
+            tabIndex={0}
+            role="region"
+            aria-label={ariaLabel ?? t('common.data_table')}
+          >
             <Table className={loading ? 'pointer-events-none opacity-60' : ''}>
               <TableHeader>
                 {table.getHeaderGroups().map((headerGroup) => (

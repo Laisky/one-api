@@ -70,6 +70,7 @@
       "input": {
         "hint_no_model": "Please select a model from the sidebar to begin",
         "hint_no_token": "Please select an API token from the sidebar to begin",
+        "label": "Message",
         "placeholder_default": "Type your message... (Shift+Enter for new line)",
         "placeholder_generating": "Generating response...",
         "placeholder_no_model": "Select a model to start chatting...",
@@ -80,7 +81,8 @@
       "model_label": "Model:",
       "preview": "Preview",
       "preview_desc": "This is how your message will be rendered",
-      "processing": "is processing..."
+      "processing": "is processing...",
+      "response_complete": "Response complete"
     },
     "delete": {
       "cancel": "Cancel",

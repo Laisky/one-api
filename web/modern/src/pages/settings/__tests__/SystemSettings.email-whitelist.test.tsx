@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -9,6 +9,36 @@ import { SystemSettings } from '../SystemSettings';
 describe('SystemSettings: EmailDomainWhitelist multi-tag', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('adds a domain on Enter but ignores the Enter that confirms an IME composition', async () => {
+    vi.spyOn(api, 'get').mockResolvedValue({
+      data: {
+        success: true,
+        data: [
+          { key: 'EmailDomainRestrictionEnabled', value: 'true' },
+          { key: 'EmailDomainWhitelist', value: 'gmail.com' },
+        ],
+      },
+    });
+
+    render(
+      <NotificationsProvider>
+        <SystemSettings />
+      </NotificationsProvider>
+    );
+
+    const input = (await screen.findByLabelText('New email domain')) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'example.org' } });
+
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true });
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 229 });
+    expect(screen.queryByText('example.org')).not.toBeInTheDocument();
+    expect(input.value).toBe('example.org');
+
+    fireEvent.keyDown(input, { key: 'Enter', keyCode: 13 });
+    expect(await screen.findByText('example.org')).toBeInTheDocument();
+    expect(input.value).toBe('');
   });
 
   it('renders existing domains as removable badges and saves comma-joined string', async () => {

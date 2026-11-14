@@ -1,3 +1,5 @@
+import { mapInChunks, type ChunkedWorkOptions } from './yield';
+
 /**
  * PaginatedListResponse describes the backend pagination envelope for list endpoints.
  * It returns the success flag, optional message, page data, and total matching records.
@@ -130,9 +132,29 @@ const stringifyCsvValue = (value: unknown): string => {
 };
 
 /**
+ * serializeCsvRow renders one row as a CSV line, quoting every field and doubling embedded quotes.
+ * It returns the line without a trailing newline.
+ */
+const serializeCsvRow = (row: unknown[]): string => row.map((value) => `"${stringifyCsvValue(value).replace(/"/g, '""')}"`).join(',');
+
+/**
  * buildCsv serializes a row matrix into CSV text with proper escaping.
  * It quotes all fields so JSON payloads, commas, quotes, and newlines remain spreadsheet-safe.
  */
 export function buildCsv(rows: unknown[][]): string {
-  return rows.map((row) => row.map((value) => `"${stringifyCsvValue(value).replace(/"/g, '""')}"`).join(',')).join('\n');
+  return rows.map((row) => serializeCsvRow(row)).join('\n');
+}
+
+/**
+ * buildCsvChunked produces exactly the same text as buildCsv, but serializes the rows in time-boxed slices
+ * and yields to the main thread between them, so exporting thousands of rows (each possibly carrying large
+ * JSON metadata and trace payloads) does not block input handling.
+ *
+ * @param rows - the row matrix, header row first.
+ * @param options - the optional time budget and yield implementation forwarded to mapInChunks.
+ * @returns a promise resolving to the CSV text.
+ */
+export async function buildCsvChunked(rows: unknown[][], options?: ChunkedWorkOptions): Promise<string> {
+  const lines = await mapInChunks(rows, (row) => serializeCsvRow(row), options);
+  return lines.join('\n');
 }

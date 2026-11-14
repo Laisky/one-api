@@ -1,6 +1,6 @@
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -220,4 +220,83 @@ describe('EditUserPage group catalog', () => {
     expect(payload).toEqual(expect.objectContaining({ display_name: 'Alice B' }));
     expect(payload).not.toHaveProperty('group');
   });
+});
+
+describe('EditUserPage password policy', () => {
+  beforeEach(() => {
+    notify.mockReset();
+    (api.post as any).mockReset();
+    (api.put as any).mockReset();
+    localStorage.clear();
+  });
+
+  it('describes the new-password field for autofill and links the label', async () => {
+    setAdmin();
+    seedTargetUser();
+    renderEditPage('2');
+
+    await screen.findByDisplayValue('alice');
+    const password = screen.getByLabelText('New Password (leave empty to keep current)');
+    expect(password).toHaveAttribute('autocomplete', 'new-password');
+    expect(password).toHaveAttribute('minlength', '8');
+    const username = screen.getByLabelText('Username *');
+    expect(username).toHaveAttribute('autocomplete', 'off');
+    expect(username).toHaveAttribute('spellcheck', 'false');
+    expect(username).toHaveAttribute('maxlength', '30');
+  });
+
+  it('rejects edit passwords outside the 8-20 characters accepted by the admin update endpoint', async () => {
+    setAdmin();
+    seedTargetUser();
+    renderEditPage('2');
+    const user = userEvent.setup();
+
+    await screen.findByDisplayValue('alice');
+    const password = screen.getByLabelText('New Password (leave empty to keep current)');
+
+    await user.type(password, 'abc1234');
+    await user.click(screen.getByRole('button', { name: 'Update User' }));
+    expect(await screen.findByText('Password must be at least 8 characters')).toBeInTheDocument();
+
+    await user.clear(password);
+    await user.type(password, 'a1'.repeat(11));
+    await user.click(screen.getByRole('button', { name: 'Update User' }));
+    expect(await screen.findByText('Password must be at most 20 characters')).toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+  it.each(['😀'.repeat(4), ' abc123 ', ' '.repeat(8), '\u0085abc123\u0085'])('rejects nonempty edit input rejected after backend trimming: %j', async (password) => {
+    setAdmin();
+    seedTargetUser();
+    renderEditPage('2');
+    await screen.findByDisplayValue('alice');
+    fireEvent.change(screen.getByLabelText('New Password (leave empty to keep current)'), { target: { value: password } });
+    fireEvent.click(screen.getByRole('button', { name: 'Update User' }));
+    expect(await screen.findByText('Password must be at least 8 characters')).toBeInTheDocument();
+    expect(api.put).not.toHaveBeenCalled();
+  });
+
+  it.each(['😀'.repeat(11), '  ' + 'a'.repeat(20) + '  ', '\ufeffabc123\ufeff'])('submits a backend-valid edit password unchanged: %j', async (password) => {
+    setAdmin();
+    seedTargetUser();
+    (api.put as any).mockResolvedValue({ data: { success: true } });
+    renderEditPage('2');
+    await screen.findByDisplayValue('alice');
+    fireEvent.change(screen.getByLabelText('New Password (leave empty to keep current)'), { target: { value: password } });
+    fireEvent.click(screen.getByRole('button', { name: 'Update User' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect((api.put as any).mock.calls[0][1].password).toBe(password);
+  });
+
+  it('omits truly empty edit input so updating another field keeps the password', async () => {
+    setAdmin();
+    seedTargetUser();
+    (api.put as any).mockResolvedValue({ data: { success: true } });
+    renderEditPage('2');
+    const displayName = await screen.findByDisplayValue('Alice');
+    fireEvent.change(displayName, { target: { value: 'Alice B' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Update User' }));
+    await waitFor(() => expect(api.put).toHaveBeenCalledTimes(1));
+    expect((api.put as any).mock.calls[0][1]).not.toHaveProperty('password');
+  });
+
 });

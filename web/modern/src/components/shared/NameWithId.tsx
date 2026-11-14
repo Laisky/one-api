@@ -1,4 +1,4 @@
-import { Check, Copy } from 'lucide-react';
+import { Check, Copy, X } from 'lucide-react';
 import { useEffect, useRef, useState, type MouseEvent, type ReactNode, type TouchEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -28,36 +28,73 @@ export function NameWithId({ name, refId, idLabel = 'ID', className }: NameWithI
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [touchIdVisible, setTouchIdVisible] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [copyAnnouncement, setCopyAnnouncement] = useState('');
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const lastTouchAtRef = useRef(0);
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const copyCountRef = useRef(0);
+  const mountedRef = useRef(false);
   const id = refId == null ? '' : String(refId);
+  const copyLabel = t('common.copy_id', 'Copy ID');
+  const copyStatusText =
+    copyStatus === 'copied' ? t('common.copied', 'Copied!') : copyStatus === 'failed' ? t('common.copy_failed', 'Copy failed') : copyLabel;
 
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       if (copyResetRef.current) clearTimeout(copyResetRef.current);
     };
   }, []);
 
+  /**
+   * handleCopy copies the reference id and reports the real outcome through the
+   * icon, the title and the polite status region, restarting one reset timer.
+   *
+   * @param event - The click event from the copy button.
+   */
   const handleCopy = async (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault();
     event.stopPropagation();
-    await copyToClipboard(id);
-    setCopied(true);
+    let outcome: 'copied' | 'failed' = 'copied';
+    try {
+      await copyToClipboard(id);
+    } catch {
+      console.error('Failed to copy reference id');
+      outcome = 'failed';
+    }
+    if (!mountedRef.current) return;
+
+    // Alternate a no-break space so VoiceOver repeats an identical message.
+    copyCountRef.current += 1;
+    const message = outcome === 'copied' ? t('common.copied', 'Copied!') : t('common.copy_failed', 'Copy failed');
+    setCopyStatus(outcome);
+    setCopyAnnouncement(copyCountRef.current % 2 === 0 ? `${message}\u00A0` : message);
     if (copyResetRef.current) clearTimeout(copyResetRef.current);
-    copyResetRef.current = setTimeout(() => setCopied(false), 1500);
+    copyResetRef.current = setTimeout(() => {
+      setCopyStatus('idle');
+      setCopyAnnouncement('');
+    }, 1500);
   };
 
   const copyButton = (
     <button
       type="button"
       onClick={handleCopy}
-      aria-label={copied ? t('common.copied', 'Copied') : t('common.copy_id', 'Copy ID')}
-      title={copied ? t('common.copied', 'Copied') : t('common.copy_id', 'Copy ID')}
-      className="inline-flex shrink-0 items-center border-0 bg-transparent p-0 text-current opacity-70 hover:opacity-100"
+      aria-label={copyLabel}
+      title={copyStatusText}
+      data-copied={copyStatus === 'copied' ? '' : undefined}
+      data-failed={copyStatus === 'failed' ? '' : undefined}
+      className="inline-flex shrink-0 items-center border-0 bg-transparent p-0 text-current opacity-70 hover:opacity-100 data-[failed]:text-destructive"
     >
-      {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+      {copyStatus === 'copied' ? (
+        <Check className="h-3 w-3" aria-hidden="true" />
+      ) : copyStatus === 'failed' ? (
+        <X className="h-3 w-3" aria-hidden="true" />
+      ) : (
+        <Copy className="h-3 w-3" aria-hidden="true" />
+      )}
     </button>
   );
 
@@ -135,6 +172,10 @@ export function NameWithId({ name, refId, idLabel = 'ID', className }: NameWithI
           {copyButton}
         </span>
       )}
+      {/* Always-mounted polite live region outside the button, so copy outcomes are announced. */}
+      <span role="status" className="sr-only">
+        {copyAnnouncement}
+      </span>
     </TooltipProvider>
   );
 }

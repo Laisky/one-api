@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { useNotifications } from '@/components/ui/notifications';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { api } from '@/lib/api';
+import { invalidateSystemStatusCache } from '@/lib/utils';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { EmailDomainWhitelistItem, OptionItem, type EnumChoice, type OptionRow } from './SystemSettingsFields';
@@ -394,6 +395,8 @@ export function SystemSettings() {
             ? privateResponseError(response.data.message, 'System settings save failed')
             : new Error(t('system_settings.save_failed'));
         }
+        // /api/status is cached briefly; drop it so the saved option shows up immediately.
+        invalidateSystemStatusCache();
         setOptions((prev) => {
           const index = prev.findIndex((opt) => opt.key === key);
           if (index === -1) {
@@ -439,6 +442,7 @@ export function SystemSettings() {
             ? privateResponseError(response.data.message, 'System settings clear failed')
             : new Error(t('system_settings.save_failed'));
         }
+        invalidateSystemStatusCache();
         setOptions((prev) => {
           const index = prev.findIndex((opt) => opt.key === key);
           if (index === -1) {
@@ -511,6 +515,7 @@ export function SystemSettings() {
             ? privateResponseError(response.data.message, 'OIDC settings save failed')
             : new Error(t('system_settings.oidc_discovery.failed_title'));
         }
+        invalidateSystemStatusCache();
       }
 
       // Update local options state in one pass

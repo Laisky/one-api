@@ -1,9 +1,11 @@
-import { render, screen } from '@testing-library/react';
+import { StrictMode } from 'react';
+import { Input } from './input';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useForm } from 'react-hook-form';
 import { describe, expect, it } from 'vitest';
 
-import { Form, FormField, FormMessage } from './form';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from './form';
 
 type HarnessForm = {
   jsonField: string;
@@ -72,6 +74,188 @@ describe('FormField', () => {
 
     await user.click(screen.getByRole('button', { name: 'Submit' }));
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('A JSON value is required');
+    // FormMessage is intentionally no longer a live region (role="alert"); the error is
+    // announced with the focused field through aria-describedby instead.
+    expect(await screen.findByText('A JSON value is required')).toBeInTheDocument();
+  });
+});
+
+type LabeledForm = {
+  name: string;
+};
+
+/** LabeledHarness renders a labelled FormControl field plus optional wrapper and explicit-id variants. */
+const LabeledHarness = ({ explicitId, describedBy, explicitHtmlFor, forwarded }: {
+  explicitId?: string; describedBy?: string; explicitHtmlFor?: string; forwarded?: boolean;
+}) => {
+  const form = useForm<LabeledForm>({ defaultValues: { name: '' } });
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(() => undefined)}>
+        <FormField
+          name="name"
+          rules={{ required: 'Name is required' }}
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel htmlFor={explicitHtmlFor}>Name</FormLabel>
+              <FormControl>
+                {forwarded
+                  ? <Input id={explicitId} aria-describedby={describedBy} {...field} />
+                  : <input id={explicitId} aria-describedby={describedBy} {...field} />}
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        <button type="submit">Save</button>
+      </form>
+    </Form>
+  );
+};
+
+describe('FormField accessibility wiring', () => {
+  it('associates the label with the control so clicking the label focuses the input', async () => {
+    const user = userEvent.setup();
+    render(<LabeledHarness />);
+
+    const input = screen.getByLabelText('Name');
+    expect(input.tagName).toBe('INPUT');
+    await user.click(screen.getByText('Name'));
+    expect(input).toHaveFocus();
+  });
+
+  it('uses an explicit child id for the default label and its click target', async () => {
+    const user = userEvent.setup();
+    render(<LabeledHarness explicitId="custom-name" />);
+    const input = screen.getByLabelText('Name');
+    expect(input).toHaveAttribute('id', 'custom-name');
+    await user.click(screen.getByText('Name'));
+    expect(input).toHaveFocus();
+  });
+
+  it('preserves existing matching explicit htmlFor callers', async () => {
+    const user = userEvent.setup();
+    render(<LabeledHarness explicitId="custom-name" explicitHtmlFor="custom-name" />);
+    const input = screen.getByLabelText('Name');
+    await user.click(screen.getByText('Name'));
+    expect(input).toHaveAttribute('id', 'custom-name');
+    expect(input).toHaveFocus();
+  });
+
+  it('updates the label when an explicit id changes or is removed without changing error identity', async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(<LabeledHarness explicitId="custom-name" describedBy="name-hint" />);
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    const message = await screen.findByText('Name is required');
+    const messageId = message.id;
+    rerender(<LabeledHarness explicitId="next-name" describedBy="name-hint" />);
+    expect(screen.getByLabelText('Name')).toHaveAttribute('id', 'next-name');
+    expect(screen.getByLabelText('Name')).toHaveAttribute('aria-describedby', `name-hint ${messageId}`);
+    expect(message).toHaveAttribute('id', messageId);
+    rerender(<LabeledHarness describedBy="name-hint" />);
+    const generated = screen.getByLabelText('Name');
+    expect(generated.id).toBeTruthy();
+    expect(generated.id).not.toBe('next-name');
+    expect(generated).toHaveAttribute('aria-describedby', `name-hint ${messageId}`);
+  });
+
+  it('keeps forwarded input refs and explicit ids working in StrictMode', async () => {
+    const user = userEvent.setup();
+    render(<StrictMode><LabeledHarness explicitId="forwarded-name" forwarded /></StrictMode>);
+    const input = screen.getByLabelText('Name');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Name is required')).toBeInTheDocument();
+    expect(input).toHaveFocus();
+    expect(input).toHaveAttribute('id', 'forwarded-name');
+  });
+
+  it('marks the control invalid and links the message only after a failed submit', async () => {
+    const user = userEvent.setup();
+    render(<LabeledHarness />);
+
+    const input = screen.getByLabelText('Name');
+    expect(input).toHaveAttribute('aria-invalid', 'false');
+    expect(input).not.toHaveAttribute('aria-describedby');
+    expect(screen.queryByText('Name is required')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    const message = await screen.findByText('Name is required');
+    expect(message.id).toBeTruthy();
+    expect(message).not.toHaveAttribute('role');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAttribute('aria-describedby', message.id);
+    expect(input).toHaveAccessibleDescription('Name is required');
+    // react-hook-form focuses the first invalid field, so the linked message is read with it.
+    expect(input).toHaveFocus();
+
+    await user.type(input, 'Ada');
+    await waitFor(() => expect(input).toHaveAttribute('aria-invalid', 'false'));
+    expect(input).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('keeps an explicit control id and merges existing descriptions with the error message', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <LabeledHarness explicitId="custom-name" describedBy="name-hint" />
+        <p id="name-hint">Hint text</p>
+      </>
+    );
+
+    const input = screen.getByRole('textbox');
+    expect(input).toHaveAttribute('id', 'custom-name');
+    expect(input).toHaveAttribute('aria-describedby', 'name-hint');
+
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+
+    const message = await screen.findByText('Name is required');
+    expect(input).toHaveAttribute('aria-describedby', `name-hint ${message.id}`);
+  });
+
+  it('leaves layout wrapper children untouched', () => {
+    /** WrapperHarness renders a FormControl whose child is a layout div that wires its own input. */
+    const WrapperHarness = () => {
+      const form = useForm<LabeledForm>({ defaultValues: { name: '' } });
+      return (
+        <Form {...form}>
+          <FormField
+            name="name"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel htmlFor="wrapped-name">Wrapped</FormLabel>
+                <FormControl>
+                  <div data-testid="wrapper">
+                    <input id="wrapped-name" {...field} />
+                  </div>
+                </FormControl>
+              </FormItem>
+            )}
+          />
+        </Form>
+      );
+    };
+    render(<WrapperHarness />);
+
+    const wrapper = screen.getByTestId('wrapper');
+    expect(wrapper).not.toHaveAttribute('id');
+    expect(wrapper).not.toHaveAttribute('aria-invalid');
+    expect(screen.getByLabelText('Wrapped')).toHaveAttribute('id', 'wrapped-name');
+  });
+
+  it('renders standalone labels and controls without generated wiring outside a FormField', () => {
+    render(
+      <>
+        <FormLabel>Standalone</FormLabel>
+        <FormControl>
+          <input data-testid="standalone" />
+        </FormControl>
+      </>
+    );
+
+    expect(screen.getByText('Standalone')).not.toHaveAttribute('for');
+    expect(screen.getByTestId('standalone')).not.toHaveAttribute('id');
+    expect(screen.getByTestId('standalone')).not.toHaveAttribute('aria-invalid');
   });
 });

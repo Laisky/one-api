@@ -59,7 +59,8 @@ beforeEach(() => {
 
 describe('selected log actions', () => {
   it('exports only selected logs and fetches no traces for other records', async () => {
-    const csv = vi.spyOn(exports, 'buildCsv');
+    // useLogExport serializes through the main-thread-yielding builder; it produces the same text as buildCsv.
+    const csv = vi.spyOn(exports, 'buildCsvChunked');
     URL.createObjectURL = vi.fn(() => 'blob:selection');
     URL.revokeObjectURL = vi.fn();
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
@@ -70,6 +71,9 @@ describe('selected log actions', () => {
     expect(csv.mock.calls[0][0]).toHaveLength(2); // Header plus one selected record.
     expect(JSON.stringify(csv.mock.calls[0][0])).toContain('model-1');
     expect(JSON.stringify(csv.mock.calls[0][0])).not.toContain('model-2');
+    const csvText = await csv.mock.results[0].value;
+    expect(csvText).toContain('model-1');
+    expect(csvText).not.toContain('model-2');
     expect(get).toHaveBeenCalledWith(`/api/trace/log/${rows[0].uuid}`);
     expect(get).not.toHaveBeenCalledWith(`/api/trace/log/${rows[1].uuid}`);
     expect(post).toHaveBeenCalledWith('/api/log/selection', expect.objectContaining({ selection: { mode: 'ids', ids: [rows[0].uuid] } }), {

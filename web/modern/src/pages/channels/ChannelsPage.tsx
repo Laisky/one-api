@@ -513,6 +513,7 @@ export function ChannelsPage() {
           {resetModels.report}
           {selectedActions.report}
           <EnhancedDataTable
+            ariaLabel={t('channels.title')}
             selection={selection}
             selectionDisabled={selectionDisabled}
             columns={columns}

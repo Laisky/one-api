@@ -70,6 +70,7 @@
       "input": {
         "hint_no_model": "開始するにはサイドバーからモデルを選択してください",
         "hint_no_token": "開始するにはサイドバーから API トークンを選択してください",
+        "label": "メッセージ",
         "placeholder_default": "メッセージを入力...(Shift+Enter で改行)",
         "placeholder_generating": "応答を生成しています...",
         "placeholder_no_model": "チャットを始めるモデルを選択してください...",
@@ -80,7 +81,8 @@
       "model_label": "モデル:",
       "preview": "プレビュー",
       "preview_desc": "メッセージはこのように表示されます",
-      "processing": "処理中です..."
+      "processing": "処理中です...",
+      "response_complete": "応答が完了しました"
     },
     "delete": {
       "cancel": "キャンセル",

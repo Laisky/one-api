@@ -139,7 +139,12 @@ export function useSafeAreaInsets() {
   return insets;
 }
 
-// Hook for detecting device capabilities
+/**
+ * useDeviceCapabilities reports input and user-preference media features and keeps them current as
+ * the matching media queries change. Contrast uses the standard `prefers-contrast: more` value.
+ * @returns An object with touch/hover/pointer capabilities, prefersReducedMotion, prefersColorScheme
+ * ('light' | 'dark') and prefersContrast ('more' | 'normal').
+ */
 export function useDeviceCapabilities() {
   const [capabilities, setCapabilities] = useState({
     hasTouch: false,
@@ -148,7 +153,7 @@ export function useDeviceCapabilities() {
     hasPointerCoarse: false,
     prefersReducedMotion: false,
     prefersColorScheme: 'light' as 'light' | 'dark',
-    prefersContrast: 'normal' as 'normal' | 'high',
+    prefersContrast: 'normal' as 'normal' | 'more',
   });
 
   useEffect(() => {
@@ -160,7 +165,7 @@ export function useDeviceCapabilities() {
         hasPointerCoarse: window.matchMedia('(pointer: coarse)').matches,
         prefersReducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
         prefersColorScheme: window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
-        prefersContrast: window.matchMedia('(prefers-contrast: high)').matches ? 'high' : 'normal',
+        prefersContrast: window.matchMedia('(prefers-contrast: more)').matches ? 'more' : 'normal',
       });
     };
 
@@ -173,7 +178,7 @@ export function useDeviceCapabilities() {
       '(pointer: coarse)',
       '(prefers-reduced-motion: reduce)',
       '(prefers-color-scheme: dark)',
-      '(prefers-contrast: high)',
+      '(prefers-contrast: more)',
     ];
 
     const listeners = mediaQueries.map((query) => {

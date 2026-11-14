@@ -134,6 +134,7 @@
   },
   "personal_settings": {
     "access_token": {
+      "copy_failed": "No se pudo copiar al portapapeles. Selecciona el valor de abajo y cópialo manualmente.",
       "description": "Genera tokens de acceso y enlaces de invitación.",
       "generate_failed": "No se pudo generar el token de acceso.",
       "generate_token": "Generar token de acceso",
@@ -196,6 +197,7 @@
       "email_help": "Cambiar el correo electrónico requiere verificación. Envía un código a la nueva dirección y confírmalo abajo.",
       "email_placeholder": "Introduce un correo",
       "email_required": "Se requiere un correo electrónico válido",
+      "email_verification_code": "Código de verificación por correo",
       "email_verification_code_placeholder": "Introduce el código de verificación por correo",
       "failed": "La actualización falló",
       "load_failed": "No se pudo cargar la información del perfil",

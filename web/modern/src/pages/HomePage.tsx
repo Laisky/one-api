@@ -1,11 +1,17 @@
 import { Card, CardContent } from '@/components/ui/card';
-import { MarkdownRenderer } from '@/components/ui/markdown';
+import { LazyMarkdownRenderer } from '@/components/ui/lazy-markdown';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+/**
+ * HomePage renders the admin-configured home content: an iframe when it is an https URL, Markdown
+ * (through the lazily loaded renderer) otherwise, or a minimal empty state when nothing is configured.
+ *
+ * @returns the home route content.
+ */
 export function HomePage() {
   const [home, setHome] = useState(''); // URL or raw Markdown
   const [loaded, setLoaded] = useState(false);
@@ -60,7 +66,7 @@ export function HomePage() {
       <ResponsivePageContainer>
         <Card>
           <CardContent className={isMobile ? 'p-4' : 'p-6'}>
-            <MarkdownRenderer content={home} compact={false} className="prose-base lg:prose-lg" />
+            <LazyMarkdownRenderer content={home} compact={false} className="prose-base lg:prose-lg" />
           </CardContent>
         </Card>
       </ResponsivePageContainer>

@@ -4,9 +4,10 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '
 import { Input } from '@/components/ui/input';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { api } from '@/lib/api';
+import { copyToClipboard } from '@/lib/utils';
 import { zodResolver } from '@/lib/zod-resolver';
-import { Check, Copy, Download } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { Check, Copy, Download, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -46,31 +47,6 @@ const triggerTextDownload = (content: string, filename: string): void => {
   URL.revokeObjectURL(url);
 };
 
-// copyTextToClipboard copies a string to the clipboard, falling back to a
-// hidden textarea when the async clipboard API is unavailable.
-const copyTextToClipboard = async (text: string): Promise<boolean> => {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-    const textArea = document.createElement('textarea');
-    textArea.value = text;
-    textArea.style.position = 'fixed';
-    textArea.style.left = '-999999px';
-    textArea.style.top = '-999999px';
-    document.body.appendChild(textArea);
-    textArea.focus();
-    textArea.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(textArea);
-    return ok;
-  } catch (err) {
-    console.error('Failed to copy redemption codes:', err);
-    return false;
-  }
-};
-
 export function EditRedemptionPage() {
   const params = useParams();
   const redemptionId = params.id;
@@ -90,7 +66,15 @@ export function EditRedemptionPage() {
   // generatedName is captured at submit time so the download filename and
   // success message stay consistent even if the operator edits the form later.
   const [generatedName, setGeneratedName] = useState<string>('');
-  const [copied, setCopied] = useState(false);
+  // copyStatus is the visible and announced outcome of the latest "copy codes" attempt.
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyResetRef.current) clearTimeout(copyResetRef.current);
+    };
+  }, []);
 
   const redemptionSchema = z.object({
     name: z.string().min(1, tr('validation.name_required', 'Name is required')).max(20, tr('validation.name_max', 'Max 20 chars')),
@@ -204,15 +188,21 @@ export function EditRedemptionPage() {
     triggerTextDownload(generatedCodes.join('\n'), filename);
   }, [generatedCodes, generatedName, tr]);
 
-  // handleCopyCodes copies all generated codes (newline-separated) to the
-  // clipboard and briefly flips the button label to "Copied".
+  // handleCopyCodes copies all generated codes (newline-separated) through the
+  // shared clipboard helper and briefly shows the real outcome on the button,
+  // restarting a single reset timer on repeated clicks.
   const handleCopyCodes = useCallback(async () => {
     if (!generatedCodes || generatedCodes.length === 0) return;
-    const ok = await copyTextToClipboard(generatedCodes.join('\n'));
-    if (ok) {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+    let status: 'copied' | 'failed' = 'copied';
+    try {
+      await copyToClipboard(generatedCodes.join('\n'));
+    } catch {
+      console.error('Failed to copy redemption codes');
+      status = 'failed';
     }
+    setCopyStatus(status);
+    if (copyResetRef.current) clearTimeout(copyResetRef.current);
+    copyResetRef.current = setTimeout(() => setCopyStatus('idle'), 2000);
   }, [generatedCodes]);
 
   if (loading) {
@@ -268,10 +258,15 @@ export function EditRedemptionPage() {
                 {tr('actions.back_to_list', 'Back to list')}
               </Button>
               <Button type="button" variant="outline" onClick={handleCopyCodes} className="w-full sm:w-auto">
-                {copied ? (
+                {copyStatus === 'copied' ? (
                   <>
                     <Check className="mr-2 h-4 w-4" />
                     {tr('actions.copied', 'Copied')}
+                  </>
+                ) : copyStatus === 'failed' ? (
+                  <>
+                    <X className="mr-2 h-4 w-4" />
+                    {t('common.copy_failed', 'Copy failed')}
                   </>
                 ) : (
                   <>
@@ -286,6 +281,10 @@ export function EditRedemptionPage() {
                   {tr('actions.download_codes', 'Download codes')}
                 </Button>
               )}
+              {/* Polite live region announcing the copy outcome; absolutely positioned, so it does not affect the row layout. */}
+              <span role="status" className="sr-only">
+                {copyStatus === 'copied' ? tr('actions.copied', 'Copied') : copyStatus === 'failed' ? t('common.copy_failed', 'Copy failed') : ''}
+              </span>
             </div>
           </CardContent>
         </Card>

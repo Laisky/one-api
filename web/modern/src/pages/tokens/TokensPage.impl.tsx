@@ -18,7 +18,7 @@ import { useTableSort } from '@/hooks/useTableSort';
 import { useResponsive } from '@/hooks/useResponsive';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/stores/auth';
-import { cn, renderQuota } from '@/lib/utils';
+import { cn, copyToClipboard as writeClipboardText, renderQuota } from '@/lib/utils';
 import type { ModernColumnDef as ColumnDef } from '@/lib/table';
 import { Ban, Check, CheckCircle, Copy, ExternalLink, Eye, EyeOff, Plus, Settings, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -370,20 +370,23 @@ export function TokensPage() {
     }
   };
 
+  /**
+   * copyToClipboard copies a token key through the shared helper, which falls back to
+   * a legacy copy on plain-HTTP deployments, and opens the manual-copy fallback only
+   * when both paths fail.
+   *
+   * @param token - The token whose key is copied.
+   */
   const copyToClipboard = async (token: Token) => {
     const ref = tokenRefText(token);
-    if (!navigator?.clipboard?.writeText) {
+    try {
+      await writeClipboardText(token.key);
+    } catch {
+      console.error('Failed to copy token key to clipboard');
       handleCopyFailure({ ref, key: token.key });
       return;
     }
-
-    try {
-      await navigator.clipboard.writeText(token.key);
-      handleCopySuccess(ref);
-    } catch (error) {
-      console.error('Failed to copy to clipboard:', error);
-      handleCopyFailure({ ref, key: token.key });
-    }
+    handleCopySuccess(ref);
   };
 
   const openInClient = useCallback((token: Token, client: ThirdPartyClient) => {
@@ -661,6 +664,7 @@ export function TokensPage() {
       >
         <ListTableCard>
           <EnhancedDataTable
+            ariaLabel={t('common.tokens')}
             selectionScope={JSON.stringify([searchKeyword.trim(), appliedKeyword])}
             selectionDisabled={searchKeyword.trim() !== appliedKeyword}
             columns={columns}

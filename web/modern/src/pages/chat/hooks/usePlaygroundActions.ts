@@ -1,6 +1,6 @@
 import { ImageAttachment as ImageAttachmentType } from '@/components/chat/ImageAttachment';
 import { useNotifications } from '@/components/ui/notifications';
-import { Message } from '@/lib/utils';
+import { Message, copyToClipboard } from '@/lib/utils';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -59,16 +59,17 @@ export const usePlaygroundActions = ({
     [sendMessage, setCurrentMessage]
   );
 
+  /** handleCopyMessage copies one message through the shared clipboard helper and toasts the real outcome. */
   const handleCopyMessage = useCallback(
-    async (messageIndex: number, content: string) => {
+    async (_messageIndex: number, content: string) => {
       try {
-        await navigator.clipboard.writeText(content);
+        await copyToClipboard(content);
         notify({
           title: t('playground.notifications.copied_title'),
           message: t('playground.notifications.copied_message'),
           type: 'success',
         });
-      } catch (error) {
+      } catch {
         notify({
           title: t('playground.notifications.copy_failed_title'),
           message: t('playground.notifications.copy_failed_message'),

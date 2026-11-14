@@ -1,12 +1,18 @@
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MarkdownRenderer } from '@/components/ui/markdown';
+import { Card, CardContent } from '@/components/ui/card';
+import { LazyMarkdownRenderer } from '@/components/ui/lazy-markdown';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { api } from '@/lib/api';
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 
+/**
+ * AboutPage renders the admin-configured about content (an iframe for https URLs, Markdown through the
+ * lazily loaded renderer otherwise) and falls back to a localized default description.
+ *
+ * @returns the about route content.
+ */
 export function AboutPage() {
   const [about, setAbout] = useState('');
   const [aboutLoaded, setAboutLoaded] = useState(false);
@@ -107,7 +113,7 @@ export function AboutPage() {
     >
       <Card className="border-0 shadow-none md:border md:shadow-sm">
         <CardContent className="p-4 sm:p-6">
-          <MarkdownRenderer content={about} compact={false} className="prose-base max-w-none break-words [&_a]:break-all lg:prose-lg" />
+          <LazyMarkdownRenderer content={about} compact={false} className="prose-base max-w-none break-words [&_a]:break-all lg:prose-lg" />
         </CardContent>
       </Card>
     </ResponsivePageContainer>

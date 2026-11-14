@@ -746,7 +746,7 @@ export function ImageAttachmentComponent({ images, onImagesChange, disabled = fa
                         variant="destructive"
                         size="sm"
                         onClick={() => handleRemoveImage(image.id)}
-                        className="absolute top-1 right-1 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                        className="absolute top-1 right-1 h-6 w-6 p-0 transition-opacity duration-200 no-touch:opacity-0 no-touch:group-hover:opacity-100 no-touch:group-focus-within:opacity-100"
                         title={t('playground.attachments.remove_image')}
                         aria-label={t('playground.attachments.remove_image')}
                       >

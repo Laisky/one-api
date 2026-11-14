@@ -1,6 +1,7 @@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { CopyButton } from '@/components/ui/copy-button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -10,14 +11,13 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useLogTrace, type TraceData, type TraceTimestamps } from '@/hooks/useLogTrace';
 import { getLogTypeLabel } from '@/lib/constants/logs';
 import { useAuthStore } from '@/lib/stores/auth';
-import { cn, renderQuota } from '@/lib/utils';
+import { cn, copyToClipboard, renderQuota } from '@/lib/utils';
 import type { LogEntry, LogMetadata } from '@/types/log';
 import {
   Activity,
   ArrowRight,
   CheckCircle,
   Clock,
-  Copy,
   ExternalLink,
   FileText,
   Flag,
@@ -121,7 +121,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
   );
   const metadataJSON = useMemo(() => (log?.metadata ? JSON.stringify(log.metadata, null, 2) : null), [log]);
   const cacheWriteSummary = useMemo(() => getCacheWriteSummaries(log?.metadata), [log]);
-  const [traceCopied, setTraceCopied] = useState(false);
+  const [traceCopyStatus, setTraceCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
   const logRef = log?.uuid || log?.id || '';
   const hasTrace = Boolean(log?.trace_id?.trim());
   const { traceData, traceLoading, traceError, traceNotRetainedLocally, retry } = useLogTrace(
@@ -178,31 +178,25 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
     [t]
   );
 
-  const handleCopy = async (value?: string) => {
-    if (!value) return;
-    try {
-      await navigator.clipboard.writeText(value);
-    } catch (error) {
-      console.error('Failed to copy value to clipboard:', error);
-    }
-  };
-
+  /** handleTraceCopy copies the trace id and shows the real outcome in the trace tooltip. */
   const handleTraceCopy = async (value?: string) => {
     if (!value) {
       return;
     }
+    let status: 'copied' | 'failed' = 'copied';
     try {
-      await navigator.clipboard.writeText(value);
-      setTraceCopied(true);
-      setTimeout(() => setTraceCopied(false), 2000);
-    } catch (error) {
-      console.error('Failed to copy trace ID:', error);
+      await copyToClipboard(value);
+    } catch {
+      console.error('Failed to copy trace ID');
+      status = 'failed';
     }
+    setTraceCopyStatus(status);
+    setTimeout(() => setTraceCopyStatus('idle'), 2000);
   };
 
   useEffect(() => {
     if (!open) {
-      setTraceCopied(false);
+      setTraceCopyStatus('idle');
     }
   }, [open]);
 
@@ -273,7 +267,13 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                <span>{traceCopied ? t('logs.details.copied', 'Copied!') : t('logs.details.copy_trace', 'Click to copy trace ID')}</span>
+                <span>
+                  {traceCopyStatus === 'copied'
+                    ? t('logs.details.copied', 'Copied!')
+                    : traceCopyStatus === 'failed'
+                      ? t('common.copy_failed', 'Copy failed')
+                      : t('logs.details.copy_trace', 'Click to copy trace ID')}
+                </span>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -403,17 +403,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
   const renderIdentifier = (value?: string) => (
     <div className="flex items-center gap-2">
       <span className="font-mono text-xs bg-muted rounded px-2 py-1 break-all flex-1">{value || '—'}</span>
-      {value && (
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7"
-          onClick={() => handleCopy(value)}
-          aria-label={t('common.copy_to_clipboard', 'Copy to clipboard')}
-        >
-          <Copy className="h-3.5 w-3.5" />
-        </Button>
-      )}
+      {value && <CopyButton text={value} size="icon" className="h-7 w-7" label={t('common.copy_to_clipboard', 'Copy to clipboard')} />}
     </div>
   );
 
@@ -508,15 +498,7 @@ export function LogDetailsModal({ open, onOpenChange, log }: LogDetailsModalProp
                     {channelDisplay}
                     <ExternalLink className="h-3 w-3 flex-shrink-0" />
                   </button>
-                  <Button
-                    size="icon"
-                    variant="ghost"
-                    className="h-6 w-6"
-                    onClick={() => handleCopy(String(channelRef))}
-                    aria-label={t('common.copy_id', 'Copy ID')}
-                  >
-                    <Copy className="h-3 w-3" />
-                  </Button>
+                  <CopyButton text={String(channelRef)} size="icon" className="h-6 w-6" label={t('common.copy_id', 'Copy ID')} />
                 </span>
               ) : (
                 <span className="font-mono text-sm">—</span>
