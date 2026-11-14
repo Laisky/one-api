@@ -12,11 +12,11 @@ import (
 
 // applyGemini4CompatibleReasoning validates the requested effort against the
 // registered upstream model and removes ignored sampling controls in place. It
-// returns whether a lossless output schema was lowered and any validation error.
+// returns a validation error for incompatible controls.
 // System instructions are preserved.
-func applyGemini4CompatibleReasoning(modelName string, request *model.GeneralOpenAIRequest) (bool, error) {
+func applyGemini4CompatibleReasoning(modelName string, request *model.GeneralOpenAIRequest) error {
 	if request.Thinking != nil {
-		return false, errors.Errorf("validation failed: Gemini model %q requires reasoning_effort levels instead of provider-specific thinking controls", modelName)
+		return errors.Errorf("validation failed: Gemini model %q requires reasoning_effort levels instead of provider-specific thinking controls", modelName)
 	}
 	requestedEfforts := []*string{request.ReasoningEffort}
 	if request.Reasoning != nil {
@@ -24,11 +24,11 @@ func applyGemini4CompatibleReasoning(modelName string, request *model.GeneralOpe
 	}
 	configEffort, outputFormat, err := decodeGemini4OutputControls(request.OutputConfig, request.ResponseFormat)
 	if err != nil {
-		return false, errors.Wrap(err, "validate Gemini output controls")
+		return errors.Wrap(err, "validate Gemini output controls")
 	}
 	requestedEfforts = append(requestedEfforts, configEffort)
 	if request.Reasoning != nil && request.Reasoning.Summary != nil && strings.TrimSpace(*request.Reasoning.Summary) != "" {
-		return false, errors.New("validation failed: reasoning.summary is unsupported by the Gemini Chat compatible contract")
+		return errors.New("validation failed: reasoning.summary is unsupported by the Gemini Chat compatible contract")
 	}
 
 	var effort *string
@@ -47,7 +47,7 @@ func applyGemini4CompatibleReasoning(modelName string, request *model.GeneralOpe
 			normalized = ""
 		}
 		if effort != nil && *effort != normalized {
-			return false, errors.Errorf("validation failed: conflicting reasoning_effort controls for Gemini model %q", modelName)
+			return errors.Errorf("validation failed: conflicting reasoning_effort controls for Gemini model %q", modelName)
 		}
 		effort = &normalized
 	}
@@ -59,7 +59,7 @@ func applyGemini4CompatibleReasoning(modelName string, request *model.GeneralOpe
 	if effort != nil {
 		config, ok := geminiOpenaiCompatible.ModelRatios[normalizedModelName(modelName)]
 		if !ok || !slices.Contains(config.SupportedReasoningEfforts, *effort) {
-			return false, errors.Errorf("validation failed: reasoning_effort %q is unsupported by Gemini model %q", *effort, modelName)
+			return errors.Errorf("validation failed: reasoning_effort %q is unsupported by Gemini model %q", *effort, modelName)
 		}
 	}
 
@@ -72,5 +72,5 @@ func applyGemini4CompatibleReasoning(modelName string, request *model.GeneralOpe
 	request.Temperature = nil
 	request.TopP = nil
 	request.TopK = nil
-	return outputFormat != nil, nil
+	return nil
 }

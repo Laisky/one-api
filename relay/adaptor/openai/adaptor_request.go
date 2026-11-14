@@ -322,12 +322,10 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 		request.ServiceTier = stringRef("default")
 	}
 	supportsReasoning := isModelSupportedReasoning(actualModel)
-	preserveGemini4OutputSchema := false
+	isGemini4Compatible := channelType == channeltype.GeminiOpenAICompatible && geminiOpenaiCompatible.IsGemini4Model(normalizedModelName(actualModel))
 
-	if channelType == channeltype.GeminiOpenAICompatible && geminiOpenaiCompatible.IsGemini4Model(normalizedModelName(actualModel)) {
-		var err error
-		preserveGemini4OutputSchema, err = applyGemini4CompatibleReasoning(actualModel, request)
-		if err != nil {
+	if isGemini4Compatible {
+		if err := applyGemini4CompatibleReasoning(actualModel, request); err != nil {
 			return errors.Wrap(err, "apply Gemini compatible controls")
 		}
 	} else if supportsReasoning {
@@ -393,7 +391,10 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 		request.ToolChoice = normalized
 	}
 
-	// Native output_config constraints must not pass through the legacy lossy sanitizer.
+	// Lossless native-schema provenance follows the actual schema through MCP
+	// retries and shallow copies. Ordinary formats retain the legacy policy.
+	preserveGemini4OutputSchema := isGemini4Compatible && request.ResponseFormat != nil &&
+		request.ResponseFormat.JsonSchema.PreservesNativeConstraintsFor(channelType)
 	if !preserveGemini4OutputSchema && request.ResponseFormat != nil && request.ResponseFormat.JsonSchema != nil && request.ResponseFormat.JsonSchema.Schema != nil {
 		if normalized, changed := NormalizeStructuredJSONSchema(request.ResponseFormat.JsonSchema.Schema, channelType); changed {
 			request.ResponseFormat.JsonSchema.Schema = normalized

@@ -32,10 +32,12 @@ type ResponseFormat struct {
 }
 
 type JSONSchema struct {
-	Description string         `json:"description,omitempty"`
-	Name        string         `json:"name"`
-	Schema      map[string]any `json:"schema,omitempty"`
-	Strict      *bool          `json:"strict,omitempty"`
+	// nativeSchemaChannel is trusted in-memory provenance, never caller wire data.
+	nativeSchemaChannel int
+	Description         string         `json:"description,omitempty"`
+	Name                string         `json:"name"`
+	Schema              map[string]any `json:"schema,omitempty"`
+	Strict              *bool          `json:"strict,omitempty"`
 }
 
 type Audio struct {

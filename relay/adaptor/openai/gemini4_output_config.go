@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/Laisky/errors/v2"
+	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -55,6 +56,7 @@ func decodeGemini4OutputControls(raw json.RawMessage, existing *model.ResponseFo
 	converted := &model.ResponseFormat{Type: "json_schema", JsonSchema: &model.JSONSchema{
 		Name: format.Name, Description: format.Description, Schema: format.Schema, Strict: format.Strict,
 	}}
+	converted.JsonSchema.PreserveNativeConstraintsFor(channeltype.GeminiOpenAICompatible)
 	if existing != nil {
 		a, err := json.Marshal(existing)
 		if err != nil {
