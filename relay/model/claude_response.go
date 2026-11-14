@@ -27,19 +27,22 @@ type ClaudeResponse struct {
 // ClaudeContent is one content block of a Messages API response. Its JSON shape
 // depends on Type (see MarshalJSON); decoding accepts every field.
 type ClaudeContent struct {
-	Type      string          `json:"type"`
-	Text      string          `json:"text,omitempty"`
-	ID        string          `json:"id,omitempty"`
-	Name      string          `json:"name,omitempty"`
-	Input     json.RawMessage `json:"input,omitempty"`
-	Thinking  string          `json:"thinking,omitempty"`
-	Signature string          `json:"signature,omitempty"`
+	Type string `json:"type"`
+	// ExtraContent is a gateway provider-state extension for non-Anthropic tool calls.
+	ExtraContent *ToolExtraContent `json:"extra_content,omitempty"`
+	Text         string            `json:"text,omitempty"`
+	ID           string            `json:"id,omitempty"`
+	Name         string            `json:"name,omitempty"`
+	Input        json.RawMessage   `json:"input,omitempty"`
+	Thinking     string            `json:"thinking,omitempty"`
+	Signature    string            `json:"signature,omitempty"`
 }
 
 // claudeTextBlockWire is the text block wire shape; text is always present.
 type claudeTextBlockWire struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type         string            `json:"type"`
+	Text         string            `json:"text"`
+	ExtraContent *ToolExtraContent `json:"extra_content,omitempty"`
 }
 
 // claudeThinkingBlockWire is the thinking block wire shape; both thinking and
@@ -53,10 +56,11 @@ type claudeThinkingBlockWire struct {
 // claudeToolUseBlockWire is the tool_use block wire shape; input is always a
 // JSON value, {} when the tool takes no arguments.
 type claudeToolUseBlockWire struct {
-	Type  string          `json:"type"`
-	ID    string          `json:"id"`
-	Name  string          `json:"name"`
-	Input json.RawMessage `json:"input"`
+	Type         string            `json:"type"`
+	ID           string            `json:"id"`
+	Name         string            `json:"name"`
+	Input        json.RawMessage   `json:"input"`
+	ExtraContent *ToolExtraContent `json:"extra_content,omitempty"`
 }
 
 // claudeEmptyToolInput is the canonical input of an argument-less tool call.
@@ -75,11 +79,11 @@ func (c ClaudeContent) MarshalJSON() ([]byte, error) {
 	)
 	switch c.Type {
 	case "text":
-		out, err = json.Marshal(claudeTextBlockWire{Type: c.Type, Text: c.Text})
+		out, err = json.Marshal(claudeTextBlockWire{Type: c.Type, Text: c.Text, ExtraContent: c.ExtraContent})
 	case "thinking":
 		out, err = json.Marshal(claudeThinkingBlockWire{Type: c.Type, Thinking: c.Thinking, Signature: c.Signature})
 	case "tool_use":
-		out, err = json.Marshal(claudeToolUseBlockWire{Type: c.Type, ID: c.ID, Name: c.Name, Input: ClaudeToolInputOrEmpty(c.Input)})
+		out, err = json.Marshal(claudeToolUseBlockWire{Type: c.Type, ID: c.ID, Name: c.Name, Input: ClaudeToolInputOrEmpty(c.Input), ExtraContent: c.ExtraContent})
 	default:
 		type plainClaudeContent ClaudeContent
 		out, err = json.Marshal(plainClaudeContent(c))

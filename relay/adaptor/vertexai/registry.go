@@ -10,6 +10,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/deepseek"
 	gemini "github.com/Laisky/one-api/relay/adaptor/vertexai/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/imagen"
+	"github.com/Laisky/one-api/relay/adaptor/vertexai/maas"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/openai"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/qwen"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/veo"
@@ -27,6 +28,7 @@ const (
 	VertexAIDeepSeek
 	VertexAIOpenAI
 	VertexAIQwen
+	VertexAIMaaS
 )
 
 var modelMapping = map[string]VertexAIModelType{}
@@ -43,6 +45,17 @@ func init() {
 	modelList = append(modelList, geminiOpenaiCompatible.ModelList...)
 	for _, model := range geminiOpenaiCompatible.ModelList {
 		modelMapping[model] = VertexAIGemini
+	}
+
+	// Retain shared legacy routes and add Vertex-only Google IDs.
+	modelList = append(modelList, vertexGoogleModels...)
+	for _, name := range vertexGoogleModels {
+		modelMapping[name] = VertexAIGemini
+	}
+
+	modelList = append(modelList, maas.ModelList...)
+	for _, name := range maas.ModelList {
+		modelMapping[name] = VertexAIMaaS
 	}
 
 	// register vertex imagen models
@@ -82,6 +95,15 @@ type innerAIAdapter interface {
 	DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode)
 }
 
+// UsesNativeGemini reports whether model dispatches through the native Vertex Gemini
+// GenerateContent sub-adaptor, which consumes gateway provider metadata itself.
+// Parameters: model is the actual upstream model name. Returns false for partner,
+// managed open, media and unknown models.
+func UsesNativeGemini(model string) bool {
+	return modelMapping[model] == VertexAIGemini
+}
+
+// GetAdaptor returns the Vertex sub-adaptor registered for model, or nil when none is registered.
 func GetAdaptor(model string) innerAIAdapter {
 	adaptorType := modelMapping[model]
 	switch adaptorType {
@@ -97,6 +119,8 @@ func GetAdaptor(model string) innerAIAdapter {
 		return &deepseek.Adaptor{}
 	case VertexAIOpenAI:
 		return &openai.Adaptor{}
+	case VertexAIMaaS:
+		return &maas.Adaptor{}
 	case VertexAIQwen:
 		return &qwen.Adaptor{}
 	default:

@@ -34,16 +34,24 @@ func vertexLiveFixtureMeta(name string) *meta.Meta {
 	return m
 }
 
-// TestVertexLivePublishedModelsRemainConfigurable reproduces catalog filtering
-// without credentials or entitlement probes. Parameters: t owns the test. Returns: none.
-func TestVertexLivePublishedModelsRemainConfigurable(t *testing.T) {
+// vertexLegacyLiveModelIDs names existing operator-configurable IDs omitted from qualified suggestions.
+// Parameters: none. Returns: a fresh test fixture slice.
+func vertexLegacyLiveModelIDs() []string {
+	return []string{"gemini-3.8-live-extended-thinking", "gemini-3.1-flash-live-preview",
+		"gemini-3.5-live-translate-preview", "gemini-3.5-transcribe-live"}
+}
+
+// TestVertexLiveQualifiedModelSuggestions distinguishes current suggestions from legacy configurability.
+// Parameters: t owns assertions. Returns: none; no credentials or entitlement probes occur.
+func TestVertexLiveQualifiedModelSuggestions(t *testing.T) {
 	t.Parallel()
 	models := (&vertexai.Adaptor{}).GetModelList()
-	for _, name := range []string{"gemini-3.8-live", "gemini-3.8-live-extended-thinking",
-		"gemini-3.1-flash-live-preview", "gemini-3.5-live-translate-preview", "gemini-3.5-transcribe-live"} {
-		t.Run(name, func(t *testing.T) { require.Contains(t, models, name) })
+	for _, name := range []string{"gemini-3.8-live", "gemini-live-2.5-flash-native-audio", "gemini-3.8-flash"} {
+		require.Contains(t, models, name)
 	}
-	require.Contains(t, models, "gemini-3.8-flash")
+	for _, name := range vertexLegacyLiveModelIDs() {
+		require.NotContains(t, models, name)
+	}
 }
 
 // TestVertexLiveEndpointMetadata advertises the implemented transport through
@@ -70,9 +78,12 @@ func TestVertexLiveEndpointMetadata(t *testing.T) {
 // t owns the test. Returns: none; the upstream remains the authority on access.
 func TestVertexLiveEligibilityDoesNotGuessEntitlements(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"gemini-3.8-live", "gemini-3.8-live-extended-thinking", "operator-configured-live-id"} {
+	for _, name := range append(vertexLegacyLiveModelIDs(), "gemini-3.8-live", "operator-configured-live-id") {
 		t.Run(name, func(t *testing.T) {
 			m := vertexLiveFixtureMeta(name)
+			if name != "operator-configured-live-id" {
+				require.NotNil(t, vertexai.GetAdaptor(name), "legacy dispatch remains registered independently of suggestions")
+			}
 			require.True(t, isGeminiLiveRequest(m))
 			require.NoError(t, validateGeminiRealtimeTransport(m))
 			require.Equal(t, "vertexai", resolveRealtimePricingAdaptor(m).GetChannelName())
@@ -84,8 +95,8 @@ func TestVertexLiveEligibilityDoesNotGuessEntitlements(t *testing.T) {
 // controller dispatch, OAuth isolation, resource binding, and the receipt ledger.
 // Parameters: t owns the fixtures. Returns: none; no paid provider is contacted.
 func TestVertexLiveNativeDispatchAndReceipt(t *testing.T) {
-	for _, name := range []string{"gemini-3.8-live", "gemini-3.8-live-extended-thinking",
-		"gemini-live-2.5-flash-native-audio", "operator-configured-live-id"} {
+	for _, name := range append(vertexLegacyLiveModelIDs(), "gemini-3.8-live",
+		"gemini-live-2.5-flash-native-audio", "operator-configured-live-id") {
 		t.Run(name, func(t *testing.T) { runVertexLiveNativeFixture(t, name) })
 	}
 }

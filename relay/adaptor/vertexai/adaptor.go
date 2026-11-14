@@ -5,7 +5,6 @@ import (
 	"io"
 	"maps"
 	"net/http"
-	"slices"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -20,6 +19,7 @@ import (
 	vertexaiClaude "github.com/Laisky/one-api/relay/adaptor/vertexai/claude"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/deepseek"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/imagen"
+	"github.com/Laisky/one-api/relay/adaptor/vertexai/maas"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/openai"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/qwen"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/veo"
@@ -76,6 +76,9 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 // mapped model (Gemini, Claude, partner models). It returns an error when the
 // model has no sub-adaptor or conversion fails.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
+	if request == nil {
+		return nil, errors.New("request is nil")
+	}
 	meta := meta.GetByContext(c)
 
 	adaptor := GetAdaptor(meta.ActualModelName)
@@ -84,7 +87,13 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 
 	converted, err := adaptor.ConvertRequest(c, relayMode, request)
-	return converted, errors.WithStack(err)
+	if err == nil {
+		err = configureVertexGoogleRequest(meta.ActualModelName, request, converted)
+	}
+	if err != nil {
+		return nil, errors.WithStack(err)
+	}
+	return converted, nil
 }
 
 // ConvertClaudeRequest converts a Claude Messages request through the Vertex
@@ -112,7 +121,14 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 		if err != nil {
 			return nil, err
 		}
-		return adaptor.ConvertRequest(c, relaymode.ChatCompletions, converted)
+		native, err := adaptor.ConvertRequest(c, relaymode.ChatCompletions, converted)
+		if err == nil {
+			err = configureVertexGoogleRequest(meta.ActualModelName, converted, native)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return native, nil
 	}
 
 	// Convert Claude Messages API request to OpenAI format first
@@ -242,22 +258,11 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 	return adaptor.DoResponse(c, resp, meta)
 }
 
-// GetModelList returns configuration suggestions, not an upstream entitlement
-// allowlist. Parameters: none. Returns: published IDs, including Live models;
-// administrators may also configure IDs outside this bundled catalog.
+// GetModelList returns current, protocol-compatible Vertex model suggestions.
+// Parameters: none. Returns: an independent catalog, not an entitlement allowlist;
+// legacy dispatch, existing pricing, and administrator model mappings are retained.
 func (a *Adaptor) GetModelList() []string {
-	var models []string
-	models = append(models, adaptor.GetModelListFromPricing(vertexaiClaude.ModelRatios)...)
-	models = append(models, adaptor.GetModelListFromPricing(imagen.ModelRatios)...)
-	models = append(models, adaptor.GetModelListFromPricing(geminiOpenaiCompatible.ModelRatios)...)
-	models = append(models, adaptor.GetModelListFromPricing(veo.ModelRatios)...)
-	models = append(models, adaptor.GetModelListFromPricing(deepseek.ModelRatios)...)
-	models = append(models, adaptor.GetModelListFromPricing(openai.ModelRatios)...)
-	models = append(models, adaptor.GetModelListFromPricing(qwen.ModelRatios)...)
-	// Vertex's public Live overview also lists these backend-specific IDs.
-	models = append(models, "gemini-live-2.5-flash-native-audio", "gemini-3.5-transcribe-live-preview")
-	slices.Sort(models)
-	return slices.Compact(models)
+	return vertexModelSuggestions()
 }
 
 // GetChannelName returns the channel display name.
@@ -294,6 +299,9 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 			pricing[name] = geminiOpenaiCompatible.NativeGeminiModelConfig(name, cfg)
 		}
 	}
+
+	maps.Copy(pricing, VertexGoogleModelConfigs())
+	maps.Copy(pricing, maas.ModelRatios)
 
 	// Import Veo models from veo subadaptor
 	maps.Copy(pricing, veo.ModelRatios)
@@ -368,11 +376,14 @@ const (
 	EndpointTypeVeo
 	EndpointTypeClaude
 	EndpointTypeGemini
+	EndpointTypeMaaS
 )
 
 // getModelEndpointType determines the endpoint type based on model name
 func getModelEndpointType(modelName string) ModelEndpointType {
 	switch {
+	case isManagedOpenModel(modelName):
+		return EndpointTypeMaaS
 	case isDeepSeekModel(modelName):
 		return EndpointTypeDeepSeek
 	case isOpenAIModel(modelName):
@@ -401,6 +412,8 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 	endpointType := getModelEndpointType(meta.ActualModelName)
 
 	switch endpointType {
+	case EndpointTypeMaaS:
+		return a.buildMaaSURL(meta)
 	case EndpointTypeDeepSeek:
 		return a.buildDeepSeekURL(meta)
 	case EndpointTypeOpenAI:
@@ -581,6 +594,8 @@ func isDeepSeekModel(model string) bool {
 // Different DeepSeek models use different endpoints and regions.
 func getDeepSeekEndpointConfig(model string) (baseHost, defaultRegion string) {
 	switch model {
+	case "deepseek-ai/deepseek-v4.1-flash-maas":
+		return "aiplatform.googleapis.com", "global"
 	case "deepseek-ai/deepseek-r1-0528-maas":
 		// DeepSeek R1 uses us-central1 endpoint
 		return "us-central1-aiplatform.googleapis.com", "us-central1"

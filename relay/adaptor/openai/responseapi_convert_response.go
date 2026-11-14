@@ -89,8 +89,9 @@ func ConvertResponseAPIToChatCompletion(responseAPIResp *ResponseAPIResponse) *T
 			// Handle function call items
 			if outputItem.CallId != "" && outputItem.Name != "" {
 				tool := model.Tool{
-					Id:   outputItem.CallId,
-					Type: "function",
+					ExtraContent: outputItem.ExtraContent,
+					Id:           outputItem.CallId,
+					Type:         "function",
 					Function: &model.Function{
 						Name:      outputItem.Name,
 						Arguments: outputItem.Arguments,
@@ -142,8 +143,9 @@ func ConvertResponseAPIToChatCompletion(responseAPIResp *ResponseAPIResponse) *T
 			}
 
 			tool := model.Tool{
-				Id:   call.Id,
-				Type: strings.ToLower(strings.TrimSpace(call.Type)),
+				ExtraContent: call.ExtraContent,
+				Id:           call.Id,
+				Type:         strings.ToLower(strings.TrimSpace(call.Type)),
 				Function: sanitizeDecodedFunction(&model.Function{
 					Name:      call.Function.Name,
 					Arguments: call.Function.Arguments,

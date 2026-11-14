@@ -14,6 +14,8 @@ type ResponseAPIInputContentNormalizationStats struct {
 	ReasoningSummaryFixed       int
 	DataURLRedacted             int
 	DataURLRedactedBytes        int
+	// ProviderMetadataRemoved counts gateway extra_content carriers removed before a native provider.
+	ProviderMetadataRemoved int
 }
 
 // responseAPIEmbeddedImageDataURLRedactionThreshold defines the minimum base64 payload length

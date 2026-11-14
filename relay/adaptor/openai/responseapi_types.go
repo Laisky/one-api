@@ -1,5 +1,7 @@
 package openai
 
+import "github.com/Laisky/one-api/relay/model"
+
 // ResponseAPIPrompt represents the prompt template configuration for Response API requests
 type ResponseAPIPrompt struct {
 	Id        string         `json:"id"`                  // Required: Unique identifier of the prompt template
@@ -20,9 +22,10 @@ type ResponseAPISubmitToolOutputs struct {
 
 // ResponseAPIToolCall represents a single tool call the model wants to execute
 type ResponseAPIToolCall struct {
-	Id       string                   `json:"id"`
-	Type     string                   `json:"type"`
-	Function *ResponseAPIFunctionCall `json:"function,omitempty"`
+	Id           string                   `json:"id"`
+	Type         string                   `json:"type"`
+	Function     *ResponseAPIFunctionCall `json:"function,omitempty"`
+	ExtraContent *model.ToolExtraContent  `json:"extra_content,omitempty"`
 }
 
 // ResponseAPIFunctionCall captures the function invocation details in a tool call

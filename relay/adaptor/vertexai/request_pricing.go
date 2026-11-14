@@ -22,7 +22,7 @@ func requiresClaude52Pricing(name string) bool {
 	return anthropic.IsClaude52(name)
 }
 
-// ValidateRequestPricing requires complete channel-owned tariffs for Claude 5.2.
+// ValidateRequestPricing requires complete channel-owned tariffs for Claude 5.2 and Argon Cyber.
 // It preserves existing channel data and uses billing's request-start window resolver.
 func (a *Adaptor) ValidateRequestPricing(c *gin.Context, m *meta.Meta) error {
 	if m == nil {
@@ -31,6 +31,25 @@ func (a *Adaptor) ValidateRequestPricing(c *gin.Context, m *meta.Meta) error {
 	name := m.ActualModelName
 	if name == "" {
 		name = m.OriginModelName
+	}
+	if name == "gemini-4-argon-cyber-permissive" {
+		if err := pricing.RequireExplicitTokenPricing(c, m); err != nil {
+			return errors.Wrap(err, "validate Vertex Argon Cyber token pricing")
+		}
+		value, _ := c.Get(ctxkey.ChannelModel)
+		channel := value.(*dbmodel.Channel)
+		configs := channel.GetModelPriceConfigsWithContext(gmw.Ctx(c))
+		cfg, found := pricing.ResolveModelConfigRatioOnly(name, configs, nil, m.StartTime)
+		valid := func(v float64) bool { return v > 0 && !math.IsNaN(v) && !math.IsInf(v, 0) }
+		if !found || !valid(cfg.CachedInputRatio) {
+			return errors.New("Vertex Argon Cyber requires explicit positive cache read pricing in channel model_configs")
+		}
+		for _, tier := range cfg.Tiers {
+			if tier.CachedInputRatio != 0 && !valid(tier.CachedInputRatio) {
+				return errors.New("Vertex Argon Cyber has invalid explicit tier cache pricing")
+			}
+		}
+		return nil
 	}
 	if !requiresClaude52Pricing(name) {
 		return nil

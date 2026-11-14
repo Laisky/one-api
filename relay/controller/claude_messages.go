@@ -366,10 +366,11 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 		// Log signature-bearing thinking blocks count for diagnostics
 		sigCount := countThinkingSignatures(rawBody)
-		if sigCount > 0 || unsignedThinkingStats.RemovedThinkingBlocks > 0 {
+		if sigCount > 0 || unsignedThinkingStats.RemovedThinkingBlocks > 0 || unsignedThinkingStats.RemovedProviderMetadata > 0 {
 			fields := []zap.Field{
 				zap.Int("signature_count", sigCount),
 				zap.Int("removed_unsigned_thinking_blocks", unsignedThinkingStats.RemovedThinkingBlocks),
+				zap.Int("removed_provider_metadata", unsignedThinkingStats.RemovedProviderMetadata),
 				zap.Int("removed_empty_assistant_messages", unsignedThinkingStats.RemovedAssistantMessages),
 				zap.Int("raw_body_len", len(rawBody)),
 				zap.Int("sanitized_body_len", len(sanitizedBody)),

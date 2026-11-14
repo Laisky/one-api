@@ -3,9 +3,10 @@ package controller
 import (
 	"strings"
 
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/common/random"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
-	"github.com/gin-gonic/gin"
 )
 
 // choiceState gives each upstream choice a stable message item and output index.
@@ -79,11 +80,7 @@ func (h *chatToResponseStreamBridge) appendChoiceReasoning(c *gin.Context, choic
 // choiceMessage renders choice's message item with the given status and the
 // text streamed so far.
 func (h *chatToResponseStreamBridge) choiceMessage(choice *responseChoiceState, status string) openai.OutputItem {
-	text := choice.text.String()
-	if choice.index == h.primaryChoiceIndex {
-		text = h.textBuilder.String()
-	}
-	return openai.OutputItem{Id: choice.messageID, Type: "message", Status: status, Role: "assistant", Content: []openai.OutputContent{{Type: "output_text", Text: text}}}
+	return openai.OutputItem{Id: choice.messageID, Type: "message", Status: status, Role: "assistant", Content: h.choiceContents(choice)}
 }
 
 // choiceReasoning renders choice's streamed reasoning as a reasoning item with
@@ -103,9 +100,7 @@ func (h *chatToResponseStreamBridge) choiceReasoning(choice *responseChoiceState
 func (h *chatToResponseStreamBridge) finishChoice(c *gin.Context, choice *responseChoiceState) {
 	if choice.index != h.primaryChoiceIndex {
 		item := h.choiceMessage(choice, "completed")
-		text := item.Content[0].Text
-		h.emitEvent(c, "response.output_text.done", openai.ResponseAPIStreamEvent{ItemId: choice.messageID, OutputIndex: choice.messageIndex, Text: text})
-		h.emitEvent(c, "response.content_part.done", openai.ResponseAPIStreamEvent{ItemId: choice.messageID, OutputIndex: choice.messageIndex, Part: &openai.OutputContent{Type: "output_text", Text: text}})
+		h.emitChoiceContentDone(c, choice)
 		h.emitEvent(c, "response.output_item.done", openai.ResponseAPIStreamEvent{OutputIndex: choice.messageIndex, Item: &item})
 	}
 	if item := h.choiceReasoning(choice, "completed"); item != nil {

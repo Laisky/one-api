@@ -216,7 +216,7 @@ func validatePublicMediaURI(raw string) error {
 	if ip := net.ParseIP(host); ip != nil && (!ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast()) {
 		return errors.WithStack(errMediaReferencePrivate)
 	}
-	if host == "generativelanguage.googleapis.com" || host == "aiplatform.googleapis.com" || strings.HasSuffix(host, "-aiplatform.googleapis.com") {
+	if IsGoogleGenerativeAPIHost(host) {
 		return errors.WithStack(errMediaReferenceProviderFile)
 	}
 	return nil

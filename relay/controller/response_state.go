@@ -115,7 +115,7 @@ func hydrateResponseAPIRequestForFallback(ctx context.Context, meta *metalib.Met
 	var priorItems []any
 	switch {
 	case prevID != "":
-		items, serr := hydratePreviousResponseChain(ctx, store, owner, limits, prevID)
+		items, serr := hydratePreviousResponseChain(ctx, store, owner, limits, prevID, meta)
 		if serr != nil {
 			return nil, serr
 		}
@@ -130,6 +130,9 @@ func hydrateResponseAPIRequestForFallback(ctx context.Context, meta *metalib.Met
 			}
 			metrics.RecordStateEvent(metrics.StateCategoryMiss, metrics.StateOutcomeStoreError)
 			return nil, stateErrorf(codeStateStoreUnavailable, http.StatusServiceUnavailable, "load conversation: %v", err)
+		}
+		if boundaryErr := validateStoredGoogleMetadata(conv.Items, conv.Binding, meta); boundaryErr != nil {
+			return nil, boundaryErr
 		}
 		priorItems = envelopesToItems(conv.Items)
 		metrics.RecordStateEvent(metrics.StateCategoryPath, metrics.StateOutcomeConversation)
@@ -161,7 +164,7 @@ func hydrateResponseAPIRequestForFallback(ctx context.Context, meta *metalib.Met
 			"item count %d exceeds limit %d", len(combined), limits.MaxItemCount)
 	}
 
-	combined, serr := resolveItemReferences(ctx, store, owner, combined)
+	combined, serr := resolveItemReferences(ctx, store, owner, combined, meta)
 	if serr != nil {
 		return nil, serr
 	}
@@ -210,7 +213,7 @@ func hydrateResponseAPIRequestForFallback(ctx context.Context, meta *metalib.Met
 // reconstructed prior transcript items. Each node stores only its incremental
 // input plus its output, so concatenating input+output across the chain rebuilds
 // the full history without duplication (R5).
-func hydratePreviousResponseChain(ctx context.Context, store state.ResponseStateStore, owner state.OwnerScope, limits state.Limits, headID string) ([]any, *relaymodel.ErrorWithStatusCode) {
+func hydratePreviousResponseChain(ctx context.Context, store state.ResponseStateStore, owner state.OwnerScope, limits state.Limits, headID string, targets ...*metalib.Meta) ([]any, *relaymodel.ErrorWithStatusCode) {
 	var chain []*state.ResponseStateRecord
 	seen := map[string]struct{}{}
 	cur := headID
@@ -236,6 +239,14 @@ func hydratePreviousResponseChain(ctx context.Context, store state.ResponseState
 			}
 			return nil, stateErrorf(codeStateStoreUnavailable, http.StatusServiceUnavailable, "load response chain: %v", err)
 		}
+		if len(targets) > 0 {
+			if boundaryErr := validateStoredGoogleMetadata(rec.InputItems, rec.Binding, targets[0]); boundaryErr != nil {
+				return nil, boundaryErr
+			}
+			if boundaryErr := validateStoredGoogleMetadata(rec.OutputItems, rec.Binding, targets[0]); boundaryErr != nil {
+				return nil, boundaryErr
+			}
+		}
 		chain = append(chain, rec)
 		cur = rec.ParentResponseID
 	}
@@ -254,7 +265,7 @@ func hydratePreviousResponseChain(ctx context.Context, store state.ResponseState
 // item's raw payload. A reference that cannot be resolved under owner scope is an
 // invalid_state_selector with an external shape identical for unknown and
 // foreign-owned item IDs (P05).
-func resolveItemReferences(ctx context.Context, store state.ResponseStateStore, owner state.OwnerScope, input []any) ([]any, *relaymodel.ErrorWithStatusCode) {
+func resolveItemReferences(ctx context.Context, store state.ResponseStateStore, owner state.OwnerScope, input []any, targets ...*metalib.Meta) ([]any, *relaymodel.ErrorWithStatusCode) {
 	out := make([]any, 0, len(input))
 	for _, item := range input {
 		m, ok := item.(map[string]any)
@@ -277,6 +288,12 @@ func resolveItemReferences(ctx context.Context, store state.ResponseStateStore, 
 				return nil, stateErrorf(codeInvalidStateSelector, http.StatusBadRequest, "referenced item not found")
 			}
 			return nil, stateErrorf(codeStateStoreUnavailable, http.StatusServiceUnavailable, "resolve item reference: %v", err)
+		}
+		if len(targets) > 0 {
+			// Individual ledger items have no model binding: do not infer one from family provenance.
+			if boundaryErr := validateStoredGoogleMetadata([]state.ItemEnvelope{*env}, nil, targets[0]); boundaryErr != nil {
+				return nil, boundaryErr
+			}
 		}
 		resolved, decodeErr := rawToAny(env.Raw)
 		if decodeErr != nil {

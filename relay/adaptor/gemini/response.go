@@ -71,11 +71,11 @@ func getToolCalls(c *gin.Context, candidate *ChatCandidate) []model.Tool {
 	}
 
 	// Process all parts that contain function calls, not just the first one
-	for _, part := range candidate.Content.Parts {
+	for partIndex, part := range candidate.Content.Parts {
 		if part.FunctionCall == nil {
 			continue
 		}
-		argsBytes, err := json.Marshal(part.FunctionCall.Arguments)
+		argsBytes, err := json.Marshal(geminiCompleteArguments(part.FunctionCall.Arguments))
 		if err != nil {
 			lg.Error("getToolCalls: failed to marshal function call arguments",
 				zap.String("function_name", part.FunctionCall.FunctionName),
@@ -83,8 +83,9 @@ func getToolCalls(c *gin.Context, candidate *ChatCandidate) []model.Tool {
 			continue
 		}
 		toolCall := model.Tool{
-			Id:   fmt.Sprintf("call_%s", random.GetUUID()),
-			Type: "function",
+			ExtraContent: geminiPartExtraContent(part, partIndex, geminiBufferedPartPositions(c, candidate)),
+			Id:           fmt.Sprintf("call_%s", random.GetUUID()),
+			Type:         "function",
 			Function: &model.Function{
 				Arguments: string(argsBytes),
 				Name:      part.FunctionCall.FunctionName,
@@ -107,19 +108,19 @@ func getStreamingToolCalls(c *gin.Context, candidate *ChatCandidate) []model.Too
 		if part.FunctionCall == nil {
 			continue
 		}
-		argsBytes, err := json.Marshal(part.FunctionCall.Arguments)
+		argsBytes, err := json.Marshal(geminiCompleteArguments(part.FunctionCall.Arguments))
 		if err != nil {
 			lg.Error("getStreamingToolCalls: failed to marshal function call arguments",
 				zap.String("function_name", part.FunctionCall.FunctionName),
 				zap.Error(err))
 			continue
 		}
-		// Set index for streaming tool calls - use the part index to ensure proper ordering
-		// This handles the case where Gemini might support multiple parallel tool calls in the future
-		index := partIndex
+		// Each native v1 event carries a complete call, not argument fragments.
+		index := nextGeminiCompleteToolIndex(c, candidate.Index)
 		toolCall := model.Tool{
-			Id:   fmt.Sprintf("call_%s", random.GetUUID()),
-			Type: "function",
+			ExtraContent: geminiPartExtraContent(part, partIndex, false),
+			Id:           fmt.Sprintf("call_%s", random.GetUUID()),
+			Type:         "function",
 			Function: &model.Function{
 				Arguments: string(argsBytes),
 				Name:      part.FunctionCall.FunctionName,
@@ -153,22 +154,27 @@ func responseGeminiChat2OpenAI(c *gin.Context, response *ChatResponse) *openai.T
 		toolCalls := getToolCalls(c, &candidate)
 		if len(toolCalls) > 0 {
 			choice.Message.ToolCalls = toolCalls
+			choice.FinishReason = "tool_calls"
 		}
 
 		if len(candidate.Content.Parts) > 0 {
 			var textParts []string
 			var structured []model.MessageContent
+			hasMetadata := false
 
-			for _, part := range candidate.Content.Parts {
+			for partIndex, part := range candidate.Content.Parts {
 				if part.FunctionCall != nil {
 					continue
 				}
 
-				if part.Text != "" {
+				metadata := geminiPartExtraContent(part, partIndex, geminiBufferedPartPositions(c, &candidate))
+				hasMetadata = hasMetadata || metadata != nil
+				if part.Text != "" || (metadata != nil && part.InlineData == nil && part.FileData == nil) {
 					textParts = append(textParts, part.Text)
 					structured = append(structured, model.MessageContent{
-						Type: model.ContentTypeText,
-						Text: &part.Text,
+						Type:         model.ContentTypeText,
+						Text:         &part.Text,
+						ExtraContent: metadata,
 					})
 				}
 
@@ -178,8 +184,9 @@ func responseGeminiChat2OpenAI(c *gin.Context, response *ChatResponse) *openai.T
 						Url: fmt.Sprintf("data:%s;base64,%s", part.InlineData.MimeType, part.InlineData.Data),
 					}
 					structured = append(structured, model.MessageContent{
-						Type:     model.ContentTypeImageURL,
-						ImageURL: imageURL,
+						Type:         model.ContentTypeImageURL,
+						ImageURL:     imageURL,
+						ExtraContent: metadata,
 					})
 				}
 				if part.FileData != nil && part.FileData.FileURI != "" && isGeminiImageMimeType(part.FileData.MimeType) {
@@ -187,14 +194,15 @@ func responseGeminiChat2OpenAI(c *gin.Context, response *ChatResponse) *openai.T
 						Url: part.FileData.FileURI,
 					}
 					structured = append(structured, model.MessageContent{
-						Type:     model.ContentTypeImageURL,
-						ImageURL: imageURL,
+						Type:         model.ContentTypeImageURL,
+						ImageURL:     imageURL,
+						ExtraContent: metadata,
 					})
 				}
 			}
 
 			joined := strings.Join(textParts, "\n")
-			if len(structured) > 1 || (len(structured) == 1 && structured[0].Type != model.ContentTypeText) {
+			if hasMetadata || len(structured) > 1 || (len(structured) == 1 && structured[0].Type != model.ContentTypeText) {
 				choice.Message.Content = structured
 			} else if joined != "" {
 				choice.Message.Content = joined
@@ -206,6 +214,11 @@ func responseGeminiChat2OpenAI(c *gin.Context, response *ChatResponse) *openai.T
 			choice.FinishReason = candidate.FinishReason
 		}
 
+		reason := candidate.FinishReason
+		if reason == "" {
+			reason = "STOP"
+		}
+		choice.FinishReason = geminiChatFinishReason(reason, len(toolCalls) > 0)
 		fullTextResponse.Choices = append(fullTextResponse.Choices, choice)
 	}
 	return &fullTextResponse
@@ -220,7 +233,7 @@ func streamResponseGeminiChat2OpenAI(c *gin.Context, geminiResponse *ChatRespons
 	}
 	choices := make([]openai.ChatCompletionsStreamResponseChoice, 0, len(geminiResponse.Candidates))
 	for _, candidate := range geminiResponse.Candidates {
-		if len(candidate.Content.Parts) == 0 {
+		if len(candidate.Content.Parts) == 0 && candidate.FinishReason == "" {
 			continue
 		}
 		var choice openai.ChatCompletionsStreamResponseChoice
@@ -228,11 +241,17 @@ func streamResponseGeminiChat2OpenAI(c *gin.Context, geminiResponse *ChatRespons
 		choice.Delta.Role = "assistant"
 		var content []model.MessageContent
 		var textParts []string
-		for _, part := range candidate.Content.Parts {
-			if part.Text != "" {
+		hasMetadata := false
+		for partIndex, part := range candidate.Content.Parts {
+			metadata := geminiPartExtraContent(part, partIndex, false)
+			if part.FunctionCall != nil {
+				continue
+			}
+			hasMetadata = hasMetadata || metadata != nil
+			if part.Text != "" || (metadata != nil && part.InlineData == nil && part.FileData == nil) {
 				text := part.Text
 				textParts = append(textParts, text)
-				content = append(content, model.MessageContent{Type: model.ContentTypeText, Text: &text})
+				content = append(content, model.MessageContent{Type: model.ContentTypeText, Text: &text, ExtraContent: metadata})
 			}
 			imageURL := ""
 			if part.InlineData != nil && part.InlineData.Data != "" && part.InlineData.MimeType != "" && isGeminiImageMimeType(part.InlineData.MimeType) {
@@ -241,15 +260,19 @@ func streamResponseGeminiChat2OpenAI(c *gin.Context, geminiResponse *ChatRespons
 				imageURL = part.FileData.FileURI
 			}
 			if imageURL != "" {
-				content = append(content, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &model.ImageURL{Url: imageURL}})
+				content = append(content, model.MessageContent{Type: model.ContentTypeImageURL, ImageURL: &model.ImageURL{Url: imageURL}, ExtraContent: metadata})
 			}
 		}
-		if len(content) > len(textParts) {
+		if hasMetadata || len(content) > len(textParts) {
 			choice.Delta.Content = content
 		} else if len(textParts) > 0 {
 			choice.Delta.Content = strings.Join(textParts, "")
 		}
 		choice.Delta.ToolCalls = getStreamingToolCalls(c, &candidate)
+		if candidate.FinishReason != "" {
+			reason := geminiChatFinishReason(candidate.FinishReason, geminiCompleteToolCount(c, candidate.Index) > 0)
+			choice.FinishReason = &reason
+		}
 
 		choices = append(choices, choice)
 	}

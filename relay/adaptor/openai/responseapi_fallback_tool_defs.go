@@ -16,12 +16,16 @@ const responseCustomToolInputArgument = "input"
 const responseCustomToolGatewayNote = "This tool takes freeform text. Pass the complete raw text, unchanged and without Markdown fences, as the string argument `input`; the gateway delivers that string to the tool verbatim."
 
 // responseFunctionToolToChat converts a Responses function definition into a
-// Chat function tool with the established fallback parameter sanitation.
-// Parameters: tool is a function definition. Returns nil for an empty definition.
-func responseFunctionToolToChat(tool ResponseAPITool) *model.Tool {
+// Chat function tool, preserving JSON Schema only for an explicitly capable provider.
+// Parameters: tool is a function definition; optional preserveJSONSchema selects provider schema fidelity. Returns nil for an empty definition.
+func responseFunctionToolToChat(tool ResponseAPITool, preserveJSONSchema ...bool) *model.Tool {
 	fn := sanitizeFunctionForRequest(tool)
 	if fn == nil {
 		return nil
+	}
+	if len(preserveJSONSchema) > 0 && preserveJSONSchema[0] {
+		fn.Parameters = cloneResponseAPIJSONValue(fn.Parameters)
+		return &model.Tool{Type: "function", Function: fn}
 	}
 	fn.Strict = nil
 	params := map[string]any{}
@@ -107,10 +111,15 @@ func describeResponseCustomToolFormat(raw json.RawMessage) string {
 // responseSearchToolToChat converts a client-executed tool_search definition
 // into a Chat function tool whose arguments are forwarded to the client as the
 // tool_search_call arguments object.
-func responseSearchToolToChat(tool ResponseAPITool) *model.Tool {
+func responseSearchToolToChat(tool ResponseAPITool, preserveJSONSchema ...bool) *model.Tool {
 	description := tool.Description
 	if strings.TrimSpace(description) == "" {
 		description = "Search the client's deferred tool catalog. Matching tools become callable on the next turn."
+	}
+	if len(preserveJSONSchema) > 0 && preserveJSONSchema[0] && tool.Parameters != nil {
+		return &model.Tool{Type: "function", Function: &model.Function{
+			Name: "tool_search", Description: description, Parameters: cloneResponseAPIJSONValue(tool.Parameters),
+		}}
 	}
 	params := map[string]any{}
 	if tool.Parameters != nil {

@@ -52,6 +52,13 @@ func (m Message) ParseContentChecked() ([]MessageContent, error) {
 				part = parsed[0]
 			}
 			if err == nil {
+				if metadata, exists := object[extraContentKey]; exists {
+					extra, decodeErr := DecodeToolExtraContent(metadata)
+					if decodeErr != nil {
+						return nil, errors.Wrap(decodeErr, "decode content metadata")
+					}
+					part.ExtraContent = extra
+				}
 				err = validateMessagePart(part)
 			}
 			if err != nil {

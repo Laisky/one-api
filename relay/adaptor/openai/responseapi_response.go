@@ -56,6 +56,9 @@ type OutputItem struct {
 	// Reasoning-specific state fields
 	EncryptedContent string `json:"encrypted_content,omitempty"` // Opaque encrypted reasoning state (retained for provider-bound replay; never fabricated)
 
+	// ExtraContent retains provider-bound Google metadata as a gateway Responses extension.
+	ExtraContent *model.ToolExtraContent `json:"extra_content,omitempty"`
+
 	// Function call fields
 	CallId    string `json:"call_id,omitempty"`   // Call ID for function calls
 	Name      string `json:"name,omitempty"`      // Function name for function calls
@@ -126,11 +129,12 @@ func (o OutputItem) MarshalJSON() ([]byte, error) {
 
 // OutputContent represents content within an output item
 type OutputContent struct {
-	Type        string          `json:"type"`                  // Type of content (e.g., "output_text", "summary_text")
-	Text        string          `json:"text,omitempty"`        // Text content
-	JSON        json.RawMessage `json:"json,omitempty"`        // Structured JSON content for structured outputs
-	Annotations []any           `json:"annotations,omitempty"` // Annotations for the content
-	Logprobs    json.RawMessage `json:"logprobs,omitempty"`    // Token log probabilities, retained verbatim from upstream output_text
+	ExtraContent *model.ToolExtraContent `json:"extra_content,omitempty"`
+	Type         string                  `json:"type"`                  // Type of content (e.g., "output_text", "summary_text")
+	Text         string                  `json:"text,omitempty"`        // Text content
+	JSON         json.RawMessage         `json:"json,omitempty"`        // Structured JSON content for structured outputs
+	Annotations  []any                   `json:"annotations,omitempty"` // Annotations for the content
+	Logprobs     json.RawMessage         `json:"logprobs,omitempty"`    // Token log probabilities, retained verbatim from upstream output_text
 }
 
 // IncompleteDetails provides details about why a response is incomplete

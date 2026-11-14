@@ -33,6 +33,11 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 
 	// Create a copy of the request to avoid modifying the original
 	deepseekRequest := *request
+	// Thinking normalization changes only our copied block, never caller-owned data.
+	if request.Thinking != nil {
+		thinking := *request.Thinking
+		deepseekRequest.Thinking = &thinking
+	}
 
 	// DeepSeek doesn't support max_completion_tokens, only max_tokens
 	// If max_completion_tokens is set but max_tokens is not, use max_completion_tokens as max_tokens

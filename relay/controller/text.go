@@ -24,6 +24,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/common/deepseekcompat"
 	"github.com/Laisky/one-api/relay/adaptor/common/structuredjson"
+	"github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/apitype"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -208,7 +209,11 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 		if execErr == nil {
 			c.Status(http.StatusOK)
-			if err := (render.JSON{Data: response}).Render(c.Writer); err != nil {
+			wireResponse := response
+			if chatProviderMetadataScope(meta) == relaymodel.ProviderMetadataNative {
+				wireResponse = gemini.ChatResponseForWire(c, response)
+			}
+			if err := (render.JSON{Data: wireResponse}).Render(c.Writer); err != nil {
 				execErr = openai.ErrorWrapper(err, "write_mcp_response_failed", http.StatusInternalServerError)
 			}
 		}
@@ -483,11 +488,16 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 // getRequestBody constructs the mapped provider payload while preserving explicit raw passthrough.
 // Shared Chat DTOs exclude Claude-only controls without mutating caller-owned request fields.
 func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.GeneralOpenAIRequest, adaptor adaptor.Adaptor, systemPromptReset bool) (io.Reader, error) {
+	lg := gmw.GetLogger(c)
 	c.Set(tierAdmissionProviderBodyKey, []byte(nil))
 	originalBody, err := common.GetRequestBody(c)
 	if err != nil {
 		return nil, errors.Wrap(err, "get raw request body")
 	}
+	// Gateway-emitted provider metadata replayed by clients is scoped to the destination on
+	// every branch below, so a model switch never forwards it to a provider that rejects it.
+	metadataScope := chatProviderMetadataScope(meta)
+	scopeChatRequestForDestination(c, meta, textRequest)
 
 	if textRequest.ResponseFormat == nil &&
 		!config.EnforceIncludeUsage &&
@@ -500,9 +510,20 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 		// Decide on decoded root keys, never on byte substrings: a JSON escape
 		// or case-folded spelling of extra_body (or of any typed field) must
 		// not bypass the allowlisted normalization below.
-		if (c.Request == nil || c.Request.URL == nil || !c.Request.URL.Query().Has("thinking")) && chatRawPassthroughSafe(originalBody) {
-			c.Set(tierAdmissionProviderBodyKey, originalBody)
-			return bytes.NewBuffer(originalBody), nil
+		passthroughBody, scopedCarriers, scopeErr := relaymodel.ScopeChatBodyProviderMetadata(originalBody, metadataScope)
+		if scopeErr != nil {
+			// The typed request is already scoped; normalize from it instead of unvetted bytes.
+			lg.Debug("raw chat passthrough skipped: provider metadata scope failed", zap.Error(scopeErr))
+			passthroughBody = nil
+		} else if scopedCarriers > 0 {
+			lg.Debug("scoped gateway provider metadata in raw chat passthrough",
+				zap.String("scope", metadataScope.String()),
+				zap.Int("scoped_carriers", scopedCarriers),
+			)
+		}
+		if passthroughBody != nil && (c.Request == nil || c.Request.URL == nil || !c.Request.URL.Query().Has("thinking")) && chatRawPassthroughSafe(passthroughBody) {
+			c.Set(tierAdmissionProviderBodyKey, passthroughBody)
+			return bytes.NewBuffer(passthroughBody), nil
 		}
 		jsonData, err := json.Marshal(textRequest)
 		if err != nil {
@@ -513,7 +534,6 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 			return nil, errors.Wrap(mergeErr, "normalize passthrough request fields")
 		}
 		if config.DebugEnabled && changed && hasPassthroughDiagnostics(stats) {
-			lg := gmw.GetLogger(c)
 			lg.Debug("normalized chat passthrough request payload",
 				zap.Int("unknown_preserved", stats.UnknownPreserved),
 				zap.Int("allowed_root_preserved", stats.AllowedRootPreserved),
@@ -540,13 +560,13 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 
 	// When upstream expects the native OpenAI chat payload and we didn't rewrite the
 	// system prompt, merge unknown user fields (e.g. encrypted extensions) back into
-	// the converted JSON so we can preserve pass-through semantics.
-	if _, isChatPayload := convertedRequest.(*relaymodel.GeneralOpenAIRequest); isChatPayload && (meta.APIType == apitype.OpenAI || meta.APIType == apitype.Azure) {
+	// the converted JSON so we can preserve pass-through semantics. Vertex managed
+	// open models use this chat envelope too; native Gemini/Claude payloads do not.
+	if _, isChatPayload := convertedRequest.(*relaymodel.GeneralOpenAIRequest); isChatPayload && (meta.APIType == apitype.OpenAI || meta.APIType == apitype.Azure || meta.APIType == apitype.VertexAI) {
 		allowUnknown := meta.ChannelType == channeltype.OpenAI && !config.EnforceIncludeUsage && !systemPromptReset
 		if merged, stats, changed, mergeErr := mergeControlledPassthroughJSON(originalBody, jsonData, allowUnknown); mergeErr == nil {
 			jsonData = merged
 			if config.DebugEnabled && changed && hasPassthroughDiagnostics(stats) {
-				lg := gmw.GetLogger(c)
 				lg.Debug("merged chat request passthrough fields",
 					zap.Bool("allow_unknown", allowUnknown),
 					zap.Int("unknown_preserved", stats.UnknownPreserved),
@@ -561,7 +581,6 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 		}
 	}
 
-	lg := gmw.GetLogger(c)
 	lg.Debug("converted request", zap.ByteString("json", jsonData))
 	c.Set(tierAdmissionProviderBodyKey, jsonData)
 	return bytes.NewBuffer(jsonData), nil

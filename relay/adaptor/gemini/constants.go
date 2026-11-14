@@ -21,6 +21,12 @@ var GeminiToolingDefaults = geminiOpenaiCompatible.GeminiToolingDefaults()
 //
 // Sources: https://ai.google.dev/gemini-api/docs/models (verified 2026-09-18)
 // and https://ai.google.dev/gemini-api/docs/latest-model (Argon verified 2026-10-13).
+// Vertex additions verified 2026-11-13 against the System instructions capability:
+// https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-hydrogen
+// https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-carbon
+// https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/4-argon
+// https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-flash-cyber
+// Cyber variants retain the base capability except the differences listed on their model pages.
 var ModelsSupportSystemInstruction = []string{
 	"gemini-2.5-flash", "gemini-2.5-flash-preview",
 	"gemini-2.5-flash-lite", "gemini-2.5-flash-lite-preview",
@@ -35,7 +41,9 @@ var ModelsSupportSystemInstruction = []string{
 	geminiOpenaiCompatible.GeminiNanoBanana21Model,
 	"gemini-3.5-flash", "gemini-3.5-flash-lite",
 	"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash",
-	"gemini-4-argon",
+	"gemini-4-argon", "gemini-4-hydrogen", "gemini-4-carbon",
+	"gemini-4-carbon-cyber-permissive", "gemini-4-argon-cyber-permissive",
+	"gemini-3.8-flash-cyber",
 	"gemini-robotics-er-1.6-preview", "gemini-robotics-er-2-preview",
 }
 
