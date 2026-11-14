@@ -29,7 +29,7 @@ func buildFunctionToolFromMCP(candidate mcp.ToolCandidate) (relaymodel.Tool, err
 	}
 	var schema map[string]any
 	if candidate.Tool.InputSchema != "" {
-		if err := json.Unmarshal([]byte(candidate.Tool.InputSchema), &schema); err != nil {
+		if err := mcp.DecodeJSON([]byte(candidate.Tool.InputSchema), &schema); err != nil {
 			return relaymodel.Tool{}, errors.Wrap(err, "parse mcp tool schema")
 		}
 	}

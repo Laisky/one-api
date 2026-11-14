@@ -264,3 +264,51 @@ reconstruction; the earlier unexplained DeepSeek result is retained without
 calling it a proven flake. FileIO is unavailable: no history search/save/retrieval
 is claimed for `one-api`, `622`, `Claude tool promotion`,
 `output_config.format`, `conflicting response_format` or `Gemini4`.
+
+## Numeric schema compatibility follow-up — November 14
+
+The new review targeted older source; the completed Claude promotion, native
+format provenance and native thinking-level fixes were retained rather than
+reimplemented. Numeric-bound loss remained on head `5223dd37` and was reproduced
+through actual mapped Gemini and standard OpenAI HTTP ingress, ordinary MCP
+rounds, and a native Vertex serialization component test.
+
+The new [provider compatibility matrix](gemini-numeric-schema-compatibility-20261114.md)
+records current official support and model restrictions. Normalization now
+preserves inclusive bounds for registered Google structured-output profiles and
+all four bounds for registered standard OpenAI structured-output models. Azure,
+fine-tuned OpenAI, unknown destinations and unverified bounds retain conservative
+adaptation. Authoritative mapped models select policy before Responses fallback
+and again at final Chat/tool adaptation.
+
+This is not a blanket schema-sanitizer bypass. Existing fallback catalog/media/
+pairing policies remain unchanged: the fallback helper does not remove numeric
+bounds itself. The numeric walker now visits schema nodes, preserving user
+property/definition names and literal instance data; changed branches are copied
+without modifying caller maps. Schema-only decoders retain exact numeric text
+without changing ordinary tool arguments or approval/metadata number contracts.
+Caller JSON reconstruction clears trusted schema/tool provenance.
+
+Actual wire regressions cover ordinary Chat response_format, Responses text.format
+with omitted/false/true strict, Claude tool schemas, repeated/MCP conversion, nested
+ranges, property names matching keywords, large integers and precise fractions.
+Native Vertex qualification is component serialization rather than authenticated
+HTTP. Gateway numeric-text preservation does not prove upstream arbitrary-precision
+enforcement, and Google exclusive bounds are not newly claimed as supported.
+
+Two earlier regression expectations deliberately asserted blanket Gemini stripping;
+after documentation-backed red reproduction they now assert supported inclusive
+bounds while still checking that ordinary/replacement schemas have no trusted
+native provenance. Unknown-provider and malformed/explicit-conflict controls remain.
+
+The earlier unexplained DeepSeek result, live/full-matrix caveats and JSON
+reconstruction provenance boundary remain documented. FileIO is still unavailable;
+no history search/save/retrieval is claimed for `one-api`, `622`, `numeric bounds`,
+`minimum`, `maximum`, `schema sanitizer`, `response_format`, `text.format`,
+`Claude tool schema` or `Gemini provider`.
+
+Stored MCP expansion and deferred tool injection had two additional schema-only
+float64 decode sites. Actual two-round wire and deferred-carrier tests reproduced
+rounding of odd large integer bounds before correction. Those sites now use the
+existing exact MCP JSON decoder; argument decoding remains unchanged. This does
+not add numeric-bound enforcement to MCP's best-effort argument validator.

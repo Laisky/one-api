@@ -142,28 +142,35 @@ func (t *Tool) UnmarshalJSON(data []byte) error {
 	type alias Tool
 	var raw struct {
 		alias
-		Function    *Function `json:"function"`
-		Name        string    `json:"name"`
-		Description string    `json:"description"`
-		Parameters  any       `json:"parameters"`
-		Arguments   any       `json:"arguments"`
-		Required    []string  `json:"required"`
-		Strict      *bool     `json:"strict"`
+		Function    *Function       `json:"function"`
+		Name        string          `json:"name"`
+		Description string          `json:"description"`
+		Parameters  json.RawMessage `json:"parameters"`
+		Arguments   any             `json:"arguments"`
+		Required    []string        `json:"required"`
+		Strict      *bool           `json:"strict"`
 	}
 
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return errors.Wrap(err, "unmarshal tool")
 	}
 
+	var parameters any
+	if len(raw.Parameters) > 0 {
+		if err := DecodeSchemaJSON(raw.Parameters, &parameters); err != nil {
+			return errors.Wrap(err, "decode tool parameters")
+		}
+	}
+
 	*t = Tool(raw.alias)
 	t.Function = raw.Function
 
 	if t.Function == nil {
-		if hasFunctionShape(raw.Name, raw.Description, raw.Parameters, raw.Arguments, raw.Required, raw.Strict) {
+		if hasFunctionShape(raw.Name, raw.Description, parameters, raw.Arguments, raw.Required, raw.Strict) {
 			t.Function = &Function{
 				Name:        raw.Name,
 				Description: raw.Description,
-				Parameters:  raw.Parameters,
+				Parameters:  parameters,
 				Arguments:   raw.Arguments,
 				Required:    raw.Required,
 				Strict:      raw.Strict,
@@ -179,8 +186,8 @@ func (t *Tool) UnmarshalJSON(data []byte) error {
 	if raw.Description != "" && t.Function.Description == "" {
 		t.Function.Description = raw.Description
 	}
-	if raw.Parameters != nil && t.Function.Parameters == nil {
-		t.Function.Parameters = raw.Parameters
+	if parameters != nil && t.Function.Parameters == nil {
+		t.Function.Parameters = parameters
 	}
 	if raw.Arguments != nil && t.Function.Arguments == nil {
 		t.Function.Arguments = raw.Arguments

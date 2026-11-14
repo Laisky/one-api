@@ -396,7 +396,7 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 	preserveGemini4OutputSchema := isGemini4Compatible && request.ResponseFormat != nil &&
 		request.ResponseFormat.JsonSchema.PreservesNativeConstraintsFor(channelType)
 	if !preserveGemini4OutputSchema && request.ResponseFormat != nil && request.ResponseFormat.JsonSchema != nil && request.ResponseFormat.JsonSchema.Schema != nil {
-		if normalized, changed := NormalizeStructuredJSONSchema(request.ResponseFormat.JsonSchema.Schema, channelType); changed {
+		if normalized, changed := NormalizeStructuredJSONSchemaForModel(request.ResponseFormat.JsonSchema.Schema, channelType, actualModel); changed {
 			request.ResponseFormat.JsonSchema.Schema = normalized
 		}
 	}
@@ -404,7 +404,7 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 	if len(request.Functions) > 0 {
 		for idx := range request.Functions {
 			if params, ok := request.Functions[idx].Parameters.(map[string]any); ok && params != nil {
-				if normalized, changed := NormalizeStructuredJSONSchema(params, channelType); changed {
+				if normalized, changed := NormalizeStructuredJSONSchemaForModel(params, channelType, actualModel); changed {
 					request.Functions[idx].Parameters = normalized
 				}
 			}
@@ -415,7 +415,7 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 		for idx := range request.Tools {
 			if fn := request.Tools[idx].Function; fn != nil {
 				if paramMap, ok := fn.Parameters.(map[string]any); ok && paramMap != nil {
-					if normalized, changed := NormalizeStructuredJSONSchema(paramMap, channelType); changed {
+					if normalized, changed := NormalizeStructuredJSONSchemaForModel(paramMap, channelType, actualModel); changed {
 						fn.Parameters = normalized
 					}
 				}

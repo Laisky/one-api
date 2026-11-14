@@ -32,14 +32,15 @@ func TestGemini4RepeatedNativeOutputFormat(t *testing.T) {
 		request = &copied
 	}
 	require.Contains(t, string(raw), `"minimum":2`, "caller-owned raw data remains intact")
-	// Replacing the actual schema must not inherit the translated schema's policy.
+	// Replacement drops native provenance; documented inclusive support is independent.
 	request.ResponseFormat.JsonSchema = &model.JSONSchema{Name: "ordinary", Schema: map[string]any{"type": "integer", "minimum": 2}}
 	_, err := (&Adaptor{}).ConvertRequest(ctx, relaymode.ChatCompletions, request)
 	require.NoError(t, err)
-	require.NotContains(t, request.ResponseFormat.JsonSchema.Schema, "minimum")
+	require.False(t, request.ResponseFormat.JsonSchema.PreservesNativeConstraintsFor(channeltype.GeminiOpenAICompatible))
+	require.Equal(t, 2, request.ResponseFormat.JsonSchema.Schema["minimum"])
 }
 
-// TestGemini4OrdinaryResponseFormatNormalization retains the ordinary and unrelated-provider sanitizer contracts.
+// TestGemini4OrdinaryResponseFormatNormalization preserves documented Gemini bounds while unknown providers retain adaptation.
 func TestGemini4OrdinaryResponseFormatNormalization(t *testing.T) {
 	for _, channel := range []int{channeltype.GeminiOpenAICompatible, channeltype.OpenAICompatible} {
 		ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -51,8 +52,14 @@ func TestGemini4OrdinaryResponseFormatNormalization(t *testing.T) {
 		for round := 0; round < 2; round++ {
 			_, err := (&Adaptor{}).ConvertRequest(ctx, relaymode.ChatCompletions, req)
 			require.NoError(t, err)
-			require.NotContains(t, req.ResponseFormat.JsonSchema.Schema, "minimum")
-			require.NotContains(t, req.ResponseFormat.JsonSchema.Schema, "maximum")
+			if channel == channeltype.GeminiOpenAICompatible {
+				require.Equal(t, 2, req.ResponseFormat.JsonSchema.Schema["minimum"])
+				require.Equal(t, 7, req.ResponseFormat.JsonSchema.Schema["maximum"])
+				require.False(t, req.ResponseFormat.JsonSchema.PreservesNativeConstraintsFor(channel))
+			} else {
+				require.NotContains(t, req.ResponseFormat.JsonSchema.Schema, "minimum")
+				require.NotContains(t, req.ResponseFormat.JsonSchema.Schema, "maximum")
+			}
 		}
 	}
 }

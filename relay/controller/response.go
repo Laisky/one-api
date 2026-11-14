@@ -60,7 +60,7 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	meta.ActualModelName = metalib.GetMappedModelName(meta.OriginModelName, meta.ModelMapping)
 	metalib.Set2Context(c, meta)
 	meta.IsStream = responseAPIRequest.Stream != nil && *responseAPIRequest.Stream
-	sanitizeResponseAPIRequest(responseAPIRequest, meta.ChannelType)
+	sanitizeResponseAPIRequest(responseAPIRequest, meta.ChannelType, meta.ActualModelName)
 	applyThinkingQueryToResponseRequest(c, responseAPIRequest, meta)
 	if normalized, changed := openai.NormalizeToolChoiceForResponse(responseAPIRequest.ToolChoice); changed {
 		responseAPIRequest.ToolChoice = normalized
