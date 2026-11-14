@@ -132,3 +132,44 @@ updated to Google's superseding November notice while preserving tariff checks.
 
 Tests are offline. They verify conversion, registration, and billing behavior;
 they do not establish live provider availability for a particular account.
+
+## Review repair and main integration — November 14, 2026
+
+The Gemini 4 OpenAI-compatible conversion previously read only
+`output_config.effort` and removed the complete native control object. An offline
+regression through the actual Responses fallback and final Chat serialization
+reproduced a successful payload with its schema missing. The independently
+translated `text.format` path was a false-positive control.
+
+| Caller control | Gemini 4 compatible behavior |
+| --- | --- |
+| `output_config.format` with `type: json_schema` and object schema | Lower to `response_format.json_schema`; generate the name `response` if absent and default strict to true. Preserve explicit strict, all schema keywords and exact JSON numeric values. |
+| Equivalent explicit output format carriers | Accept identical serialized constraints; reject competing formats. Representations differing in metadata/defaults can be conservatively rejected. |
+| Unknown native output controls, malformed or unrepresentable formats | Return a validation error before clearing controls. |
+| `reasoning.summary` | Reject nonblank values; the documented Google include-thoughts extension has no equivalent concise/detailed selection contract. Nil/blank remains accepted. |
+| `temperature`, `top_p`, `top_k` | Omit consistently for the registered Gemini 4 compatible contract, matching native fixed-sampling behavior. Live rejection of top_k was not tested. |
+| Legacy models and unrelated provider channels | Retain their existing control behavior. |
+
+The lowered native schema bypasses the legacy cross-provider schema sanitizer:
+removing a numeric bound would silently weaken the constraint. Existing
+`text.format` and unrelated-provider normalization contracts remain unchanged.
+Decoding owns a new schema tree and uses JSON numbers rather than float64.
+The native Claude ingress and Responses fallback share this scoped conversion;
+the caller's native raw configuration remains unchanged.
+
+Official references checked November 14, 2026:
+
+- [Google OpenAI compatibility: structured output and thinking](https://aistudio.google.com/docs/openai)
+- [Claude structured outputs: native output_config.format shape](https://platform.claude.com/docs/en/build-with-claude/structured-outputs)
+
+Latest main `148ea1dc431c8c846cfa8f53ef20c9c24a59958c` was merged rather than
+rebased. The system-instruction catalog conflict retains both the shared
+Carbon/Hydrogen constants and main's Vertex/Cyber entries. Catalog integration
+tests distinguish IDs available on both APIs from Vertex-only variants and
+continue to verify independent metadata ownership and provider pricing.
+
+Qualification is offline. Schema preservation in the upstream payload does not
+prove every schema keyword is accepted or enforced by every Google deployment.
+No live account entitlement, regional availability, paid API call or provider
+billing qualification was performed. Full database/race and frontend/browser
+qualification are separate from the focused backend checks.

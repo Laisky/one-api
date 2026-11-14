@@ -101,8 +101,11 @@ func TestVertexGoogleRejectBudgetAndHonorCompletionLimit(t *testing.T) {
 func TestVertexGoogleIndependentCatalog(t *testing.T) {
 	for _, name := range vertexGoogleModels {
 		require.NotNil(t, GetAdaptor(name))
-		if name != "gemini-3.8-flash-cyber" {
-			require.NotContains(t, geminiOpenaiCompatible.ModelRatios, name)
+		switch name {
+		case geminiOpenaiCompatible.Gemini4CarbonModel, geminiOpenaiCompatible.Gemini4HydrogenModel, "gemini-3.8-flash-cyber":
+			require.Contains(t, geminiOpenaiCompatible.ModelRatios, name, "published Developer IDs remain shared")
+		default:
+			require.NotContains(t, geminiOpenaiCompatible.ModelRatios, name, "Vertex-only variants must not leak into Developer discovery")
 		}
 		m := &meta.Meta{ActualModelName: name, Mode: relaymode.ChatCompletions}
 		m.Config.VertexAIProjectID = "offline-project"
@@ -113,6 +116,7 @@ func TestVertexGoogleIndependentCatalog(t *testing.T) {
 	a := VertexGoogleModelConfigs()
 	a["gemini-4-hydrogen"].SupportedReasoningEfforts[0] = "changed"
 	require.Equal(t, "low", VertexGoogleModelConfigs()["gemini-4-hydrogen"].SupportedReasoningEfforts[0])
+	require.Equal(t, "low", geminiOpenaiCompatible.ModelRatios[geminiOpenaiCompatible.Gemini4HydrogenModel].SupportedReasoningEfforts[0], "Vertex metadata mutations must not affect the Developer catalogue")
 	_, found := (&Adaptor{}).GetDefaultModelPricing()["gemini-4-argon-cyber-permissive"]
 	require.False(t, found)
 }
