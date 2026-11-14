@@ -173,3 +173,47 @@ prove every schema keyword is accepted or enforced by every Google deployment.
 No live account entitlement, regional availability, paid API call or provider
 billing qualification was performed. Full database/race and frontend/browser
 qualification are separate from the focused backend checks.
+
+## Follow-up: repeated MCP conversion and native enum output — November 14
+
+The review of `edad62b0` identified two independently reproduced wire defects:
+
+- **Repeated compatible conversion (P2):** the first conversion moved a native
+  schema into `response_format` and cleared `output_config`. A later conversion
+  recomputed its policy from the now-empty source field and removed bounds.
+  The actual MCP loop reproduced this on its second local provider request:
+  round one retained minimum/maximum, round two lost them.
+- **Native enum casing (P1):** the native Argon/Carbon/Hydrogen converter emitted
+  lowercase thinking levels. The current
+  [GenerateContent ThinkingConfig reference](https://aistudio.google.com/api-reference/generate-content)
+  specifies uppercase `LOW`, `MEDIUM`, `HIGH`, and `XHIGH`; the
+  [official Go SDK enum](https://github.com/googleapis/go-genai/blob/main/types.go)
+  agrees. Corrected serialized-payload tests on exact `edad62b0` reproduced the
+  mismatch. The first test attempt used an incorrect fixture decoding key and
+  is explicitly excluded from reproduction evidence.
+
+Lossless-schema provenance now lives on the actual in-memory JSONSchema object,
+scoped to its destination channel. It follows typed request reuse and shallow
+copies, is absent from JSON, and cannot be supplied by caller JSON. Replacing
+the schema drops the provenance. Normalization still checks the exact Gemini 4
+compatible channel/model guard; ordinary formats and other providers keep
+their existing behavior. This adapts supported native schemas through repeated
+MCP rounds without rejecting them.
+
+The provenance is intentionally not a public wire extension or persistence
+format. JSON serialization/reconstruction does not carry it; current typed MCP
+paths do not cross that boundary. Any future internal reconstruction must carry
+trusted provenance explicitly rather than infer it from caller fields.
+
+Native generation now uppercases only the emitted Gemini 4 enum. Input parsing,
+mapped-model selection, defaults and validation stay unchanged. The compatible
+transport still emits lowercase `reasoning_effort`. Tests cover all three
+registered native models, aliases, omitted/default/empty/lowercase/uppercase/
+spaced/nested inputs, and unrelated native/compatible controls. Live provider
+acceptance or rejection was not exercised.
+
+The prior unexplained DeepSeek concurrent-funding qualification failure remains
+recorded in the PR description and local evidence; this follow-up does not relabel it as a proven flake or weaken
+its assertions. FileIO remains unavailable: no history search/save or verified
+retrieval is claimed for `one-api`, `622`, `Gemini4`, `output_config`,
+`MCP repeated conversion`, `schema sanitizer`, or `thinkingLevel`.

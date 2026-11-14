@@ -32,7 +32,10 @@ func configureNativeGeneration(out *ChatRequest, request model.GeneralOpenAIRequ
 	if err != nil {
 		return errors.Wrap(err, "validate Gemini 4 reasoning effort")
 	}
-	out.GenerationConfig.ThinkingConfig = &ThinkingConfig{ThinkingLevel: level}
+	// GenerateContent uses uppercase ThinkingLevel enum values; compatible
+	// reasoning_effort normalization remains a separate lowercase contract.
+	// https://aistudio.google.com/api-reference/generate-content
+	out.GenerationConfig.ThinkingConfig = &ThinkingConfig{ThinkingLevel: strings.ToUpper(level)}
 	// Gemini 4 ignores these sampling controls. The source request retains them
 	// for callers and any later retry through another provider's adaptor.
 	out.GenerationConfig.Temperature = nil

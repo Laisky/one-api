@@ -50,7 +50,7 @@ func TestGemini4NativeGenerationContracts(t *testing.T) {
 				if level == "absent" || level == "default" || level == "" {
 					want = spec.defaultLevel
 				}
-				require.Equal(t, want, native.GenerationConfig.ThinkingConfig.ThinkingLevel)
+				require.Equal(t, strings.ToUpper(want), native.GenerationConfig.ThinkingConfig.ThinkingLevel)
 				require.Nil(t, native.GenerationConfig.Temperature)
 				require.Nil(t, native.GenerationConfig.TopP)
 				require.Zero(t, native.GenerationConfig.TopK)
@@ -62,7 +62,7 @@ func TestGemini4NativeGenerationContracts(t *testing.T) {
 				require.Equal(t, "Review this change.", native.Contents[0].Parts[0].Text)
 				wire, err := json.Marshal(native)
 				require.NoError(t, err)
-				require.Contains(t, string(wire), `"thinkingLevel":"`+want+`"`)
+				require.Contains(t, string(wire), `"thinkingLevel":"`+strings.ToUpper(want)+`"`)
 				require.NotContains(t, string(wire), `"temperature"`)
 				require.NotContains(t, string(wire), `"topP"`)
 				after, err := json.Marshal(request)
@@ -105,7 +105,7 @@ func TestGemini4NativeEffortAdmission(t *testing.T) {
 			native, ok := converted.(*ChatRequest)
 			require.True(t, ok)
 			require.NotNil(t, native.GenerationConfig.ThinkingConfig)
-			require.Equal(t, tc.want, native.GenerationConfig.ThinkingConfig.ThinkingLevel)
+			require.Equal(t, strings.ToUpper(tc.want), native.GenerationConfig.ThinkingConfig.ThinkingLevel)
 		})
 	}
 }
@@ -140,7 +140,7 @@ func TestGemini4NativeClientFormats(t *testing.T) {
 			native, ok := converted.(*ChatRequest)
 			require.True(t, ok)
 			require.NotNil(t, native.GenerationConfig.ThinkingConfig)
-			require.Equal(t, "xhigh", native.GenerationConfig.ThinkingConfig.ThinkingLevel)
+			require.Equal(t, "XHIGH", native.GenerationConfig.ThinkingConfig.ThinkingLevel)
 			require.Equal(t, 2048, native.GenerationConfig.MaxOutputTokens)
 			require.NotNil(t, native.SystemInstruction)
 			require.Equal(t, "Follow the operating policy.", native.SystemInstruction.Parts[0].Text)
