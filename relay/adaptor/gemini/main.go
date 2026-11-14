@@ -87,7 +87,7 @@ func convertRequest(ctx context.Context, textRequest model.GeneralOpenAIRequest,
 	if geminiRequest.GenerationConfig.MaxOutputTokens == 0 {
 		geminiRequest.GenerationConfig.MaxOutputTokens = config.DefaultMaxToken
 	}
-	if err := configureNanoBananaThinking(&geminiRequest, textRequest); err != nil {
+	if err := configureNativeGeneration(&geminiRequest, textRequest); err != nil {
 		return nil, errors.Wrap(err, "validation failed: reasoning effort")
 	}
 	if textRequest.ResponseFormat != nil {

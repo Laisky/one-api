@@ -322,8 +322,13 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 		request.ServiceTier = stringRef("default")
 	}
 	supportsReasoning := isModelSupportedReasoning(actualModel)
+	isGemini4Compatible := channelType == channeltype.GeminiOpenAICompatible && geminiOpenaiCompatible.IsGemini4Model(normalizedModelName(actualModel))
 
-	if supportsReasoning {
+	if isGemini4Compatible {
+		if err := applyGemini4CompatibleReasoning(actualModel, request); err != nil {
+			return errors.Wrap(err, "apply Gemini compatible controls")
+		}
+	} else if supportsReasoning {
 		// Sampling depends on the effective effort, not merely on whether the
 		// model is capable of reasoning. Preserve explicit zero values at none.
 		request.ReasoningEffort = normalizeReasoningEffortForModel(actualModel, request.ReasoningEffort)
@@ -386,7 +391,11 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 		request.ToolChoice = normalized
 	}
 
-	if request.ResponseFormat != nil && request.ResponseFormat.JsonSchema != nil && request.ResponseFormat.JsonSchema.Schema != nil {
+	// Lossless native-schema provenance follows the actual schema through MCP
+	// retries and shallow copies. Ordinary formats retain the legacy policy.
+	preserveGemini4OutputSchema := isGemini4Compatible && request.ResponseFormat != nil &&
+		request.ResponseFormat.JsonSchema.PreservesNativeConstraintsFor(channelType)
+	if !preserveGemini4OutputSchema && request.ResponseFormat != nil && request.ResponseFormat.JsonSchema != nil && request.ResponseFormat.JsonSchema.Schema != nil {
 		if normalized, changed := NormalizeStructuredJSONSchema(request.ResponseFormat.JsonSchema.Schema, channelType); changed {
 			request.ResponseFormat.JsonSchema.Schema = normalized
 		}
@@ -484,6 +493,14 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 				zap.String("model", openaiRequest.Model),
 				zap.Int("rewritten_count", rewrites),
 			)
+		}
+	}
+	if metaInfo != nil && metaInfo.ChannelType == channeltype.GeminiOpenAICompatible {
+		metaInfo.EnsureActualModelName(openaiRequest.Model)
+		if geminiOpenaiCompatible.IsGemini4Model(normalizedModelName(metaInfo.ActualModelName)) {
+			if err := a.applyRequestTransformations(metaInfo, openaiRequest); err != nil {
+				return nil, errors.Wrap(err, "apply Gemini request transformations for Claude conversion")
+			}
 		}
 	}
 	if shouldForceResponseAPI(metaInfo) {

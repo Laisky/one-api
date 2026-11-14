@@ -145,10 +145,16 @@ func TestGeminiLatestLifecyclePreservesLegacyPricing(t *testing.T) {
 			require.Empty(t, config.TimeWindows)
 		})
 	}
-	for _, model := range []string{"gemini-2.5-pro", "gemini-2.5-flash", "gemini-2.5-flash-lite"} {
+	// The November 2 notice supersedes September's availability statement for
+	// Pro and Flash; Flash-Lite retains its prior-usage restriction.
+	for _, model := range []string{"gemini-2.5-pro", "gemini-2.5-flash"} {
 		require.Contains(t, ModelList, model)
-		require.Contains(t, ModelRatios[model].Description, "prior active usage")
-		require.Contains(t, ModelRatios[model].Description, "not deprecated")
+		require.Contains(t, ModelRatios[model].Description, "is deprecated in the Gemini Developer API")
+		require.Contains(t, ModelRatios[model].Description, "December 1, 2026")
+		require.Contains(t, ModelRatios[model].Description, "historical pricing")
 	}
+	require.Contains(t, ModelList, "gemini-2.5-flash-lite")
+	require.Contains(t, ModelRatios["gemini-2.5-flash-lite"].Description, "prior active usage")
+	require.Contains(t, ModelRatios["gemini-2.5-flash-lite"].Description, "not deprecated")
 	require.Contains(t, ModelRatios["gemini-omni-flash-preview"].Description, "shutdown October 22, 2026")
 }
