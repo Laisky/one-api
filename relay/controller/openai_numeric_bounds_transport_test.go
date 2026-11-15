@@ -118,10 +118,7 @@ func TestOpenAIStandardNumericBoundsTransport(t *testing.T) {
 			require.NoError(t, json.Unmarshal(got.body, &payload))
 			require.Equal(t, "gpt-6.1-sol", payload.Model, "mapped models must reach the upstream")
 			require.Equal(t, "json_schema", payload.Text.Format.Type)
-			raw := string(payload.Text.Format.Schema)
-			for _, token := range []string{`"minimum":9007199254740993`, `"maximum":9007199254740997`, `"exclusiveMinimum":0.123456789012345678901234567890`, `"exclusiveMaximum":0.987654321098765432109876543210`} {
-				require.Contains(t, raw, token, "supported bound tokens must remain exact")
-			}
+			require.NoError(t, validateNumericSchemaTokens(payload.Text.Format.Schema, openAINumericTokenChecks()))
 			var schema struct {
 				Properties map[string]json.RawMessage `json:"properties"`
 				Required   []string                   `json:"required"`

@@ -1,6 +1,7 @@
 package openai
 
 import (
+	"encoding/json"
 	"maps"
 	"slices"
 	"strings"
@@ -88,6 +89,24 @@ func normalizeNumericSchema(node any, support schemaNumericBounds) (any, bool) {
 				set(key, nil, true)
 				continue
 			}
+			if lower == "exclusiveminimum" || lower == "exclusivemaximum" {
+				if exclusive, legacy := value.(bool); legacy {
+					// Draft 4 Boolean exclusivity qualifies its inclusive bound. Modern
+					// schemas use that exact number as the exclusive threshold instead.
+					bound := typed["minimum"]
+					if lower == "exclusivemaximum" {
+						bound = typed["maximum"]
+					}
+					if exclusive && isSchemaNumber(bound) {
+						set(key, bound, false)
+					} else {
+						// False adds no constraint. Unpaired Boolean forms are invalid
+						// legacy schemas; retain the established conservative adaptation.
+						set(key, nil, true)
+					}
+					continue
+				}
+			}
 			var child any
 			var modified bool
 			switch key {
@@ -141,4 +160,15 @@ func normalizeSchemaDictionary(node any, support schemaNumericBounds) (any, bool
 		}
 	}
 	return result, changed
+}
+
+// isSchemaNumber recognizes decoded JSON numbers and programmatically built schemas
+// without converting thresholds through floating point.
+func isSchemaNumber(value any) bool {
+	switch value.(type) {
+	case json.Number, float32, float64, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		return true
+	default:
+		return false
+	}
 }

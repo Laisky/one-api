@@ -22,8 +22,7 @@ const geminiNumericBoundsSchema = `{"type":"object","properties":{"count":{"type
 // assertGeminiNumericBounds checks actual serialized schema tokens without rounding them through float64 assertions.
 func assertGeminiNumericBounds(t *testing.T, raw json.RawMessage) {
 	t.Helper()
-	require.Contains(t, string(raw), `"minimum":9007199254740993`, "the exact integer lower bound must survive")
-	require.Contains(t, string(raw), `"maximum":9007199254740997`, "the exact integer upper bound must survive")
+	require.NoError(t, validateNumericSchemaTokens(raw, geminiNumericTokenChecks()))
 	var schema struct {
 		Properties map[string]json.RawMessage `json:"properties"`
 		Required   []string                   `json:"required"`
@@ -36,7 +35,10 @@ func assertGeminiNumericBounds(t *testing.T, raw json.RawMessage) {
 		Properties map[string]json.RawMessage `json:"properties"`
 	}
 	require.NoError(t, json.Unmarshal(schema.Properties["nested"], &nested))
-	require.JSONEq(t, `{"type":"number","minimum":0.1,"maximum":0.9}`, string(nested.Properties["ratio"]))
+	var ratio map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(nested.Properties["ratio"], &ratio))
+	require.Len(t, ratio, 3)
+	require.JSONEq(t, `"number"`, string(ratio["type"]))
 }
 
 // TestGeminiNumericBoundsIngressTransport preserves documented inclusive bounds through the actual Chat, Responses, and Claude controller paths.

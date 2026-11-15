@@ -10,24 +10,22 @@ import (
 const exactBoundsSchema = `{"type":"object","properties":{"count":{"type":"integer","minimum":9007199254740993,"maximum":9007199254740995},"nested":{"type":"array","items":{"type":"number","minimum":9007199254740993.125}}}}`
 
 // assertExactBoundsWire checks integer and fractional bounds in a serialized schema carrier.
-func assertExactBoundsWire(t *testing.T, value any) {
+func assertExactBoundsWire(t *testing.T, value any, schemaPath ...string) {
 	t.Helper()
 	wire, err := json.Marshal(value)
 	require.NoError(t, err)
-	require.Contains(t, string(wire), `"minimum":9007199254740993`)
-	require.Contains(t, string(wire), `"maximum":9007199254740995`)
-	require.Contains(t, string(wire), `"minimum":9007199254740993.125`)
+	require.NoError(t, validateExactBoundsTokens(wire, schemaPath...))
 }
 
 // TestJSONSchemaExactNumbers decodes ordinary response_format schemas without rounding nested bounds.
 func TestJSONSchemaExactNumbers(t *testing.T) {
 	var format ResponseFormat
 	require.NoError(t, json.Unmarshal([]byte(`{"type":"json_schema","json_schema":{"name":"bounds","schema":`+exactBoundsSchema+`}}`), &format))
-	assertExactBoundsWire(t, format)
+	assertExactBoundsWire(t, format, "json_schema", "schema")
 	format.JsonSchema.PreserveNativeConstraintsFor(28)
 	require.NoError(t, json.Unmarshal([]byte(`{"name":"caller","nativeSchemaChannel":28,"schema":`+exactBoundsSchema+`}`), format.JsonSchema))
 	require.False(t, format.JsonSchema.PreservesNativeConstraintsFor(28), "wire reconstruction must clear trusted provenance on reused receivers")
-	assertExactBoundsWire(t, format)
+	assertExactBoundsWire(t, format, "json_schema", "schema")
 }
 
 // TestClaudeToolExactSchemaNumbers preserves exact input schema numbers while clearing caller provenance.
@@ -35,14 +33,14 @@ func TestClaudeToolExactSchemaNumbers(t *testing.T) {
 	tool := ClaudeTool{TrustedDeferredLoading: true}
 	require.NoError(t, json.Unmarshal([]byte(`{"name":"bounds","input_schema":`+exactBoundsSchema+`,"TrustedDeferredLoading":true}`), &tool))
 	require.False(t, tool.TrustedDeferredLoading)
-	assertExactBoundsWire(t, tool)
+	assertExactBoundsWire(t, tool, "input_schema")
 }
 
 // TestFunctionSchemaNumbersKeepArgumentsContract preserves only schema precision, keeping ordinary argument number types.
 func TestFunctionSchemaNumbersKeepArgumentsContract(t *testing.T) {
 	var fn Function
 	require.NoError(t, json.Unmarshal([]byte(`{"name":"bounds","parameters":`+exactBoundsSchema+`,"arguments":{"count":1}}`), &fn))
-	assertExactBoundsWire(t, fn)
+	assertExactBoundsWire(t, fn, "parameters")
 	require.IsType(t, float64(0), fn.Arguments.(map[string]any)["count"])
 }
 
@@ -55,7 +53,7 @@ func TestToolSchemaNumbersKeepArgumentsContract(t *testing.T) {
 		}
 		var tool Tool
 		require.NoError(t, json.Unmarshal([]byte(raw), &tool))
-		assertExactBoundsWire(t, tool)
+		assertExactBoundsWire(t, tool, "function", "parameters")
 		require.IsType(t, float64(0), tool.Function.Arguments.(map[string]any)["count"])
 	}
 }

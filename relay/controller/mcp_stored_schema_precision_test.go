@@ -22,9 +22,7 @@ const storedMCPNumericSchema = `{"type":"object","properties":{"count":{"type":"
 // assertStoredMCPNumericSchema checks exact stored numeric constraints in provider and deferred wire carriers.
 func assertStoredMCPNumericSchema(t *testing.T, raw json.RawMessage) {
 	t.Helper()
-	for _, token := range []string{`"minimum":9007199254740993`, `"maximum":9007199254740997`, `"minimum":9007199254740999`, `"maximum":9007199254741003`} {
-		require.Contains(t, string(raw), token, "stored schema constraints must not round")
-	}
+	require.NoError(t, validateNumericSchemaTokens(raw, storedMCPNumericTokenChecks()))
 }
 
 // TestDeferredMCPStoredNumericSchema preserves stored constraints in actual deferred injection without contacting the tool server.
