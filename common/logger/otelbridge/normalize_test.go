@@ -13,38 +13,33 @@ import (
 )
 
 // normalizeCases are attribute lists covering every place a key can repeat.
-//
-// sdkDefect marks the one case where the pinned SDK (sdk/log v0.22.0) is not
-// spec-conformant: when a repeated top-level key overwrites an earlier one, the
-// SDK stores the new value without deduplicating the map inside it, so it
-// exports a nested map that still repeats a key. The bridge produces the
-// spec-conformant result instead, given in want.
+// The explicit expected map case also pins the nested-map replacement behavior
+// now implemented correctly by the pinned SDK (sdk/log v1.47.0).
 var normalizeCases = []struct {
-	name      string
-	attrs     []attribute.KeyValue
-	repeated  bool
-	sdkDefect bool
-	want      []attribute.KeyValue
+	name     string
+	attrs    []attribute.KeyValue
+	repeated bool
+	want     []attribute.KeyValue
 }{
-	{"unique", []attribute.KeyValue{attribute.String("a", "1"), attribute.Int("b", 2)}, false, false, nil},
+	{"unique", []attribute.KeyValue{attribute.String("a", "1"), attribute.Int("b", 2)}, false, nil},
 	{"top-level repeat keeps first position", []attribute.KeyValue{
 		attribute.String("host", "container"), attribute.String("url", "/v1"), attribute.String("host", "oneapi.example.com"),
-	}, true, false, nil},
+	}, true, nil},
 	{"three occurrences", []attribute.KeyValue{
 		attribute.Int("n", 1), attribute.Int("m", 0), attribute.Int("n", 2), attribute.Int("n", 3),
-	}, true, false, nil},
+	}, true, nil},
 	{"repeat inside a map", []attribute.KeyValue{
 		attribute.Map("worker", attribute.Int("attempt", 1), attribute.Int("attempt", 2)),
-	}, true, false, nil},
+	}, true, nil},
 	{"repeat inside a map inside a list", []attribute.KeyValue{
 		attribute.Slice("items", attribute.StringValue("x"), attribute.MapValue(attribute.Int("k", 1), attribute.Int("k", 2))),
-	}, true, false, nil},
+	}, true, nil},
 	{"repeated key whose values are maps", []attribute.KeyValue{
 		attribute.Map("m", attribute.Int("a", 1)), attribute.Map("m", attribute.Int("b", 2), attribute.Int("b", 3)),
-	}, true, true, []attribute.KeyValue{attribute.Map("m", attribute.Int("b", 3))}},
+	}, true, []attribute.KeyValue{attribute.Map("m", attribute.Int("b", 3))}},
 	{"same key at different depths is not a repeat", []attribute.KeyValue{
 		attribute.Int("k", 1), attribute.Map("m", attribute.Int("k", 2)),
-	}, false, false, nil},
+	}, false, nil},
 }
 
 // hasNestedRepeat reports whether any map inside attrs holds a key twice.
@@ -133,13 +128,9 @@ func TestNormalizeMatchesSDKDeduplication(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, tc.repeated, repeated)
 			require.False(t, hasNestedRepeat(gotAttrs), "the bridge must never export a repeated nested key")
-			if tc.sdkDefect {
-				// When this fails, the SDK has fixed the defect: drop sdkDefect
-				// and let the case compare against the SDK like the others.
-				require.True(t, hasNestedRepeat(wantAttrs), "the pinned SDK no longer exports a repeated nested key")
+			require.Equal(t, wantAttrs, gotAttrs)
+			if tc.want != nil {
 				require.Equal(t, tc.want, gotAttrs)
-			} else {
-				require.Equal(t, wantAttrs, gotAttrs)
 			}
 
 			gotBody, bodyRepeated, err := NormalizeLogValue(attribute.MapValue(tc.attrs...))

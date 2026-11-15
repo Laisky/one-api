@@ -128,7 +128,7 @@ func (t *ResponseAPITool) UnmarshalJSON(data []byte) error {
 		DeferLoading      *bool                   `json:"defer_loading,omitempty"`
 		Name              string                  `json:"name,omitempty"`
 		Description       string                  `json:"description,omitempty"`
-		Parameters        map[string]any          `json:"parameters,omitempty"`
+		Parameters        json.RawMessage         `json:"parameters,omitempty"`
 		Function          json.RawMessage         `json:"function,omitempty"`
 		SearchContextSize *string                 `json:"search_context_size,omitempty"`
 		Filters           *model.WebSearchFilters `json:"filters,omitempty"`
@@ -147,6 +147,13 @@ func (t *ResponseAPITool) UnmarshalJSON(data []byte) error {
 	var raw rawTool
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return errors.Wrap(err, "unmarshal response api tool")
+	}
+
+	var parameters map[string]any
+	if len(raw.Parameters) > 0 {
+		if err := model.DecodeSchemaJSON(raw.Parameters, &parameters); err != nil {
+			return errors.Wrap(err, "decode response tool parameters")
+		}
 	}
 
 	// Decode at most one namespace level. Inspect children before invoking this
@@ -183,7 +190,7 @@ func (t *ResponseAPITool) UnmarshalJSON(data []byte) error {
 	t.Type = raw.Type
 	t.Name = raw.Name
 	t.Description = raw.Description
-	t.Parameters = raw.Parameters
+	t.Parameters = parameters
 	t.SearchContextSize = raw.SearchContextSize
 	t.Filters = raw.Filters
 	t.UserLocation = raw.UserLocation
@@ -200,17 +207,17 @@ func (t *ResponseAPITool) UnmarshalJSON(data []byte) error {
 			return errors.Wrap(err, "unmarshal response api tool.function")
 		}
 		t.Function = sanitizeDecodedFunction(&fn)
-	} else if raw.Type == "function" && (raw.Name != "" || raw.Description != "" || raw.Parameters != nil) {
+	} else if raw.Type == "function" && (raw.Name != "" || raw.Description != "" || parameters != nil) {
 		t.Function = &model.Function{
 			Name:        raw.Name,
 			Description: raw.Description,
 		}
 		// model.Function.Parameters is `any`, and omitempty does not drop an
-		// interface holding a nil map — assigning raw.Parameters unconditionally put
+		// interface holding a nil map — assigning decoded parameters unconditionally put
 		// `"parameters": null` inside the function block for every flattened tool
 		// that carried a name but no parameters.
-		if len(raw.Parameters) > 0 {
-			t.Function.Parameters = raw.Parameters
+		if len(parameters) > 0 {
+			t.Function.Parameters = parameters
 		}
 	}
 

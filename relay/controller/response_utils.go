@@ -363,11 +363,15 @@ func responseMessageTokenOverhead(model string) (int, int) {
 }
 
 // sanitizeResponseAPIRequest sanitizes Response API request by removing parameters not supported by reasoning models
-func sanitizeResponseAPIRequest(request *openai.ResponseAPIRequest, channelType int) {
+func sanitizeResponseAPIRequest(request *openai.ResponseAPIRequest, channelType int, actualModel ...string) {
 	if request == nil {
 		return
 	}
 	modelName := strings.TrimSpace(strings.ToLower(request.Model))
+	schemaModel := modelName
+	if len(actualModel) > 0 && strings.TrimSpace(actualModel[0]) != "" {
+		schemaModel = actualModel[0]
+	}
 
 	if isReasoningModel(modelName) {
 		request.Temperature = nil
@@ -375,7 +379,7 @@ func sanitizeResponseAPIRequest(request *openai.ResponseAPIRequest, channelType 
 	}
 
 	if request.Text != nil && request.Text.Format != nil && request.Text.Format.Schema != nil {
-		if normalized, changed := openai.NormalizeStructuredJSONSchema(request.Text.Format.Schema, channelType); changed {
+		if normalized, changed := openai.NormalizeStructuredJSONSchemaForModel(request.Text.Format.Schema, channelType, schemaModel); changed {
 			request.Text.Format.Schema = normalized
 		}
 	}
@@ -387,11 +391,11 @@ func sanitizeResponseAPIRequest(request *openai.ResponseAPIRequest, channelType 
 			tool.Type = "web_search"
 		}
 		if tool.Parameters != nil {
-			tool.Parameters, _ = openai.NormalizeStructuredJSONSchema(tool.Parameters, channelType)
+			tool.Parameters, _ = openai.NormalizeStructuredJSONSchemaForModel(tool.Parameters, channelType, schemaModel)
 		}
 		if tool.Function != nil {
 			if params, ok := tool.Function.Parameters.(map[string]any); ok && params != nil {
-				if normalized, changed := openai.NormalizeStructuredJSONSchema(params, channelType); changed {
+				if normalized, changed := openai.NormalizeStructuredJSONSchemaForModel(params, channelType, schemaModel); changed {
 					tool.Function.Parameters = normalized
 				}
 			}

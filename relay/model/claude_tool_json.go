@@ -1,8 +1,6 @@
 package model
 
 import (
-	"encoding/json"
-
 	"github.com/Laisky/errors/v2"
 )
 
@@ -11,7 +9,7 @@ import (
 func (t *ClaudeTool) UnmarshalJSON(data []byte) error {
 	type wireTool ClaudeTool
 	var decoded wireTool
-	if err := json.Unmarshal(data, &decoded); err != nil {
+	if err := DecodeSchemaJSON(data, &decoded); err != nil {
 		return errors.Wrap(err, "decode Claude tool")
 	}
 	*t = ClaudeTool(decoded)

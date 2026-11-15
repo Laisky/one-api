@@ -155,7 +155,7 @@ func injectDeferredMCPToolsForToolSearch(c *gin.Context, request *ClaudeMessages
 			var inputSchema any
 			if entry.Tool.InputSchema != "" {
 				var schema map[string]any
-				if err := json.Unmarshal([]byte(entry.Tool.InputSchema), &schema); err == nil {
+				if err := mcp.DecodeJSON([]byte(entry.Tool.InputSchema), &schema); err == nil {
 					inputSchema = schema
 				}
 			}
