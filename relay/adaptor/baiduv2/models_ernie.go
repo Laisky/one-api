@@ -282,17 +282,20 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(6),
 				CompletionRatio:     3.6666666666666665,
-				InputTokenThreshold: 32768,
+				InputTokenThreshold: 32001,
 			},
 			},
-			ContextLength:               131072,
+			ContextLength:               128000,
 			MaxOutputTokens:             65536,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens"},
 			MaxReasoningTokens:          61440,
-			Description:                 "Baidu ERNIE 5.1 next-generation text chat model (released 2026-05-09) on Qianfan v2 API; 128K context.",
+			// Sources checked 2026-11-16:
+			// https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j
+			// https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya
+			Description: "Baidu ERNIE 5.1 on Qianfan v2. Published 128K context with K normalized to 1000; CNY/M input/output 4/18 through 32K input, then 6/22. No cache price is inferred. Historical uppercase metadata remains separately available.",
 		},
 		"ernie-char-8k": {
 			Ratio:                       2.857142857142857,

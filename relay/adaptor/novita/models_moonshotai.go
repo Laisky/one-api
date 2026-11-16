@@ -98,7 +98,9 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"max_tokens", "stop"},
-			Description:                 "moonshotai/kimi-k3 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "moonshotai/kimi-k3 on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
+			CacheWrite5mRatio:           nativeRate(3),
+			CacheWrite1hRatio:           nativeRate(6),
 		},
 	}
 }

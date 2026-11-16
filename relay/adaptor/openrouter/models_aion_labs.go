@@ -102,7 +102,8 @@ func aion_labsModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{},
 			SupportedSamplingParameters: []string{"max_tokens", "temperature", "top_p"},
-			Description:                 "aion-labs/aion-rp-llama-3.1-8b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "aion-labs/aion-rp-llama-3.1-8b on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			HuggingFaceID:               "aion-labs/Aion-RP-Llama-3.1-8B",
 		},
 	}
 }

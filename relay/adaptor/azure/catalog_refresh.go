@@ -2,8 +2,6 @@ package azure
 
 import (
 	"slices"
-
-	"github.com/Laisky/one-api/relay/adaptor/openai"
 )
 
 // init refreshes Foundry discovery from Microsoft's November 2026 Claude list.
@@ -20,5 +18,5 @@ func init() {
 			FoundryClaudeModels = append(FoundryClaudeModels, id)
 		}
 	}
-	ModelList = append(slices.Clone(openai.ModelList), FoundryClaudeModels...)
+	ModelList = buildAzureModelList()
 }

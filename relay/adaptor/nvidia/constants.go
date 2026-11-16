@@ -72,7 +72,7 @@ var (
 // Model IDs are the slash-namespaced dotted strings expected by the API `model`
 // field (NOT the underscore-substituted catalog URL slugs).
 // Source: https://build.nvidia.com/models (retrieved 2026-06-14)
-var ModelRatios = adaptor.JoinModelCatalogs(curatedModels(), currentGLMModels())
+var ModelRatios = adaptor.JoinModelCatalogs(curatedModels(), currentGLMModels(), novemberModels())
 
 // curatedModels returns the preceding curated model map. It accepts no
 // parameters and preserves existing model fields and compatibility metadata.

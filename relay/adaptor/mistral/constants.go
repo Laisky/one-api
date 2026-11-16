@@ -230,17 +230,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 	},
 
 	// --- Mistral Large family ---
-	"mistral-large-latest": {
-		Ratio:                       0.5 * ratio.MilliTokensUsd, // $0.50 input (Large 3)
-		CompletionRatio:             3.0,                        // $1.50 output
-		ContextLength:               262144,
-		MaxOutputTokens:             8192,
-		InputModalities:             multimodalInputModalities,
-		OutputModalities:            textOnlyModalities,
-		SupportedFeatures:           chatFeatures,
-		SupportedSamplingParameters: commonSamplingParams,
-		Description:                 "Mistral Large flagship multimodal MoE model (alias for the latest release; currently Large 3).",
-	},
+	"mistral-large-latest": large4LatestModelConfig(),
 	"mistral-large-2512": {
 		Ratio:                       0.5 * ratio.MilliTokensUsd,
 		CompletionRatio:             3.0,

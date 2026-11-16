@@ -129,9 +129,11 @@ var replicateLanguageModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"google/gemini-3.1-pro": {
 		// Tiered on Replicate, identical scheme to gemini-3-pro: input ≤200K = $2/M in, $12/M out; >200K = $4/M in, $18/M out.
-		// Literal uses the base (≤200K) tier. Multimodal: accepts text/image/video/audio, outputs text.
+		// The threshold is inclusive, so 200001 is the first long-context token count.
+		// Tariff reverified 2026-11-16; no first-party Google tariff is substituted.
 		// https://replicate.com/google/gemini-3.1-pro#pricing
 		Ratio: 2.0 * ratio.MilliTokensUsd, CompletionRatio: 12.0 / 2.0,
+		Tiers:         []adaptor.ModelRatioTier{{InputTokenThreshold: 200_001, Ratio: 4.0 * ratio.MilliTokensUsd, CompletionRatio: 18.0 / 4.0}},
 		ContextLength: 1000000, MaxOutputTokens: 65535,
 		InputModalities: []string{"text", "image", "video", "audio"}, OutputModalities: textOnlyOutputs,
 		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
@@ -409,39 +411,33 @@ var replicateLanguageModelRatios = map[string]adaptor.ModelConfig{
 	},
 	"openai/gpt-5.6-sol": {
 		// $5/M input, $0.50/M cached input, $30/M output; vision + reasoning.
-		// ContextLength / MaxOutputTokens are UNCONFIRMED — not published on the Replicate
-		// page; mirrored from the sibling openai/gpt-5.2 entry (256K / 128K).
+		// Context/output ceilings are unpublished and must not be copied from GPT-5.2.
 		// https://replicate.com/openai/gpt-5.6-sol
 		Ratio: 5.0 * ratio.MilliTokensUsd, CompletionRatio: 30.0 / 5.0,
 		CachedInputRatio: 0.50 * ratio.MilliTokensUsd,
-		ContextLength:    256000, MaxOutputTokens: 128000,
-		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		InputModalities:  visionTextInputs, OutputModalities: textOnlyOutputs,
 		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
-		Description: "OpenAI GPT-5.6 Sol frontier model hosted on Replicate; vision, reasoning. Context/max-output unconfirmed (mirrored from GPT-5.2).",
+		Description: "OpenAI GPT-5.6 Sol frontier model hosted on Replicate; vision, reasoning. Hosted context and maximum output limits are unpublished. The historical September promotion remains date-bounded.",
 	},
 	"openai/gpt-5.6-terra": {
 		// $2.50/M input, $0.25/M cached input, $15/M output; vision + reasoning.
-		// ContextLength / MaxOutputTokens are UNCONFIRMED — not published on the Replicate
-		// page; mirrored from the sibling openai/gpt-5.2 entry (256K / 128K).
+		// Context/output ceilings are unpublished and must not be copied from GPT-5.2.
 		// https://replicate.com/openai/gpt-5.6-terra
 		Ratio: 2.5 * ratio.MilliTokensUsd, CompletionRatio: 15.0 / 2.5,
 		CachedInputRatio: 0.25 * ratio.MilliTokensUsd,
-		ContextLength:    256000, MaxOutputTokens: 128000,
-		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		InputModalities:  visionTextInputs, OutputModalities: textOnlyOutputs,
 		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
-		Description: "OpenAI GPT-5.6 Terra model hosted on Replicate; vision, reasoning. Context/max-output unconfirmed (mirrored from GPT-5.2).",
+		Description: "OpenAI GPT-5.6 Terra model hosted on Replicate; vision, reasoning. Hosted context and maximum output limits are unpublished.",
 	},
 	"openai/gpt-5.6-luna": {
 		// $1/M input, $0.10/M cached input, $6/M output; vision + reasoning.
-		// ContextLength / MaxOutputTokens are UNCONFIRMED — not published on the Replicate
-		// page; mirrored from the sibling openai/gpt-5.2 entry (256K / 128K).
+		// Context/output ceilings are unpublished and must not be copied from GPT-5.2.
 		// https://replicate.com/openai/gpt-5.6-luna
 		Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 6.0 / 1.0,
 		CachedInputRatio: 0.10 * ratio.MilliTokensUsd,
-		ContextLength:    256000, MaxOutputTokens: 128000,
-		InputModalities: visionTextInputs, OutputModalities: textOnlyOutputs,
+		InputModalities:  visionTextInputs, OutputModalities: textOnlyOutputs,
 		SupportedFeatures: reasoningFeatures, SupportedSamplingParameters: reasoningSamplingParams,
-		Description: "OpenAI GPT-5.6 Luna model hosted on Replicate; vision, reasoning. Context/max-output unconfirmed (mirrored from GPT-5.2).",
+		Description: "OpenAI GPT-5.6 Luna model hosted on Replicate; vision, reasoning. Hosted context and maximum output limits are unpublished.",
 	},
 	"openai/gpt-oss-120b": {
 		// $0.18/M input, $0.72/M output; 131K context; Apache 2.0 open weights; reasoning + tools + structured outputs.

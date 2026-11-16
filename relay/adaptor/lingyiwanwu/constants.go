@@ -5,12 +5,14 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// LingYi WanWu (01.AI) hosts the Yi family of chat models. Public docs
-// (retrieved 2026-05-18):
-//   - https://platform.lingyiwanwu.com/docs (API + pricing)
+// LingYi WanWu (01.AI) previously hosted the Yi family of chat models.
+// Its 2026-08-03 notice, checked 2026-11-16, ended public API service at
+// the end of 2026-09-03. Retained entries preserve historical configuration.
+// Sources: https://platform.lingyiwanwu.com/ (service adjustment notice) and
+// https://platform.lingyiwanwu.com/docs (historical API and pricing).
 //
 // 01.AI has pivoted toward enterprise deployments; only yi-lightning and
-// yi-vision-v2 remain documented on the consumer platform pricing page.
+// yi-vision-v2 were the last documented consumer platform entries.
 // yi-large / yi-medium / yi-spark are no longer publicly listed and are
 // omitted from this map. yi-lightning is documented as an intelligent-routing
 // model that internally dispatches to DeepSeek-V3 / Qwen3-30B-A3B / Yi-Lightning.
@@ -57,7 +59,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            lingyiwanwuTextOutputs,
 		SupportedFeatures:           lingyiwanwuChatFeatures,
 		SupportedSamplingParameters: lingyiwanwuSamplingParams,
-		Description:                 "01.AI Yi-Lightning fast cost-optimized chat model served via OpenAI-compatible API.",
+		Description:                 "Historical 01.AI Yi-Lightning chat model. The official platform notice ended public API service at the end of 2026-09-03; the refund application window closes at the end of 2026-12-03. This entry and its historical tariff remain for operator compatibility, not as a claim of live public API availability.",
 	},
 	"yi-vision-v2": {
 		Ratio:                       6 * ratio.MilliTokensRmb,
@@ -68,7 +70,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		OutputModalities:            lingyiwanwuTextOutputs,
 		SupportedFeatures:           lingyiwanwuChatFeatures,
 		SupportedSamplingParameters: lingyiwanwuSamplingParams,
-		Description:                 "01.AI Yi-Vision v2 multimodal chat model that accepts text and image inputs.",
+		Description:                 "Historical 01.AI Yi-Vision v2 multimodal chat model. The official platform notice ended public API service at the end of 2026-09-03; the refund application window closes at the end of 2026-12-03. This entry and its historical tariff remain for operator compatibility, not as a claim of live public API availability.",
 	},
 }
 

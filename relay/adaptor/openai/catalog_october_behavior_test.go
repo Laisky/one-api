@@ -140,7 +140,9 @@ func TestOpenAIOctoberLifecycleGuidance(t *testing.T) {
 	require.Contains(t, ModelRatios["gpt-4o-mini-transcribe"].Description, "json or text only")
 	require.NotContains(t, ModelRatios["gpt-5.3-chat-latest"].Description, "use gpt-5.5)")
 	// No invented lifecycle propagation to similarly named models or aliases.
-	for _, name := range []string{"gpt-6.1-sol", "gpt-4o", "gpt-4.1", "gpt-4-1106-preview", "gpt-4o-mini-transcribe-2025-12-15"} {
+	// The November audit explicitly confirms notices for 4-1106-preview and
+	// the 2025-12-15 transcription snapshot; unrelated aliases stay unannotated.
+	for _, name := range []string{"gpt-6.1-sol", "gpt-4o", "gpt-4.1", "gpt-image-2.5-sunburst"} {
 		require.NotContains(t, ModelRatios[name].Description, "[OpenAI lifecycle:", name)
 	}
 }

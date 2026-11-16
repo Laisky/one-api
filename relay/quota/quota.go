@@ -2,7 +2,6 @@ package quota
 
 import (
 	"math"
-	"strings"
 	"time"
 
 	modelcfg "github.com/Laisky/one-api/model"
@@ -164,12 +163,10 @@ func Compute(input ComputeInput) ComputeResult {
 
 	return ComputeResult{
 		// Preserve unsupported provider-priced usage as an auditable estimate.
-		// Terra HTTP forbids 12h retention and non-Standard tiers at admission,
+		// Native HTTP forbids 12h retention and unpriced service tiers at admission,
 		// but an unexpected provider receipt must not be settled as Standard.
 		UnpricedUsage: audioUnpriced || usage.CacheWrite12hTokens > 0 ||
-			(strings.EqualFold(strings.TrimSpace(input.ModelName), "gpt-6.1-terra") &&
-				strings.TrimSpace(usage.ServiceTier) != "" &&
-				!strings.EqualFold(strings.TrimSpace(usage.ServiceTier), "default")),
+			hasUnpricedOpenAIReceipt(input, resolvedModelCfg),
 		TotalQuota:          totalQuota,
 		PromptTokens:        promptTokens,
 		CompletionTokens:    completionTokens,

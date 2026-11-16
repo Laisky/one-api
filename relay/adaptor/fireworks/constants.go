@@ -85,7 +85,7 @@ var (
 // Capability metadata (context length, modalities, Hugging Face lineage, and
 // quantization where explicitly published) is sourced from the model cards and
 // upstream model repositories.
-var ModelRatios = mergeModelMaps(
+var ModelRatios = adaptor.JoinModelCatalogs(
 	deepseekModels,
 	glmModels,
 	kimiModels,
@@ -98,23 +98,8 @@ var ModelRatios = mergeModelMaps(
 	mistralModels,
 	rerankModels,
 	embeddingModels,
+	novemberModels(),
 )
-
-// mergeModelMaps combines per-family model maps into a single map. Duplicate
-// keys are overwritten by later maps; family files must keep keys disjoint.
-func mergeModelMaps(maps ...map[string]adaptor.ModelConfig) map[string]adaptor.ModelConfig {
-	total := 0
-	for _, m := range maps {
-		total += len(m)
-	}
-	merged := make(map[string]adaptor.ModelConfig, total)
-	for _, m := range maps {
-		for k, v := range m {
-			merged[k] = v
-		}
-	}
-	return merged
-}
 
 // FireworksToolingDefaults records that Fireworks does not publish provider-level
 // built-in tool pricing (retrieved 2026-08-18).

@@ -61,7 +61,7 @@ func TestMiniMaxCurrentCatalogueOwnership(t *testing.T) {
 	cfg := first["MiniMax-M3"]
 	cfg.SupportedSamplingParameters[0] = "changed"
 	cfg.Tiers[0].Ratio = -1
-	require.Equal(t, "temperature", second["MiniMax-M3"].SupportedSamplingParameters[0])
+	require.Equal(t, "max_tokens", second["MiniMax-M3"].SupportedSamplingParameters[0])
 	require.Positive(t, second["MiniMax-M3"].Tiers[0].Ratio)
 	require.Equal(t, "temperature", first["MiniMax-M2.7"].SupportedSamplingParameters[0])
 }

@@ -123,6 +123,11 @@ func perCallUsd(usd float64) func(*adaptor.ModelConfig) {
 // autoglm-phone-multilingual is valid in Z.AI's model enum but has no published
 // price anywhere, so it is omitted rather than billed at the fallback rate.
 var ModelRatios = map[string]adaptor.ModelConfig{
+	// The documented Legal API ID has an independent Z.AI USD tariff.
+	// Sources checked 2026-11-16: https://docs.z.ai/guides/overview/pricing
+	// and https://docs.z.ai/guides/vlm/glm-5.3-flash.
+	"glm-5.3-flashx-legal": derive("glm-5.3-flashx-legal", usdPrice{Input: .37, Cached: .075, Output: 1.25},
+		describe("GLM-5.3-FlashX-Legal on Z.AI: legal-specialized multimodal FlashX with 1M context, 128K output and always-on low/high/max reasoning. Flat USD 0.37 input, 0.075 cached input and 1.25 output per million tokens. No AutoClaw legal-database tools or Coding Plan entitlement are implied.")),
 	// ---- flagship text ------------------------------------------------------
 	"glm-5.3": derive("glm-5.3", usdPrice{Input: 1.40, Cached: 0.26, Output: 4.40},
 		describe("GLM-5.3 on Z.AI: 1M context, 128K max output, always-on thinking with reasoning_effort low/high/max. Flat $1.40/$4.40 per 1M input/output, $0.26 cached input.")),

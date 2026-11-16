@@ -96,7 +96,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "MiniMaxAI/MiniMax-M3 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "MiniMaxAI/MiniMax-M3 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"NousResearch/Hermes-3-Llama-3.1-405B": {
 			Ratio:                       nativeRate(1),
@@ -168,7 +169,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Sao10K/L3-8B-Lunaris-v1-Turbo on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Sao10K/L3-8B-Lunaris-v1-Turbo on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Sao10K/L3.1-70B-Euryale-v2.2": {
 			Ratio:                       nativeRate(0.8500000000000001),
@@ -178,7 +180,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Sao10K/L3.1-70B-Euryale-v2.2 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Sao10K/L3.1-70B-Euryale-v2.2 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Wan-AI/Wan2.6-Image-Edit": {
 			Ratio:           0,
@@ -421,7 +424,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "inclusionAI/Ling-3.0-flash on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "inclusionAI/Ling-3.0-flash on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp4",
 		},
 		"inclusionAI/Ling-3.0-flash-Fin": {
 			Ratio:             nativeRate(0.060000000000000005),
@@ -441,7 +445,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 			InputModalities:   []string{"text", "image", "video"},
 			OutputModalities:  []string{"text"},
 			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
-			Description:       "inclusionAI/Ling-3.0-flash-VL on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:       "inclusionAI/Ling-3.0-flash-VL on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:      "fp4",
 		},
 		"intfloat/e5-base-v2": {
 			Ratio:           nativeRate(0.005),
@@ -527,7 +532,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "microsoft/phi-4 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "microsoft/phi-4 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "bf16",
 		},
 		"mistralai/Mistral-Nemo-Instruct-2407": {
 			Ratio:                       nativeRate(0.029),
@@ -537,7 +543,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "mistralai/Mistral-Nemo-Instruct-2407 on DeepInfra; host token prices verified 2026-10-12. Existing capability metadata is retained. A direct-creator redirect or another provider's tariff is not a DeepInfra price change.",
+			Description:                 "mistralai/Mistral-Nemo-Instruct-2407 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"mistralai/Mistral-Small-24B-Instruct-2501": {
 			Ratio:                       nativeRate(0.05),
@@ -547,7 +554,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "mistralai/Mistral-Small-24B-Instruct-2501 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "mistralai/Mistral-Small-24B-Instruct-2501 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"mistralai/Mistral-Small-3.2-24B-Instruct-2506": {
 			Ratio:                       nativeRate(0.075),
@@ -557,7 +565,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "mistralai/Mistral-Small-3.2-24B-Instruct-2506 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "mistralai/Mistral-Small-3.2-24B-Instruct-2506 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"mistralai/Voxtral-Mini-3B-2507": {
 			Ratio:           nativeRate(1.6666666666666667),
@@ -601,7 +610,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "moonshotai/Kimi-K2.6 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "moonshotai/Kimi-K2.6 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp4",
 		},
 		"moonshotai/Kimi-K2.7-Code": {
 			Ratio:                       nativeRate(0.68),
@@ -621,9 +631,10 @@ func otherModels() map[string]adaptor.ModelConfig {
 			ContextLength:               1048576,
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "moonshotai/Kimi-K3 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "moonshotai/Kimi-K3 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified. Explicit cache writes are published at 1.25x/2x input for 5m/1h; TTL-specific request and receipt billing requires separate qualification.",
+			Quantization:                "mxfp4",
 		},
 		"sesame/csm-1b": {
 			Ratio:            nativeRate(7),
@@ -701,13 +712,14 @@ func otherModels() map[string]adaptor.ModelConfig {
 		"thinkingmachines/Inkling-Small": {
 			Ratio:                       nativeRate(0.45),
 			CompletionRatio:             2.6666666666666665,
-			CachedInputRatio:            nativeRate(0.1),
-			ContextLength:               512000,
+			CachedInputRatio:            nativeRate(0.099999999),
+			ContextLength:               524288,
 			InputModalities:             []string{"text", "image", "audio"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+			SupportedFeatures:           []string{"tools", "json_mode", "reasoning", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "DeepInfra hosted text-generation model.",
+			Description:                 "thinkingmachines/Inkling-Small on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp4",
 		},
 	}
 }

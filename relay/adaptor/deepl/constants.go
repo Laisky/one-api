@@ -6,11 +6,14 @@ import (
 )
 
 // deeplUsdPerMillionCharacters is DeepL's published usage rate, $27.50 per
-// 1,000,000 characters (API Growth overage and Enterprise usage alike; the fixed
-// monthly plan fee is not a per-request charge and is not modelled here).
+// 1,000,000 characters, retained as the historical US usage default. Fixed plan
+// fees and included allowances are not per-request charges. Enterprise usage
+// is contract-dependent and must be configured by the operator.
 // Retrieved 2026-09-02 from DeepL's own pricing backend behind
 // https://www.deepl.com/en/pro#developer. DeepL publishes no price split between
-// latency_optimized and quality_optimized model types.
+// latency_optimized and quality_optimized model types. The 2026-11-16 review
+// confirmed character metering but could not revalidate this regional rate in
+// the publicly rendered pricing page; it is not a newly certified universal tariff.
 const deeplUsdPerMillionCharacters = 27.5
 
 // ModelRatios prices DeepL per SOURCE CHARACTER, which is the unit this adaptor

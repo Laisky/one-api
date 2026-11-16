@@ -121,7 +121,9 @@ func (a *Adaptor) GetModelList() []string {
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	merged := make(map[string]adaptor.ModelConfig)
 	for k, v := range a.Adaptor.GetDefaultModelPricing() {
-		merged[k] = v
+		if !unverifiedNovemberOpenAIModel(k) {
+			merged[k] = v
+		}
 	}
 	for k, v := range a.claude.GetDefaultModelPricing() {
 		// Foundry 5.2 supports xhigh but not the native max effort level.
@@ -134,6 +136,9 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 }
 
 func (a *Adaptor) GetModelRatio(modelName string) float64 {
+	if unverifiedNovemberOpenAIModel(strings.ToLower(strings.TrimSpace(modelName))) {
+		return a.DefaultPricingMethods.GetModelRatio(modelName)
+	}
 	if meta.IsClaudeModelName(modelName) {
 		return a.claude.GetModelRatio(modelName)
 	}
@@ -141,6 +146,9 @@ func (a *Adaptor) GetModelRatio(modelName string) float64 {
 }
 
 func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
+	if unverifiedNovemberOpenAIModel(strings.ToLower(strings.TrimSpace(modelName))) {
+		return a.DefaultPricingMethods.GetCompletionRatio(modelName)
+	}
 	if meta.IsClaudeModelName(modelName) {
 		return a.claude.GetCompletionRatio(modelName)
 	}

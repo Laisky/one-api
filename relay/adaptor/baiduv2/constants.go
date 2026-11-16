@@ -11,6 +11,7 @@ import (
 // Source: https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya
 // ModelRatios contains each provider model exactly once, with no patch overlays.
 var ModelRatios = adaptor.JoinModelCatalogs(
+	novemberModels(),
 	deepseekModels(),
 	ernieModels(),
 	otherModels(),

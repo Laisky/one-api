@@ -27,6 +27,7 @@ var ModelRatios = applyOpenAIModelCatalog202610(applyOpenAIModelCatalog202609(me
 	audioModelRatios,
 	imageModelRatios,
 	image25ModelRatios,
+	november2026ModelRatios,
 	videoModelRatios,
 )))
 

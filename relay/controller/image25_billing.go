@@ -9,12 +9,13 @@ import (
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
-// isGPTImage25Model identifies the four verified token-priced image IDs.
+// isGPTImage25Model identifies verified GPT Image 2.5 and 2.6 token-priced IDs.
 // Parameters: name is the mapped provider model. Returns: whether this policy applies.
 func isGPTImage25Model(name string) bool {
 	switch name {
 	case "gpt-image-2.5-sunburst", "gpt-image-2.5-sunburst-2026-09-08",
-		"gpt-image-2.5-flare", "gpt-image-2.5-flare-2026-09-08":
+		"gpt-image-2.5-flare", "gpt-image-2.5-flare-2026-09-08",
+		"gpt-image-2.6-sunburst", "gpt-image-2.6-flare":
 		return true
 	default:
 		return false
@@ -23,7 +24,7 @@ func isGPTImage25Model(name string) bool {
 
 // imagePostConsumeDelta computes the remaining debit or reservation refund.
 // Parameters: name selects the billing policy; used and reserved are quota units.
-// Returns: a signed delta for GPT Image 2.5, preserving legacy settlement elsewhere.
+// Returns: a signed delta for GPT Image 2.5/2.6, preserving legacy settlement elsewhere.
 func imagePostConsumeDelta(name string, used, reserved int64) int64 {
 	delta := used - reserved
 	if delta < 0 && !isGPTImage25Model(name) {
@@ -105,11 +106,11 @@ func validateGPTImage25Billing(name string, fallbackUSD, tier, group float64, co
 		return nil
 	}
 	if fallbackUSD <= 0 || tier <= 0 || group <= 0 || count <= 0 {
-		return errors.New("GPT Image 2.5 requires a positive image.price_per_image_usd reservation/fallback tariff in channel model_configs; this is operator policy, not an official per-image price")
+		return errors.New("GPT Image 2.5/2.6 requires a positive image.price_per_image_usd reservation/fallback tariff in channel model_configs; this is operator policy, not an official per-image price")
 	}
 	perImage := math.Ceil(fallbackUSD * billingratio.QuotaPerUsd * tier * group)
 	if math.IsNaN(perImage) || math.IsInf(perImage, 0) || perImage <= 0 || perImage >= float64(uint64(1)<<63)/float64(count) {
-		return errors.New("GPT Image 2.5 reservation/fallback tariff must produce finite, representable quota")
+		return errors.New("GPT Image 2.5/2.6 reservation/fallback tariff must produce finite, representable quota")
 	}
 	return nil
 }

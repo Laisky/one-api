@@ -71,6 +71,7 @@ func textImageVideoFileInput() []string { return []string{"text", "image", "vide
 //   - https://docs.bigmodel.cn/cn/guide/models/text/* and /vlm/*
 //   - https://huggingface.co/zai-org for open-weight HuggingFace IDs.
 var ModelRatios = mergeModelRatios(
+	flashXLegalModels(),
 	flagshipTextModels,
 	flagshipVisionModels,
 	languageModels,

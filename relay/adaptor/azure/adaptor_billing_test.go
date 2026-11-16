@@ -25,8 +25,14 @@ func TestPricingCatalogsAreDisjoint(t *testing.T) {
 
 	a := &Adaptor{}
 	merged := a.GetDefaultModelPricing()
-	require.Equal(t, len(openai.ModelRatios)+len(anthropic.ModelRatios), len(merged),
-		"merged pricing size must equal the sum of both catalogs — a smaller size means a key collision dropped an entry")
+	// The November native additions have no independently verified Foundry
+	// contract. Their deliberate exclusion must not mask any other lost entry.
+	for _, name := range []string{"gpt-6-cyber", "gpt-image-2.6-sunburst", "gpt-image-2.6-flare"} {
+		require.Contains(t, openai.ModelRatios, name)
+		require.NotContains(t, merged, name)
+	}
+	require.Equal(t, len(openai.ModelRatios)+len(anthropic.ModelRatios)-3, len(merged),
+		"merged pricing must retain both catalogs except the three unverified native-only additions")
 }
 
 // TestEveryAdvertisedModelBillsAtItsFamilyRate quantifies billing correctness for

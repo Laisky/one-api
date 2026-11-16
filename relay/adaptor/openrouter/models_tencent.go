@@ -70,9 +70,9 @@ func tencentModels() map[string]adaptor.ModelConfig {
 			Description:                 "tencent/hy3-preview on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"tencent/hy4-preview": {
-			Ratio:            nativeRate(0.7506),
+			Ratio:            nativeRate(0.834),
 			CompletionRatio:  (2.2509 * 1.0) / 0.7506,
-			CachedInputRatio: nativeRate(0.0378),
+			CachedInputRatio: nativeRate(0.042),
 			TimeWindows: []adaptor.TimeWindow{
 				{
 					Name:     "openrouter-1",
@@ -99,12 +99,12 @@ func tencentModels() map[string]adaptor.ModelConfig {
 			MaxOutputTokens:             64000,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "max_completion_tokens", "max_tokens", "min_p", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_completion_tokens", "max_tokens", "min_p", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			SupportedReasoningEfforts:   []string{"high", "low", "none"},
 			DefaultReasoningEffort:      "high",
 			HuggingFaceID:               "tencent/Hy4-preview",
-			Description:                 "tencent/hy4-preview on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified.",
+			Description:                 "tencent/hy4-preview on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 	}
 }

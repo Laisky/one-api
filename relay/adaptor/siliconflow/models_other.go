@@ -347,7 +347,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		"inclusionAI/Ling-mini-2.0": {
 			Ratio:           nativeRate(0.5),
 			CompletionRatio: 4,
-			Description:     "inclusionAI/Ling-mini-2.0 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:     "inclusionAI/Ling-mini-2.0 on siliconflow; official catalog snapshot 2026-09-24. SiliconFlow announced retirement on 2026-11-16; the historical ID and tariff remain for administrator configurations. Source: https://docs.siliconflow.cn/docs/release-notes/overview",
 		},
 		"internlm/internlm2_5-7b-chat": {
 			Ratio:                       nativeRate(0.49000000000000005),
@@ -483,7 +483,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		"stepfun-ai/Step-3.5-Flash": {
 			Ratio:           nativeRate(0.7),
 			CompletionRatio: 3.0000000000000004,
-			Description:     "stepfun-ai/Step-3.5-Flash on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:     "stepfun-ai/Step-3.5-Flash on siliconflow; official catalog snapshot 2026-09-24. SiliconFlow announced retirement on 2026-11-16; the historical ID and tariff remain for administrator configurations. Source: https://docs.siliconflow.cn/docs/release-notes/overview",
 		},
 		"tencent/Hunyuan-A13B-Instruct": {
 			Ratio:           nativeRate(1),
@@ -527,7 +527,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "max_tokens", "stop", "presence_penalty", "frequency_penalty", "seed", "response_format", "tools", "tool_choice"},
 			Quantization:                "fp8",
 			HuggingFaceID:               "tencent/Hunyuan-A13B-Instruct",
-			Description:                 "tencent/Hunyuan-A13B-Instruct on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "tencent/Hunyuan-A13B-Instruct on siliconflow; official catalog snapshot 2026-09-24. SiliconFlow announced retirement on 2026-11-16; the historical ID and tariff remain for administrator configurations. Source: https://docs.siliconflow.cn/docs/release-notes/overview",
 		},
 		"tencent/Hunyuan-MT-7B": {
 			Ratio:           0,

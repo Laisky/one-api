@@ -19,9 +19,11 @@ import (
 func TestMistralOctoberReasoningWire(t *testing.T) {
 	t.Parallel()
 	for id, efforts := range map[string][]string{
-		"zai-glm-5-3":       {"low", "high", "max"},
-		"mistral-large-4":   {"none", "high"},
-		"mistral-large-4-0": {"none", "high"},
+		"zai-glm-5-3":          {"low", "high", "max"},
+		"zai-glm-5-3-flash":    {"low", "high", "max"},
+		"mistral-large-latest": {"low", "medium", "high"},
+		"mistral-large-4":      {"low", "medium", "high"},
+		"mistral-large-4-0":    {"low", "medium", "high"},
 	} {
 		for _, effort := range efforts {
 			for _, source := range []string{"chat", "responses"} {
@@ -85,12 +87,12 @@ func TestMistralLarge4LaunchWindow(t *testing.T) {
 				at                    string
 				input, cached, output float64
 			}{
-				{"2026-10-05T23:59:59.999999999Z", 1.36, 0.14, 4.18},
+				{"2026-10-05T23:59:59.999999999Z", 0.70, 0.07, 2.10},
 				{"2026-10-06T00:00:00Z", 0.68, 0.07, 2.09},
 				{"2026-10-12T12:00:00Z", 0.68, 0.07, 2.09},
 				{"2026-10-19T23:59:59.999999999Z", 0.68, 0.07, 2.09},
-				{"2026-10-20T00:00:00Z", 1.36, 0.14, 4.18},
-				{"2026-10-19T20:00:00-04:00", 1.36, 0.14, 4.18},
+				{"2026-10-20T00:00:00Z", 0.70, 0.07, 2.10},
+				{"2026-10-19T20:00:00-04:00", 0.70, 0.07, 2.10},
 			} {
 				at, err := time.Parse(time.RFC3339Nano, tc.at)
 				require.NoError(t, err)
@@ -106,6 +108,8 @@ func TestMistralLarge4LaunchWindow(t *testing.T) {
 	require.NotEmpty(t, two.TimeWindows)
 	require.NotSame(t, &one.TimeWindows[0], &two.TimeWindows[0])
 	require.NotSame(t, &one.InputModalities[0], &two.InputModalities[0])
-	legacy := a.GetDefaultModelPricing()["mistral-large-latest"]
-	require.InDelta(t, 0.5, legacy.Ratio/ratio.MilliTokensUsd, 1e-12, "do not infer an undocumented latest-alias migration")
+	latest := a.GetDefaultModelPricing()["mistral-large-latest"]
+	require.InDelta(t, 0.70, latest.Ratio/ratio.MilliTokensUsd, 1e-12, "the documented latest alias now resolves to Large 4")
+	require.Equal(t, one.SupportedReasoningEfforts, latest.SupportedReasoningEfforts)
+	require.InDelta(t, 0.5, a.GetModelRatio("mistral-large-2512")/ratio.MilliTokensUsd, 1e-12, "pinned Large 3 pricing is unchanged")
 }

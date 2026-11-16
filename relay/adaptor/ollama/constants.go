@@ -44,7 +44,9 @@ var (
 // ModelRatios contains a curated Ollama compatibility list.
 // Model list is derived from the keys of this map, eliminating redundancy.
 // Ollama's official search page now exposes a much broader local and cloud catalog, but this adaptor intentionally keeps a
-// small stable set until there is an explicit product decision to broaden the supported surface.
+// small stable compatibility set. Actual model names, tags and quantizations
+// depend on the installation and are discoverable from its GET /api/tags endpoint;
+// public library availability does not mean a model is installed on a channel.
 //
 // Catalog snapshot verified 2026-05-19 against https://ollama.com/library:
 // the top-pull entries (llama3.1 114M, deepseek-r1 85M, llama3.2 69M, gemma3 36M,

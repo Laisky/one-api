@@ -32,9 +32,15 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:     "MiniMax/MiniMax-M2.7 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"MiniMax/MiniMax-M3": {
-			Ratio:           nativeRate(4.2),
-			CompletionRatio: 4,
-			Description:     "MiniMax/MiniMax-M3 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Ratio: nativeRate(2.1), CompletionRatio: 4, CachedInputRatio: nativeRate(.42),
+			Tiers: []adaptor.ModelRatioTier{{
+				InputTokenThreshold: 512001,
+				Ratio:               nativeRate(4.2), CompletionRatio: 4, CachedInputRatio: nativeRate(.84),
+			}},
+			// Alibaba's own tariff and cache policy, checked 2026-11-16:
+			// https://help.aliyun.com/zh/model-studio/model-pricing
+			// https://help.aliyun.com/zh/model-studio/context-cache
+			Description: "MiniMax M3 supplied through Alibaba, Beijing CNY/M input/cache/output 2.1/0.42/8.4 up to 512K input, then 4.2/0.84/16.8. Native MiniMax Priority pricing is not an Alibaba tariff.",
 		},
 		"Moonshot-Kimi-K2-Instruct": {
 			Ratio:           nativeRate(4),

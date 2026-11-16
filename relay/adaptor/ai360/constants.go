@@ -5,19 +5,14 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
 
-// AI360 (奇虎 360 智脑) hosts closed-weight chat and embedding models behind an
-// OpenAI-compatible API. Reference docs (re-audited 2026-05-18):
-//   - https://ai.360.cn/ (product overview)
-//   - https://ai.360.com/platform/docs (developer documentation; behind login)
-//   - https://aiplus.360.cn/360gptpro (enterprise console; no public per-token pricing)
-//
-// The official 360 platform docs require login, and the public marketing pages
-// no longer publish per-token pricing. The entries below reflect the
-// historical pricing surfaced by the original constants and remain
-// UNVERIFIED against current 2026 docs — they are retained because none of
-// these SKUs has been officially retired. New 360GPT-Pro / 360GPT-Turbo
-// variants advertised on the marketing site lack public USD-per-token data,
-// so they are intentionally omitted to avoid speculative pricing.
+// AI360 retains historical chat and embedding metadata. Rechecked 2026-11-16:
+// https://ai.360.com/open/zh/models now publishes native-CNY model cards, and
+// https://ai.360.com/docs/quick-start documents the newer public platform.
+// The historical entries below remain unverified against current tariffs.
+// Router cards may expose different provider-specific prices for the same
+// virtual model. Their current API host is api.360.cn, whereas the legacy
+// channel defaults to ai.360.cn. Those routing, tariff-selection and cache-write
+// distinctions need separate qualification before importing router defaults.
 //
 // All 360GPT* and embedding SKUs are closed-weight (HuggingFaceID stays empty).
 

@@ -27,7 +27,7 @@ func TestOctoberTogetherPublishedRates(t *testing.T) {
 		{"Qwen/Qwen3.7-Max", 2.5, .5, 7.5},
 		{"Qwen/Qwen3.6-Plus", .5, 0, 3},
 		{"Qwen/Qwen3.5-9B", .17, 0, .25},
-		{"moonshotai/Kimi-K3", 2.7, .3, 13.5},
+		{"moonshotai/Kimi-K3", 3, .3, 15},
 		{"zai-org/GLM-5.3", 1.4, .26, 4.4},
 		{"zai-org/GLM-5.3-Flash", .15, .03, .5},
 		{"zai-org/GLM-5.2", 1.4, .26, 4.4},

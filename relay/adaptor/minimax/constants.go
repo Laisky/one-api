@@ -15,12 +15,12 @@ var (
 )
 
 // ModelRatios contains one complete definition per MiniMax API model ID.
-// Current model and tariff sources were checked on 2026-10-12:
+// Current model and tariff sources were checked on 2026-11-16:
 // https://platform.minimax.cn/docs/guides/models-intro
-// https://platform.minimax.cn/docs/guides/pricing-paygo
+// https://platform.minimax.cn/docs/pricing/overview
 // https://platform.minimax.cn/docs/api-reference/text-openai-api
 // Native MiniMax transport is not implemented by this catalogue-only adaptor.
-var ModelRatios = adaptor.JoinModelCatalogs(minimaxCurrentModels(), minimaxLegacyModels())
+var ModelRatios = adaptor.JoinModelCatalogs(minimaxM31FlashModels(), minimaxCurrentModels(), minimaxLegacyModels())
 
 // ModelList retains the compatibility list derived from the complete catalogue.
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)

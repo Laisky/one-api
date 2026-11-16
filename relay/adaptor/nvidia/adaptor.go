@@ -61,15 +61,16 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	return nil
 }
 
-// ConvertRequest preserves native GLM 5.3 effort controls while retaining the
-// preceding normalization for other NVIDIA models. Parameters are the request
+// ConvertRequest preserves model-specific documented effort controls while
+// retaining the preceding normalization for other NVIDIA models. Parameters are the request
 // context, relay mode and chat request; it returns the normalized request or an
-// error for nil input. The GLM model cards explicitly support reasoning_effort.
+// error for nil input. The hosted endpoint schema, rather than the creator's
+// checkpoint capabilities, determines which models advertise reasoning_effort.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	if request.ReasoningEffort != nil && request.Model != "z-ai/glm-5.3" && request.Model != "z-ai/glm-5.3-flash" {
+	if request.ReasoningEffort != nil && len(ModelRatios[request.Model].SupportedReasoningEfforts) == 0 {
 		request.ReasoningEffort = nil
 	}
 	return request, nil

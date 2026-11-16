@@ -312,12 +312,12 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 	if meta != nil {
 		channelType = meta.ChannelType
 	}
-	// Terra's published model tariff currently covers Standard only. Force a
+	// Terra and Cyber currently have only Standard tariffs in this catalog. Force a
 	// stable default rather than allowing the upstream project's auto/Fast tier
 	// to incur a higher bill than the quota reserved by this gateway.
-	if channelType == channeltype.OpenAI && normalizedModelName(actualModel) == "gpt-6.1-terra" {
+	if channelType == channeltype.OpenAI && (normalizedModelName(actualModel) == "gpt-6.1-terra" || normalizedModelName(actualModel) == "gpt-6-cyber") {
 		if request.ServiceTier != nil && normalizedModelName(*request.ServiceTier) != "default" {
-			return errors.Errorf("GPT-6.1 Terra Standard billing does not support service_tier %q", *request.ServiceTier)
+			return errors.Errorf("%s Standard billing does not support service_tier %q", actualModel, *request.ServiceTier)
 		}
 		request.ServiceTier = stringRef("default")
 	}
@@ -350,6 +350,7 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 		// keep native GPT-6 system instructions for the Responses converter. It
 		// moves the leading system message into the upstream instructions field.
 		_, publishedGPT6 := gpt6ModelRatios[normalizedModelName(actualModel)]
+		publishedGPT6 = publishedGPT6 || normalizedModelName(actualModel) == "gpt-6-cyber"
 		if !publishedGPT6 || meta.ChannelType != channeltype.OpenAI || !shouldForceResponseAPI(meta) {
 			request.Messages = func(raw []model.Message) (filtered []model.Message) {
 				for i := range raw {

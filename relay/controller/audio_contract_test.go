@@ -58,7 +58,7 @@ func TestProtocolAuditAudioHTTP(t *testing.T) {
 		{name: "mimo_operator_characters", actual: "XiaomiMiMo/MiMo-V2.5-tts", text: "Hello", channel: channeltype.DeepInfra, status: 200, charge: 25, group: 1, override: &model.ModelConfigLocal{Audio: &model.AudioPricingLocal{InputUnit: "characters", InputPriceQuantity: 1e6, InputPriceUsd: 10}}},
 		{name: "mistral_chars", actual: "voxtral-mini-tts-2603", text: "你é🙂", channel: channeltype.Mistral, status: 200, charge: 24, group: 1},
 		{name: "mistral_legacy_alias", actual: "voxtral-tts-2603", text: "hello", channel: channeltype.Mistral, status: 200, charge: 40, group: 1},
-		{name: "mistral_latest", actual: "voxtral-mini-tts-latest", text: "hello", channel: channeltype.Mistral, status: 200, charge: 40, group: 1},
+		{name: "mistral_latest", actual: "voxtral-mini-tts-latest", text: "hello", channel: channeltype.Mistral, status: 200, charge: 33, group: 1},
 		{name: "siliconflow_bytes", actual: "FunAudioLLM/CosyVoice2-0.5B", text: "你é🙂", channel: channeltype.SiliconFlow, status: 200, charge: 33, group: 1},
 		{name: "groq_chars", actual: "canopylabs/orpheus-v1-english", text: "你é🙂", channel: channeltype.Groq, status: 200, charge: 33, group: 1},
 		{name: "groq_arabic", actual: "canopylabs/orpheus-arabic-saudi", text: "مرحبا", channel: channeltype.Groq, status: 200, charge: 100, group: 1},

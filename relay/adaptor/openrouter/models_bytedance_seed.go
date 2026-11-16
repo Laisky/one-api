@@ -85,18 +85,19 @@ func bytedance_seedModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
-			SupportedReasoningEfforts:   []string{"high", "medium", "low", "minimal"},
+			SupportedReasoningEfforts:   []string{"high", "medium", "low", "minimal", "none"},
 			DefaultReasoningEffort:      "medium",
-			Description:                 "bytedance-seed/seed-2.0-lite on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "bytedance-seed/seed-2.0-lite on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"bytedance-seed/seed-2.0-mini": {
 			Ratio:           nativeRate(0.09999999999999999),
 			CompletionRatio: 4,
-			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(0.19999999999999998),
-				CompletionRatio:     4,
-				InputTokenThreshold: 128000,
-			},
+			Tiers: []adaptor.ModelRatioTier{
+				{
+					Ratio:               nativeRate(0.2),
+					CompletionRatio:     4,
+					InputTokenThreshold: 128000,
+				},
 			},
 			ContextLength:               262144,
 			MaxOutputTokens:             131072,
@@ -104,9 +105,9 @@ func bytedance_seedModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
-			SupportedReasoningEfforts:   []string{"high", "medium", "low", "minimal"},
+			SupportedReasoningEfforts:   []string{"high", "medium", "low", "minimal", "none"},
 			DefaultReasoningEffort:      "medium",
-			Description:                 "bytedance-seed/seed-2.0-mini on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "bytedance-seed/seed-2.0-mini on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 	}
 }

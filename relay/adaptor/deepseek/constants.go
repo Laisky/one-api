@@ -86,9 +86,10 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 }
 
 // DeepseekToolingDefaults does not advertise a separate built-in tool policy.
-// Flash ignores native Responses web_search; Pro supports it upstream, but this
-// gateway does not enable or price that built-in integration. Function tools
-// remain supported with the existing token accounting policy.
+// The 2026-11-13 upstream built-in search, URL and file tools require distinct
+// protocol handling and per-call billing that this gateway has not implemented.
+// Function tools retain the existing token accounting policy.
+// Source: https://api-docs.deepseek.com/news/news261113/
 var DeepseekToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{},
 }

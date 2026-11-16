@@ -28,7 +28,7 @@ var image25ModelRatios = map[string]adaptor.ModelConfig{
 		"GPT Image 2.5 Flare snapshot (2026-09-08): fast, high-quality everyday image generation and editing; supports low, medium, high, xhigh, max, and auto quality."),
 }
 
-// newGPTImage25Config creates independent metadata for one GPT Image 2.5 model.
+// newGPTImage25Config creates independent metadata for a GPT Image 2.5 or 2.6 model.
 // Parameters: description identifies the alias or snapshot. Returns: token-only
 // pricing and Image API defaults without undocumented context or output limits.
 func newGPTImage25Config(description string) adaptor.ModelConfig {

@@ -239,11 +239,11 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text", "image", "audio", "video"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
+			SupportedFeatures:           []string{"tools", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"max_tokens", "stop", "seed", "response_format", "tools", "tool_choice"},
 			Quantization:                "bf16",
 			HuggingFaceID:               "Qwen/Qwen3-Omni-30B-A3B-Thinking",
-			Description:                 "Qwen3 Omni 30B/A3B omnimodal (text/image/audio/video) reasoning chat model with 64K context.",
+			Description:                 "qwen/qwen3-omni-30b-a3b-thinking on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
 		},
 		"qwen/qwen3-vl-235b-a22b-instruct": {
 			Ratio:                       nativeRate(0.3),
@@ -431,7 +431,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			InputModalities:   []string{"text", "image", "video"},
 			OutputModalities:  []string{"text"},
 			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
-			Description:       "qwen/qwen3.8-flash on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:       "qwen/qwen3.8-flash on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
+			CacheWrite5mRatio: nativeRate(0.2),
 		},
 		"qwen/qwen3.8-max": {
 			Ratio:             nativeRate(2),
@@ -442,7 +443,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			InputModalities:   []string{"text", "image", "video"},
 			OutputModalities:  []string{"text"},
 			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
-			Description:       "qwen/qwen3.8-max on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:       "qwen/qwen3.8-max on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
+			CacheWrite5mRatio: nativeRate(2.5),
 		},
 	}
 }

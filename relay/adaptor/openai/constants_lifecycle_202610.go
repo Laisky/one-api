@@ -9,7 +9,7 @@ import (
 // openAIOctoberLifecycle records exact published IDs, without prefix matching
 // or extrapolating a snapshot's date to every alias in its family. Dates describe
 // OpenAI's API, not Azure or another provider's independently operated endpoint.
-// Reviewed 2026-10-13 America/Toronto (2026-10-14 UTC):
+// Reviewed 2026-11-16; supersedes the October audit's migration guidance:
 // https://developers.openai.com/api/docs/deprecations
 var openAIOctoberLifecycle = []struct {
 	models      string
@@ -18,21 +18,22 @@ var openAIOctoberLifecycle = []struct {
 }{
 	// The October 14 notice was visible during the October 13 Toronto audit.
 	{"gpt-4o-2024-08-06 gpt-4o-2024-11-20 gpt-4o-mini-2024-07-18 gpt-4.1-2025-04-14 gpt-4.1-mini-2025-04-14", "2027-01-14", "gpt-6-luna"},
-	{"gpt-5.3-codex gpt-5.1", "2027-04-01", "gpt-6-sol"},
+	{"gpt-5.3-codex gpt-5.1 gpt-5.1-2025-11-13", "2027-04-01", "gpt-6-sol"},
 	{"gpt-5.4-nano", "2027-04-01", "gpt-6-luna"},
-	{"tts-1 tts-1-hd gpt-4o-mini-tts-2025-12-15", "2027-01-06", "gpt-realtime-2.1-mini (Realtime API; not a drop-in audio/speech replacement)"},
-	{"whisper-1 gpt-4o-transcribe gpt-4o-mini-transcribe", "2027-02-26", "gpt-transcribe or gpt-live-transcribe; choose the appropriate transcription API"},
-	{"gpt-realtime", "2027-01-20", "gpt-realtime-2.1"},
-	{"gpt-audio gpt-audio-mini", "2027-01-20", "gpt-audio-1.5"},
-	{"gpt-realtime-mini", "2027-01-20", "gpt-realtime-2.1-mini"},
+	{"tts-1 tts-1-hd gpt-4o-mini-tts gpt-4o-mini-tts-2025-12-15", "2027-01-06", "gpt-realtime-2.1-mini (Realtime API; not a drop-in audio/speech replacement)"},
+	{"whisper-1 gpt-4o-transcribe gpt-4o-mini-transcribe gpt-4o-mini-transcribe-2025-12-15", "2027-02-26", "gpt-transcribe or gpt-live-transcribe; choose the appropriate transcription API"},
+	{"gpt-realtime gpt-realtime-2025-08-28", "2027-01-20", "gpt-realtime-2.1"},
+	{"gpt-audio gpt-audio-2025-08-28 gpt-audio-mini gpt-audio-mini-2025-12-15", "2027-01-20", "gpt-audio-1.5"},
+	{"gpt-realtime-mini gpt-realtime-mini-2025-12-15", "2027-01-20", "gpt-realtime-2.1-mini"},
 	{"gpt-4o-mini-transcribe-2025-03-20", "2027-01-20", "gpt-4o-mini-transcribe-2025-12-15"},
-	{"gpt-5-2025-08-07 o3-2025-04-16", "2026-12-11", "gpt-5.6-sol"},
-	{"gpt-5-mini-2025-08-07", "2026-12-11", "gpt-5.6-terra"},
-	{"gpt-5-nano-2025-08-07", "2026-12-11", "gpt-5.6-luna"},
-	{"gpt-5-pro-2025-10-06 o3-pro-2025-06-10", "2026-12-11", "gpt-5.6-sol with reasoning.mode=pro (not a separate native model ID)"},
-	{"gpt-image-1-mini gpt-image-1.5 chatgpt-image-latest", "2026-12-01", "gpt-image-2.5-sunburst or gpt-image-2.5-flare"},
+	{"gpt-5 gpt-5-2025-08-07 o3 o3-2025-04-16", "2026-12-11", "gpt-6.1-sol"},
+	{"gpt-5-mini gpt-5-mini-2025-08-07", "2026-12-11", "gpt-6.1-terra"},
+	{"gpt-5-nano gpt-5-nano-2025-08-07", "2026-12-11", "gpt-6-luna"},
+	{"gpt-5-pro gpt-5-pro-2025-10-06 o3-pro o3-pro-2025-06-10", "2026-12-11", "gpt-6.1-sol with reasoning.mode=pro in Responses (not a separate native model ID)"},
+	{"gpt-image-1-mini gpt-image-1.5 gpt-image-1.5-2025-12-16 chatgpt-image-latest", "2026-12-01", "gpt-image-2.6-sunburst or gpt-image-2.6-flare"},
+	{"gpt-image-2 gpt-image-2-2026-04-21", "2027-02-10", "gpt-image-2.6-sunburst or gpt-image-2.6-flare"},
 	{"gpt-3.5-turbo-0125 gpt-3.5-turbo", "2026-10-23", "gpt-5.6-terra"},
-	{"gpt-4-0613 gpt-4 gpt-4-turbo gpt-4-turbo-2024-04-09 gpt-4o-2024-05-13 o1 o1-2024-12-17 o3-mini o3-mini-2025-01-31", "2026-10-23", "gpt-5.6-sol"},
+	{"gpt-4-0613 gpt-4 gpt-4-1106-preview gpt-4-turbo gpt-4-turbo-2024-04-09 gpt-4o-2024-05-13 o1 o1-2024-12-17 o3-mini o3-mini-2025-01-31", "2026-10-23", "gpt-5.6-sol"},
 	{"gpt-4.1-nano gpt-4.1-nano-2025-04-14", "2026-10-23", "gpt-5.6-luna"},
 	{"gpt-image-1", "2026-10-23", "gpt-image-2.5-sunburst or gpt-image-2.5-flare"},
 	{"o1-pro o1-pro-2025-03-19", "2026-10-23", "gpt-5.6-sol with reasoning.mode=pro (not a separate native model ID)"},

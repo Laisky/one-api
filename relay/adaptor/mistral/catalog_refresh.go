@@ -19,7 +19,6 @@ func init() {
 		"mistral-medium-latest": 0.15,
 		"mistral-medium-2604":   0.15,
 		"mistral-medium-3-5":    0.15,
-		"mistral-large-latest":  0.05,
 		"mistral-large-2512":    0.05,
 		"mistral-small-latest":  0.015,
 		"mistral-small-2603":    0.015,
@@ -42,7 +41,7 @@ func init() {
 	}
 
 	for name, lifecycle := range map[string]string{
-		"zai-glm-5-2": "Deprecated; scheduled to retire on 2026-10-31. Use zai-glm-5-3 at the same tariff.",
+		"zai-glm-5-2": "Deprecated; retired on 2026-10-31. Use zai-glm-5-3 at the same tariff.",
 		"zai-glm-5-3": "Generally Available since 2026-09-28.",
 	} {
 		if _, exists := ModelRatios[name]; exists {

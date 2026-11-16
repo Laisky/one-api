@@ -17,7 +17,7 @@ const (
 )
 
 // normalizeOpenAITerraStandardPricing enforces the common unpriced-cache
-// boundary for published native GPT-5.6/6 models and additionally pins Terra
+// boundary for published native GPT-5.6/6 models and additionally pins Terra/Cyber
 // to the Standard service tier. It checks raw controls before root filtering.
 func normalizeOpenAITerraStandardPricing(root map[string]json.RawMessage, model string, channel int) (bool, error) {
 	if channel != channeltype.OpenAI {
@@ -29,7 +29,7 @@ func normalizeOpenAITerraStandardPricing(root map[string]json.RawMessage, model 
 			return false, err
 		}
 	}
-	if modelName != "gpt-6.1-terra" {
+	if modelName != "gpt-6.1-terra" && modelName != "gpt-6-cyber" {
 		return false, nil
 	}
 
@@ -37,10 +37,10 @@ func normalizeOpenAITerraStandardPricing(root map[string]json.RawMessage, model 
 	if current, ok := root["service_tier"]; ok && !bytes.Equal(bytes.TrimSpace(current), []byte("null")) {
 		var requested string
 		if err := json.Unmarshal(current, &requested); err != nil {
-			return false, errors.Wrap(err, "decode Terra service_tier")
+			return false, errors.Wrap(err, "decode OpenAI Standard service_tier")
 		}
 		if !strings.EqualFold(strings.TrimSpace(requested), "default") {
-			return false, errors.Errorf("GPT-6.1 Terra Standard pricing does not support service_tier %q", requested)
+			return false, errors.Errorf("%s Standard pricing does not support service_tier %q", modelName, requested)
 		}
 	}
 	if bytes.Equal(bytes.TrimSpace(root["service_tier"]), []byte(standard)) {

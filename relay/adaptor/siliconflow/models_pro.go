@@ -48,7 +48,7 @@ func proModels() map[string]adaptor.ModelConfig {
 				InputTokenThreshold: 32000,
 			},
 			},
-			Description: "Pro/zai-org/GLM-5.1 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description: "Pro/zai-org/GLM-5.1 on siliconflow; official catalog snapshot 2026-09-24. SiliconFlow announced retirement on 2026-11-10; the historical ID and tariff remain for administrator configurations. Source: https://docs.siliconflow.cn/docs/release-notes/overview",
 		},
 	}
 }

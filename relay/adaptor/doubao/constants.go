@@ -66,7 +66,7 @@ var doubaoSamplingParams = []string{
 // ModelRatios contains all supported models and their pricing ratios.
 // Model list is derived from the keys of this map, eliminating redundancy.
 // Pricing source: https://www.volcengine.com/docs/82379/1099320 (last verified 2026-05).
-var ModelRatios = adaptor.JoinModelCatalogs(legacyModels(), currentArkModels())
+var ModelRatios = adaptor.JoinModelCatalogs(legacyModels(), currentArkModels(), novemberArkModels())
 
 // legacyModels returns the preceding compatibility catalogue without changes.
 // It takes no parameters and returns a new map of the historical definitions.

@@ -42,7 +42,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen2.5-72B-Instruct on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen2.5-72B-Instruct on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3-14B": {
 			Ratio:                       nativeRate(0.12000000000000001),
@@ -52,7 +53,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3-14B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3-14B on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3-235B-A22B-Instruct-2507": {
 			Ratio:                       nativeRate(0.09),
@@ -62,7 +64,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3-235B-A22B-Instruct-2507 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3-235B-A22B-Instruct-2507 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3-30B-A3B": {
 			Ratio:                       nativeRate(0.12000000000000001),
@@ -72,7 +75,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3-30B-A3B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3-30B-A3B on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3-32B": {
 			Ratio:                       nativeRate(0.08),
@@ -82,7 +86,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3-32B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3-32B on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3-ASR-0.6B": {
 			Ratio:           nativeRate(0.3333333333333333),
@@ -115,7 +120,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3-Coder-480B-A35B-Instruct-Turbo on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp4",
 		},
 		"Qwen/Qwen3-Embedding-0.6B": {
 			Ratio:           nativeRate(0.01),
@@ -180,7 +186,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3-Next-80B-A3B-Instruct on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3-Next-80B-A3B-Instruct on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3-Reranker-0.6B": {
 			Ratio:                       nativeRate(0.01),
@@ -232,7 +239,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3-VL-235B-A22B-Instruct on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3-VL-235B-A22B-Instruct on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3-VL-30B-A3B-Instruct": {
 			Ratio:                       nativeRate(0.15),
@@ -242,7 +250,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3-VL-30B-A3B-Instruct on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3-VL-30B-A3B-Instruct on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3.5-122B-A10B": {
 			Ratio:                       nativeRate(0.29),
@@ -262,7 +271,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3.5-27B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3.5-27B on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3.5-35B-A3B": {
 			Ratio:                       nativeRate(0.13999999999999999),
@@ -273,7 +283,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3.5-35B-A3B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3.5-35B-A3B on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3.5-397B-A17B": {
 			Ratio:                       nativeRate(0.45),
@@ -284,7 +295,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3.5-397B-A17B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3.5-397B-A17B on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3.5-9B": {
 			Ratio:                       nativeRate(0.1),
@@ -292,9 +304,10 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			ContextLength:               262144,
 			InputModalities:             []string{"text", "image", "video"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3.5-9B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3.5-9B on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "bf16",
 		},
 		"Qwen/Qwen3.6-27B": {
 			Ratio:                       nativeRate(0.32),
@@ -304,7 +317,8 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3.6-27B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3.6-27B on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3.6-35B-A3B": {
 			Ratio:                       nativeRate(0.1),
@@ -314,8 +328,9 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "Qwen/Qwen3.6-35B-A3B on DeepInfra; host token prices verified 2026-10-12. Existing capability metadata is retained. A direct-creator redirect or another provider's tariff is not a DeepInfra price change.",
+			Description:                 "Qwen/Qwen3.6-35B-A3B on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
 			CachedInputRatio:            nativeRate(0.1),
+			Quantization:                "fp8",
 		},
 		"Qwen/Qwen3.7-Max": {
 			Ratio:                       nativeRate(2.5),

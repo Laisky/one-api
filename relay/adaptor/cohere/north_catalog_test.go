@@ -20,7 +20,9 @@ func TestNorthCatalogAndChat(t *testing.T) {
 		context, output int32
 	}{
 		{"north-mini-code-1-0", 256000, 64000},
+		{"north-mini-code-1.0", 256000, 64000},
 		{"north-small-translate-1-0", 16000, 16000},
+		{"north-small-translate-1.0", 16000, 16000},
 	} {
 		t.Run(tc.id, func(t *testing.T) {
 			t.Parallel()

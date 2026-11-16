@@ -15,7 +15,8 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "zai-org/GLM-4.6 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "zai-org/GLM-4.6 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp4",
 		},
 		"zai-org/GLM-4.7": {
 			Ratio:                       nativeRate(0.4),
@@ -26,7 +27,8 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "zai-org/GLM-4.7 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "zai-org/GLM-4.7 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp4",
 		},
 		"zai-org/GLM-4.7-Flash": {
 			Ratio:                       nativeRate(0.06),
@@ -70,7 +72,8 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "zai-org/GLM-5.2 on DeepInfra. Observed 25% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+			Description:                 "zai-org/GLM-5.2 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified. Includes the published 25% discount; no expiry is invented. Explicit cache writes are published at 1.25x/2x input for 5m/1h; TTL-specific request and receipt billing requires separate qualification.",
+			Quantization:                "fp4",
 		},
 		"zai-org/GLM-5.3": {
 			Ratio:             nativeRate(0.5625),
@@ -80,17 +83,19 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 			InputModalities:   []string{"text"},
 			OutputModalities:  []string{"text"},
 			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
-			Description:       "zai-org/GLM-5.3 on DeepInfra. Observed 37.5% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+			Description:       "zai-org/GLM-5.3 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified. Includes the published 37.5% discount; no expiry is invented.",
+			Quantization:      "fp4",
 		},
 		"zai-org/GLM-5.3-Flash": {
-			Ratio:             nativeRate(0.075),
+			Ratio:             nativeRate(0.15),
 			CompletionRatio:   3.3333333333333335,
-			CachedInputRatio:  nativeRate(0.015),
+			CachedInputRatio:  nativeRate(0.03),
 			ContextLength:     1048576,
 			InputModalities:   []string{"text", "image", "video"},
 			OutputModalities:  []string{"text"},
 			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
-			Description:       "zai-org/GLM-5.3-Flash on DeepInfra. Observed 50% promotion on 2026-09-24; discount applied once to token/cache prices. No end date published; this is a dated quote, not a permanent-price guarantee.",
+			Description:       "zai-org/GLM-5.3-Flash on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:      "fp4",
 		},
 	}
 }

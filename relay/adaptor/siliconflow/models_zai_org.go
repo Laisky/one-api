@@ -21,7 +21,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		"zai-org/GLM-4.5V": {
 			Ratio:           nativeRate(1),
 			CompletionRatio: 6,
-			Description:     "zai-org/GLM-4.5V on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:     "zai-org/GLM-4.5V on siliconflow; official catalog snapshot 2026-09-24. SiliconFlow announced retirement on 2026-11-16; the historical ID and tariff remain for administrator configurations. Source: https://docs.siliconflow.cn/docs/release-notes/overview",
 		},
 		"zai-org/GLM-4.6": {
 			Ratio:                       nativeRate(2.7300000000000004),

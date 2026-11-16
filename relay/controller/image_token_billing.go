@@ -18,6 +18,23 @@ type gptImageTokenBucketPricing struct {
 }
 
 var gptImageTokenBucketPrices = map[string]gptImageTokenBucketPricing{
+	// GPT Image 2.6 token rates verified 2026-11-16; no dated snapshots are published.
+	// https://developers.openai.com/api/docs/models/gpt-image-2.6-sunburst
+	// https://developers.openai.com/api/docs/models/gpt-image-2.6-flare
+	"gpt-image-2.6-sunburst": {
+		inputTextUSD:        5.0,
+		cachedInputTextUSD:  1.25,
+		inputImageUSD:       8.0,
+		cachedInputImageUSD: 2.0,
+		outputImageUSD:      30.0,
+	},
+	"gpt-image-2.6-flare": {
+		inputTextUSD:        5.0,
+		cachedInputTextUSD:  1.25,
+		inputImageUSD:       8.0,
+		cachedInputImageUSD: 2.0,
+		outputImageUSD:      30.0,
+	},
 	// https://platform.openai.com/docs/models/gpt-image-1
 	"gpt-image-1": {
 		inputTextUSD:        5.0,

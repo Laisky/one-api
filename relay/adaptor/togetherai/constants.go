@@ -11,6 +11,7 @@ import (
 // Source: https://docs.together.ai/docs/serverless-models
 // ModelRatios contains each provider model exactly once, with no patch overlays.
 var ModelRatios = adaptor.JoinModelCatalogs(
+	novemberChatModels1(),
 	black_forest_labsModels(),
 	deepseek_aiModels(),
 	googleModels(),

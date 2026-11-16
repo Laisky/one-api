@@ -11,6 +11,7 @@ import (
 // Source: https://api.novita.ai/v3/openai/models
 // ModelRatios contains each provider model exactly once, with no patch overlays.
 var ModelRatios = adaptor.JoinModelCatalogs(
+	novemberChatModels1(),
 	octoberChatModels(),
 	baiduModels(),
 	deepseekModels(),

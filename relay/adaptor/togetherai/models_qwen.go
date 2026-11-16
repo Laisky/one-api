@@ -173,8 +173,9 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			Ratio:             nativeRate(0.15),
 			CompletionRatio:   (0.47 * 1.0) / 0.15,
 			ContextLength:     1000000,
-			Description:       "Qwen/Qwen3.8-Flash on Together's public serverless API; verified 2026-10-12. Token tariffs are USD per million. Omitted source fields retain prior metadata rather than becoming invented limits or free prices.",
+			Description:       "Qwen/Qwen3.8-Flash on Together Standard serverless; published token prices and metadata checked 2026-11-16. Dedicated deployments and US-only endpoint surcharges are separate contracts. Unpublished output limits remain unspecified.",
 			SupportedFeatures: []string{"tools", "structured_outputs"},
+			OutputModalities:  []string{"text"},
 		},
 	}
 }

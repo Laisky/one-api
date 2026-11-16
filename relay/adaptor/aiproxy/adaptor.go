@@ -77,8 +77,9 @@ func (a *Adaptor) GetChannelName() string {
 
 // GetDefaultModelPricing returns the pricing table this channel advertises.
 //
-// constants.go sets ModelRatios = openai.ModelRatios because AIProxy resells the
-// OpenAI catalog. Without this override the embedded DefaultPricingMethods answered
+// The library adaptor retains historical OpenAI-derived defaults. Newly published
+// native OpenAI models require separate AIProxy evidence. Without this override
+// the embedded DefaultPricingMethods answered
 // a flat 2.5 USD/1M with completion ratio 1 for every model, so cheap models were
 // over-charged and expensive completions under-charged.
 //

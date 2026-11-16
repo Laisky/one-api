@@ -45,6 +45,14 @@ func (a *Adaptor) DoResponse(c *gin.Context,
 	resp *http.Response,
 	meta *meta.Meta) (usage *model.Usage,
 	err *model.ErrorWithStatusCode) {
+	if receipt := observeCyberResponseReceipt(resp, meta); receipt != nil {
+		defer func() {
+			// Non-stream Claude conversion deliberately returns nil usage so the
+			// controller still writes ConvertedResponse before settling its receipt.
+			convertedBody := err == nil && !meta.IsStream && c.GetBool(ctxkey.ClaudeMessagesConversion)
+			usage = receipt.finish(c, usage, convertedBody)
+		}()
+	}
 	if meta.IsStream {
 		var responseText string
 		handledClaudeStream := false

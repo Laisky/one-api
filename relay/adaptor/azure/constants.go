@@ -88,11 +88,31 @@ var FoundryPartnerModels = []string{
 }
 
 // ModelList is the set of models this adaptor advertises for the Azure channel:
-// the full Azure OpenAI catalog plus the Azure AI Foundry Claude models. Both
-// groups price correctly through the adaptor's per-family pricing dispatch.
-var ModelList = func() []string {
+// the inherited historical OpenAI catalog plus the Azure AI Foundry Claude models.
+// New native-only IDs require independent Foundry availability and pricing evidence.
+var ModelList = buildAzureModelList()
+
+// buildAzureModelList returns discovery IDs without newly added native-only
+// OpenAI models. It takes no arguments and preserves historical Azure membership.
+func buildAzureModelList() []string {
 	models := make([]string, 0, len(openai.ModelList)+len(FoundryClaudeModels))
-	models = append(models, openai.ModelList...)
+	for _, name := range openai.ModelList {
+		if !unverifiedNovemberOpenAIModel(name) {
+			models = append(models, name)
+		}
+	}
 	models = append(models, FoundryClaudeModels...)
 	return models
-}()
+}
+
+// unverifiedNovemberOpenAIModel reports whether name lacks a published Foundry
+// contract in the 2026-11-16 audit. It does not restrict operator deployment mappings.
+// https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure
+func unverifiedNovemberOpenAIModel(name string) bool {
+	switch name {
+	case "gpt-6-cyber", "gpt-image-2.6-sunburst", "gpt-image-2.6-flare":
+		return true
+	default:
+		return false
+	}
+}

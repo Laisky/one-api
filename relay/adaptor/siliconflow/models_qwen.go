@@ -101,7 +101,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "max_tokens", "stop", "presence_penalty", "frequency_penalty", "seed", "response_format", "tools", "tool_choice"},
 			Quantization:                "fp8",
 			HuggingFaceID:               "Qwen/Qwen3.5-122B-A10B",
-			Description:                 "Qwen/Qwen3.5-122B-A10B on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3.5-122B-A10B on siliconflow; official catalog snapshot 2026-09-24. SiliconFlow announced retirement on 2026-11-16; the historical ID and tariff remain for administrator configurations. Source: https://docs.siliconflow.cn/docs/release-notes/overview",
 		},
 		"Qwen/Qwen3.5-27B": {
 			Ratio:           nativeRate(0.6),
