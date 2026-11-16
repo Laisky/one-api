@@ -2,8 +2,9 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// moonshotaiModels returns the moonshotai model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// moonshotaiModels returns independently owned moonshotai defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func moonshotaiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"moonshotai/kimi-k2": {
@@ -96,6 +97,21 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 			DefaultReasoningEffort:      "max",
 			HuggingFaceID:               "moonshotai/Kimi-K3",
 			Description:                 "moonshotai/kimi-k3 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
+		"moonshotai/kimi-k3.1-pro": {
+			Ratio:                       nativeRate(0.2403),
+			CompletionRatio:             34.9658759883479,
+			CachedInputRatio:            nativeRate(0.2),
+			ContextLength:               1048576,
+			MaxOutputTokens:             943718,
+			InputModalities:             []string{"text", "image", "video"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			SupportedReasoningEfforts:   []string{"max", "high", "low", "none"},
+			DefaultReasoningEffort:      "max",
+			HuggingFaceID:               "moonshotai/Kimi-K3.1-Pro",
+			Description:                 "moonshotai/kimi-k3.1-pro on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"~moonshotai/kimi-latest": {
 			Ratio:                       nativeRate(0.1824),

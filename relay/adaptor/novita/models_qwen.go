@@ -2,8 +2,9 @@ package novita
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// qwenModels returns the qwen model defaults for novita.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// qwenModels returns independently owned qwen defaults for novita.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.novita.ai/v3/openai/models
 func qwenModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"qwen/qwen-2.5-72b-instruct": {
@@ -445,6 +446,19 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
 			Description:       "qwen/qwen3.8-max on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
 			CacheWrite5mRatio: nativeRate(2.5),
+		},
+		"qwen/qwen4-max": {
+			Ratio:             nativeRate(1.413),
+			CompletionRatio:   3.00070771408351,
+			CachedInputRatio:  nativeRate(0.071),
+			CacheWrite5mRatio: nativeRate(1.767),
+			CacheWrite1hRatio: nativeRate(2.827),
+			ContextLength:     1000000,
+			MaxOutputTokens:   131000,
+			InputModalities:   []string{"text", "image", "video"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+			Description:       "qwen/qwen4-max on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
 		},
 	}
 }

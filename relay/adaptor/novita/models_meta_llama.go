@@ -2,9 +2,10 @@ package novita
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// meta_llamaModels returns the meta_llama model defaults for novita.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func meta_llamaModels() map[string]adaptor.ModelConfig {
+// metaLlamaModels returns independently owned meta llama defaults for novita.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.novita.ai/v3/openai/models
+func metaLlamaModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"meta-llama/llama-3-70b-instruct": {
 			Ratio:                       nativeRate(0.51),

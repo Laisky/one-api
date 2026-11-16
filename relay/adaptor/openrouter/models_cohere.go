@@ -2,8 +2,9 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// cohereModels returns the cohere model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// cohereModels returns independently owned cohere defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func cohereModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"cohere/command-a": {

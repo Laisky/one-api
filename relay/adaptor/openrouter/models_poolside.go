@@ -2,8 +2,9 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// poolsideModels returns the poolside model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// poolsideModels returns independently owned poolside defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func poolsideModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"poolside/laguna-m.1": {

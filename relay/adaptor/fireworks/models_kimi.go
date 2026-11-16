@@ -10,20 +10,11 @@ import (
 //   - https://app.fireworks.ai/models/fireworks/kimi-k3
 //   - https://app.fireworks.ai/models/fireworks/kimi-k2p6
 //   - https://app.fireworks.ai/models/fireworks/kimi-k2p7-code
+//
+// Additional cards checked 2026-09-24 through 2026-11-16 against
+// https://docs.fireworks.ai/serverless/pricing
+// https://fireworks.ai/models/fireworks/kimi-k3p1-pro
 var kimiModels = map[string]adaptor.ModelConfig{
-	"accounts/fireworks/models/kimi-k3": {
-		Ratio:                       3.00 * ratio.MilliTokensUsd,
-		CompletionRatio:             15.00 / 3.00,
-		CachedInputRatio:            0.30 * ratio.MilliTokensUsd,
-		ContextLength:               1048576,
-		MaxOutputTokens:             131072,
-		InputModalities:             fwTextImageInModalities,
-		OutputModalities:            fwTextOnlyModalities,
-		SupportedFeatures:           fwReasoningFeatures,
-		SupportedSamplingParameters: fwChatSamplingParams,
-		HuggingFaceID:               "moonshotai/Kimi-K3",
-		Description:                 "Moonshot Kimi K3 (2.78T MoE) flagship with Kimi Delta Attention, native visual understanding, 1M-token context, function calling, and long-horizon coding/reasoning.",
-	},
 	"accounts/fireworks/models/kimi-k2p5": {
 		Ratio:                       0.60 * ratio.MilliTokensUsd,
 		CompletionRatio:             3.00 / 0.60,
@@ -52,8 +43,6 @@ var kimiModels = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "moonshotai/Kimi-K2.6",
 		Description:                 "Moonshot AI Kimi K2.6 (1T MoE) native multimodal agentic model for long-horizon coding, autonomous execution, and swarm orchestration.",
 	},
-
-	// Kimi K2.7 Code — $0.95 in / $4.00 out.
 	"accounts/fireworks/models/kimi-k2p7-code": {
 		Ratio:                       0.95 * ratio.MilliTokensUsd,
 		CompletionRatio:             4.00 / 0.95,
@@ -67,5 +56,29 @@ var kimiModels = map[string]adaptor.ModelConfig{
 		Quantization:                "fp8",
 		HuggingFaceID:               "moonshotai/Kimi-K2.7-Code",
 		Description:                 "Moonshot Kimi K2.7 Code on Fireworks, multimodal coding model, 262K context, $0.95/$4.00 per 1M.",
+	},
+	"accounts/fireworks/models/kimi-k3": {
+		Ratio:                       3.00 * ratio.MilliTokensUsd,
+		CompletionRatio:             15.00 / 3.00,
+		CachedInputRatio:            0.30 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		MaxOutputTokens:             131072,
+		InputModalities:             fwTextImageInModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		HuggingFaceID:               "moonshotai/Kimi-K3",
+		Description:                 "Moonshot Kimi K3 (2.78T MoE) flagship with Kimi Delta Attention, native visual understanding, 1M-token context, function calling, and long-horizon coding/reasoning.",
+	},
+	"accounts/fireworks/models/kimi-k3p1-pro": {
+		Ratio:                       2 * ratio.MilliTokensUsd,
+		CachedInputRatio:            .20 * ratio.MilliTokensUsd,
+		CompletionRatio:             fireworksOutputRatio(10, 2),
+		ContextLength:               1_048_576,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedSamplingParameters: []string{"temperature", "top_p", "max_tokens", "max_completion_tokens", "stop", "tools", "tool_choice"},
+		Description:                 "Fireworks-hosted Kimi K3.1 Pro with native text/image input and 1M context." + " Maximum output and hosted precision are unspecified. Priority, Fast, Ultra-fast and deployment-specific charges are separate operator configuration.",
+		SupportedFeatures:           []string{"tools", "reasoning"},
 	},
 }

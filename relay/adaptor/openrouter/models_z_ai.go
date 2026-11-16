@@ -2,9 +2,10 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// z_aiModels returns the z_ai model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func z_aiModels() map[string]adaptor.ModelConfig {
+// zAiModels returns independently owned z ai defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
+func zAiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"z-ai/glm-4-32b": {
 			Ratio:                       nativeRate(0.1),
@@ -229,6 +230,20 @@ func z_aiModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"max", "high", "low"},
 			DefaultReasoningEffort:      "max",
 			Description:                 "z-ai/glm-5.3-flashx on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
+		"z-ai/glm-5.3-flashx-legal": {
+			Ratio:                       nativeRate(0.37),
+			CompletionRatio:             3.37837837837838,
+			CachedInputRatio:            nativeRate(0.075),
+			ContextLength:               1048576,
+			MaxOutputTokens:             131072,
+			InputModalities:             []string{"text", "image", "video"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			SupportedReasoningEfforts:   []string{"max", "high", "low"},
+			DefaultReasoningEffort:      "max",
+			Description:                 "z-ai/glm-5.3-flashx-legal on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"z-ai/glm-5.3-prime": {
 			Ratio:                       nativeRate(2.8),

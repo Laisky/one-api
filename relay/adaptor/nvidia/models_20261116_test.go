@@ -38,7 +38,7 @@ func TestNovemberHostedModels(t *testing.T) {
 	require.NotContains(t, a.GetModelList(), "moonshotai/kimi-k3_1-pro")
 	require.NotContains(t, a.GetDefaultModelPricing()["stepfun-ai/step-5-preview"].SupportedFeatures, "structured_outputs")
 	require.NotContains(t, a.GetDefaultModelPricing()["meta/muse-glimmer-30b"].SupportedFeatures, "structured_outputs")
-	one, two := novemberModels(), novemberModels()
+	one, two := buildModelRatios(), buildModelRatios()
 	one["moonshotai/kimi-k3.1-pro"].SupportedReasoningEfforts[0] = "changed"
 	require.Equal(t, "low", two["moonshotai/kimi-k3.1-pro"].SupportedReasoningEfforts[0])
 }

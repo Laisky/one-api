@@ -2,9 +2,10 @@ package novita
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// zai_orgModels returns the zai_org model defaults for novita.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func zai_orgModels() map[string]adaptor.ModelConfig {
+// zaiOrgModels returns independently owned zai org defaults for novita.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.novita.ai/v3/openai/models
+func zaiOrgModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"zai-org/autoglm-phone-9b-multilingual": {
 			Ratio:                       nativeRate(0.035),
@@ -208,6 +209,17 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 			OutputModalities:  []string{"text"},
 			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
 			Description:       "zai-org/glm-5.3-flash on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"zai-org/glm-5.3-flashX": {
+			Ratio:             nativeRate(0.37),
+			CompletionRatio:   3.37837837837838,
+			CachedInputRatio:  nativeRate(0.075),
+			ContextLength:     1048576,
+			MaxOutputTokens:   131072,
+			InputModalities:   []string{"text", "image", "video"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+			Description:       "zai-org/glm-5.3-flashX on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
 		},
 		"zai-org/glm-5.3-p": {
 			Ratio:             nativeRate(1.4),

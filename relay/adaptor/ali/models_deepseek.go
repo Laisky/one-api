@@ -1,9 +1,15 @@
 package ali
 
-import "github.com/Laisky/one-api/relay/adaptor"
+import (
+	"github.com/Laisky/one-api/relay/adaptor"
+)
 
-// deepseekModels returns the deepseek model defaults for ali.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// deepseekModels returns independently owned deepseek defaults for ali.
+// It takes no arguments and returns the complete family catalog.
+// Source: https://help.aliyun.com/zh/model-studio/model-pricing
+// Additional model and cache sources checked 2026-11-16:
+// https://help.aliyun.com/zh/model-studio/context-cache
+// https://help.aliyun.com/zh/model-studio/qwen-api-via-dashscope
 func deepseekModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"deepseek-r1": {
@@ -260,6 +266,72 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			},
 			},
 			Description: "deepseek-v4.1-flash on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"deepseek-v4.1-flash-1017": {
+			Ratio: nativeRate(1), CompletionRatio: 4, CachedInputRatio: nativeRate(.02),
+			InputModalities: []string{"text"}, OutputModalities: []string{"text"},
+			SupportedFeatures: []string{"reasoning"}, SupportedSamplingParameters: []string{"max_tokens"},
+			TimeWindows: []adaptor.TimeWindow{{
+				Name: "beijing-peak", TimeZone: "Asia/Shanghai",
+				Ranges:  []adaptor.ClockRange{{Start: "08:00", End: "22:00"}},
+				Overlay: adaptor.ModelConfig{Ratio: nativeRate(2), CompletionRatio: 4, CachedInputRatio: nativeRate(.04)},
+			}},
+			Description: "Alibaba-deployed DeepSeek V4.1 Flash 1017, Beijing tariff. CNY/M input/cache/output is 2/0.04/8 from 08:00 to 22:00 Asia/Shanghai, otherwise 1/0.02/4. Native Ali forwards text only; direct DeepSeek USD tariffs, holidays and tool protocols do not apply.",
+		},
+		"siliconflow/deepseek-r1-0528": {
+			Ratio:           nativeRate(4),
+			CompletionRatio: 4,
+			Description:     "siliconflow/deepseek-r1-0528 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"siliconflow/deepseek-v3-0324": {
+			Ratio:           nativeRate(2),
+			CompletionRatio: 4,
+			Description:     "siliconflow/deepseek-v3-0324 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"siliconflow/deepseek-v3.1-terminus": {
+			Ratio:           nativeRate(4),
+			CompletionRatio: 3,
+			Description:     "siliconflow/deepseek-v3.1-terminus on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"siliconflow/deepseek-v3.2": {
+			Ratio:           nativeRate(2),
+			CompletionRatio: 1.5,
+			Description:     "siliconflow/deepseek-v3.2 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"vanchin/deepseek-r1": {
+			Ratio:           nativeRate(4),
+			CompletionRatio: 4,
+			Description:     "vanchin/deepseek-r1 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"vanchin/deepseek-v3": {
+			Ratio:           nativeRate(2),
+			CompletionRatio: 4,
+			Description:     "vanchin/deepseek-v3 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"vanchin/deepseek-v3.1-terminus": {
+			Ratio:           nativeRate(4),
+			CompletionRatio: 3,
+			Description:     "vanchin/deepseek-v3.1-terminus on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"vanchin/deepseek-v3.2-think": {
+			Ratio:           nativeRate(2),
+			CompletionRatio: 1.5,
+			Description:     "vanchin/deepseek-v3.2-think on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"vanchin/deepseek-v4-pro": {
+			Ratio:           nativeRate(12),
+			CompletionRatio: 2,
+			Description:     "vanchin/deepseek-v4-pro on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"vanchin/deepseek-v4-pro-0813": {
+			Ratio:           nativeRate(9),
+			CompletionRatio: 3,
+			Description:     "vanchin/deepseek-v4-pro-0813 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"vanchin/deepseek-v4.1-flash": {
+			Ratio:           nativeRate(2),
+			CompletionRatio: 4,
+			Description:     "vanchin/deepseek-v4.1-flash on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 	}
 }

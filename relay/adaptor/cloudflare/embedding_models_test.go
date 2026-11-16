@@ -26,3 +26,16 @@ func TestEmbeddingModelsDeclareEmbeddingCapability(t *testing.T) {
 		})
 	}
 }
+
+// cloudflareEmbeddingModelNames lists Workers AI models that accept text as
+// input but return embedding vectors rather than generated chat text. Keeping
+// this type metadata explicit prevents generic channel-test selection from
+// treating text-input embedding models as chat models.
+var cloudflareEmbeddingModelNames = []string{
+	"@cf/baai/bge-small-en-v1.5",
+	"@cf/baai/bge-base-en-v1.5",
+	"@cf/baai/bge-large-en-v1.5",
+	"@cf/baai/bge-m3",
+	"@cf/pfnet/plamo-embedding-1b",
+	"@cf/qwen/qwen3-embedding-0.6b",
+}

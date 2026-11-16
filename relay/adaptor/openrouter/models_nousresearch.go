@@ -2,8 +2,9 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// nousresearchModels returns the nousresearch model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// nousresearchModels returns independently owned nousresearch defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func nousresearchModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"nousresearch/hermes-2-pro-llama-3-8b": {

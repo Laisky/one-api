@@ -4,6 +4,8 @@ import "github.com/Laisky/one-api/relay/adaptor"
 
 // zai_orgModels returns the zai_org model defaults for siliconflow.
 // It takes no arguments and returns independently owned, directly editable Go configurations.
+// GLM 5.3 Flash pricing was verified 2026-10-12 at
+// https://www.siliconflow.cn/pricing; unverified deployment metadata remains unset.
 func zai_orgModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"zai-org/GLM-4.5-Air": {
@@ -103,6 +105,14 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 			CompletionRatio:  3.5,
 			CachedInputRatio: nativeRate(2),
 			Description:      "zai-org/GLM-5.3 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"zai-org/GLM-5.3-Flash": {
+			Ratio:            nativeRate(0.80),
+			CompletionRatio:  2.80 / 0.80,
+			CachedInputRatio: nativeRate(0.23),
+			InputModalities:  []string{"text"},
+			OutputModalities: []string{"text"},
+			Description:      "GLM 5.3 Flash hosted by SiliconFlow. Published CNY per million tokens: 0.80 input, 0.23 cached input, 2.80 output. This is a paid model, not GLM 4.7 Flash's free offer or Z.AI's USD tariff. Text chat uses the existing compatible endpoint; deployment limits and additional capabilities were not independently verified from the authenticated SiliconFlow model card. No provider-specific reasoning-effort controls are advertised.",
 		},
 		"zai-org/GLM-5V-Turbo": {
 			Ratio:                       nativeRate(8.4),

@@ -2,9 +2,10 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// bytedance_seedModels returns the bytedance_seed model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func bytedance_seedModels() map[string]adaptor.ModelConfig {
+// bytedanceSeedModels returns independently owned bytedance seed defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
+func bytedanceSeedModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"bytedance-seed/seed-1.6": {
 			Ratio:           nativeRate(0.25),

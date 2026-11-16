@@ -2,8 +2,9 @@ package novita
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// baiduModels returns the baidu model defaults for novita.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// baiduModels returns independently owned baidu defaults for novita.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.novita.ai/v3/openai/models
 func baiduModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"baidu/cobuddy": {

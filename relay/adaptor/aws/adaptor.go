@@ -190,7 +190,7 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 }
 
 // GetDefaultModelPricing returns the AWS Bedrock pricing and metadata table.
-// The canonical map lives in ratios.go to keep this file under the codebase
+// The canonical map lives in models.go to keep this file under the codebase
 // length budget. Callers receive a fresh shallow copy so mutations do not
 // affect the shared table.
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {

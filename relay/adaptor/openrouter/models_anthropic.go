@@ -2,8 +2,9 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// anthropicModels returns the anthropic model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// anthropicModels returns independently owned anthropic defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func anthropicModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"anthropic/claude-3-haiku": {
@@ -65,6 +66,22 @@ func anthropicModels() map[string]adaptor.ModelConfig {
 			DefaultReasoningEffort:      "high",
 			Description:                 "anthropic/claude-fable-5.1 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
+		"anthropic/claude-fable-5.2": {
+			Ratio:                       nativeRate(8),
+			CompletionRatio:             5,
+			CachedInputRatio:            nativeRate(0.2),
+			CacheWrite5mRatio:           nativeRate(10),
+			CacheWrite1hRatio:           nativeRate(16),
+			ContextLength:               1000000,
+			MaxOutputTokens:             128000,
+			InputModalities:             []string{"text", "image", "file"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_completion_tokens", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "structured_outputs", "tool_choice", "tools", "verbosity"},
+			SupportedReasoningEfforts:   []string{"max", "xhigh", "high", "medium", "low"},
+			DefaultReasoningEffort:      "high",
+			Description:                 "anthropic/claude-fable-5.2 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
 		"anthropic/claude-haiku-4.5": {
 			Ratio:                       nativeRate(1),
 			CompletionRatio:             5,
@@ -78,6 +95,32 @@ func anthropicModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"include_reasoning", "max_completion_tokens", "max_tokens", "reasoning", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
 			Description:                 "anthropic/claude-haiku-4.5 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"anthropic/claude-haiku-5.5": {
+			Ratio:             nativeRate(0.1),
+			CompletionRatio:   (0.5 * 1.0) / 0.1,
+			CachedInputRatio:  nativeRate(0.01),
+			CacheWrite5mRatio: nativeRate(0.125),
+			CacheWrite1hRatio: nativeRate(0.2),
+			Tiers: []adaptor.ModelRatioTier{
+				{
+					Ratio:               nativeRate(0.5),
+					CompletionRatio:     (2.5 * 1.0) / 0.5,
+					CachedInputRatio:    nativeRate(0.05),
+					CacheWrite5mRatio:   nativeRate(0.625),
+					CacheWrite1hRatio:   nativeRate(1),
+					InputTokenThreshold: 100000,
+				},
+			},
+			ContextLength:               1000000,
+			MaxOutputTokens:             128000,
+			InputModalities:             []string{"text", "image", "file"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_completion_tokens", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "structured_outputs", "tool_choice", "tools", "verbosity"},
+			SupportedReasoningEfforts:   []string{"max", "xhigh", "high", "medium", "low", "none"},
+			DefaultReasoningEffort:      "medium",
+			Description:                 "anthropic/claude-haiku-5.5 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"anthropic/claude-opus-4": {
 			Ratio:                       nativeRate(15),
@@ -316,6 +359,24 @@ func anthropicModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"max", "xhigh", "high", "medium", "low", "none"},
 			DefaultReasoningEffort:      "high",
 			Description:                 "anthropic/claude-sonnet-5 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
+		// Use the public ID, not canonical_slug. The separately listed :batch
+		// variant requires qualification of the gateway asynchronous Batch path.
+		"anthropic/claude-sonnet-5.5": {
+			Ratio:                       nativeRate(2),
+			CompletionRatio:             (10 * 1.0) / 2,
+			CachedInputRatio:            nativeRate(0.1),
+			CacheWrite5mRatio:           nativeRate(2.5),
+			CacheWrite1hRatio:           nativeRate(4),
+			ContextLength:               1000000,
+			MaxOutputTokens:             128000,
+			InputModalities:             []string{"text", "image", "file"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_completion_tokens", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "structured_outputs", "tool_choice", "tools", "verbosity"},
+			SupportedReasoningEfforts:   []string{"max", "xhigh", "high", "medium", "low"},
+			DefaultReasoningEffort:      "high",
+			Description:                 "anthropic/claude-sonnet-5.5 on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified. Reasoning is mandatory.",
 		},
 		"~anthropic/claude-fable-latest": {
 			Ratio:                       nativeRate(8),

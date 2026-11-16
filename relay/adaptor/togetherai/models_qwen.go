@@ -2,8 +2,9 @@ package togetherai
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// qwenModels returns the qwen model defaults for togetherai.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// qwenModels returns independently owned qwen defaults for togetherai.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://docs.together.ai/docs/serverless/models
 func qwenModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"Qwen/Qwen-Image": {

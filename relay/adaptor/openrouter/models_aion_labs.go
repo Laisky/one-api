@@ -2,9 +2,10 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// aion_labsModels returns the aion_labs model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func aion_labsModels() map[string]adaptor.ModelConfig {
+// aionLabsModels returns independently owned aion labs defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
+func aionLabsModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"aion-labs/aion-1.0": {
 			Ratio:                       nativeRate(4),

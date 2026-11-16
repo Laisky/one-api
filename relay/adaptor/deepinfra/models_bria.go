@@ -2,8 +2,9 @@ package deepinfra
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// briaModels returns the bria model defaults for deepinfra.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// briaModels returns independently owned bria defaults for deepinfra.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.deepinfra.com/models/list
 func briaModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"Bria/Bria-3.2": {

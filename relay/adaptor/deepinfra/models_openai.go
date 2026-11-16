@@ -2,8 +2,9 @@ package deepinfra
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// openaiModels returns the openai model defaults for deepinfra.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// openaiModels returns independently owned openai defaults for deepinfra.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.deepinfra.com/models/list
 func openaiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"openai/gpt-oss-120b": {

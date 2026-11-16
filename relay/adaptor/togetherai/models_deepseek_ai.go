@@ -2,9 +2,10 @@ package togetherai
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// deepseek_aiModels returns the deepseek_ai model defaults for togetherai.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func deepseek_aiModels() map[string]adaptor.ModelConfig {
+// deepseekAiModels returns independently owned deepseek ai defaults for togetherai.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://docs.together.ai/docs/serverless/models
+func deepseekAiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"deepseek-ai/DeepSeek-R1": {
 			Ratio:                       nativeRate(3),
@@ -73,6 +74,16 @@ func deepseek_aiModels() map[string]adaptor.ModelConfig {
 			Description:       "deepseek-ai/DeepSeek-V4.1-Flash on Together Standard serverless; published token prices and metadata checked 2026-11-16. Dedicated deployments and US-only endpoint surcharges are separate contracts. Unpublished output limits remain unspecified.",
 			Quantization:      "fp8",
 			OutputModalities:  []string{"text"},
+		},
+		"deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+			Ratio:             nativeRate(0.3),
+			CompletionRatio:   4,
+			CachedInputRatio:  nativeRate(0.006),
+			ContextLength:     1000000,
+			SupportedFeatures: []string{"tools", "structured_outputs"},
+			Quantization:      "fp8",
+			OutputModalities:  []string{"text"},
+			Description:       "deepseek-ai/DeepSeek-V4.1-Flash-1017 on Together Standard serverless; published token prices and metadata checked 2026-11-16. Dedicated deployments and US-only endpoint surcharges are separate contracts. Unpublished output limits remain unspecified.",
 		},
 	}
 }

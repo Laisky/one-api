@@ -2,8 +2,9 @@ package deepinfra
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// qwenModels returns the qwen model defaults for deepinfra.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// qwenModels returns independently owned qwen defaults for deepinfra.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.deepinfra.com/models/list
 func qwenModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"Qwen/Qwen-Image-Edit-Max": {
@@ -385,6 +386,16 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
 			Description:                 "Qwen/Qwen3.8-Max on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"Qwen/Qwen4-Max": {
+			Ratio:             nativeRate(1.413),
+			CompletionRatio:   3.00070771408351,
+			CachedInputRatio:  nativeRate(0.0710000001),
+			ContextLength:     1000000,
+			InputModalities:   []string{"text", "image", "video"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			Description:       "Qwen/Qwen4-Max on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
 		},
 	}
 }

@@ -142,7 +142,7 @@ func (a *Adaptor) GetChannelName() string {
 // GetDefaultModelPricing returns the pricing table this channel advertises.
 //
 // Without this override the embedded DefaultPricingMethods answered 2.5 USD/1M,
-// ignoring the rate recorded in constants.go.
+// ignoring the rate recorded in models.go.
 //
 // Return values:
 //   - map[string]adaptor.ModelConfig: the audited pricing keyed by model id.

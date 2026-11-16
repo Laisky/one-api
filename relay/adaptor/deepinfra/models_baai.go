@@ -2,8 +2,9 @@ package deepinfra
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// baaiModels returns the baai model defaults for deepinfra.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// baaiModels returns independently owned baai defaults for deepinfra.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.deepinfra.com/models/list
 func baaiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"BAAI/bge-base-en-v1.5": {

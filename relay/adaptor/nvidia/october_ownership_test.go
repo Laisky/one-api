@@ -9,8 +9,8 @@ import (
 // it returns nothing and never mutates package-level state.
 func TestOctoberGLMOwnership(t *testing.T) {
 	t.Parallel()
-	first := currentGLMModels()
-	second := currentGLMModels()
+	first := buildModelRatios()
+	second := buildModelRatios()
 	cfg := first["z-ai/glm-5.3"]
 	cfg.InputModalities[0] = "changed"
 	cfg.SupportedReasoningEfforts[0] = "changed"

@@ -315,17 +315,3 @@ func (b *thinkingBody) nextEvent() ([]byte, error) {
 	out.WriteByte('\n')
 	return out.Bytes(), nil
 }
-
-// init advertises the documented effort toggles for the hybrid models rather
-// than copying an unrelated provider's effort vocabulary. No request allowlist
-// is introduced: explicit values remain subject to upstream validation.
-func init() {
-	for _, id := range []string{"mistral-small-latest", "mistral-small-2603", "mistral-medium-latest", "mistral-medium-2604", "mistral-medium-3-5"} {
-		cfg := ModelRatios[id].Clone()
-		cfg.SupportedReasoningEfforts = []string{"none", "high"}
-		if !slices.Contains(cfg.SupportedSamplingParameters, "reasoning_effort") {
-			cfg.SupportedSamplingParameters = append(cfg.SupportedSamplingParameters, "reasoning_effort")
-		}
-		ModelRatios[id] = cfg
-	}
-}

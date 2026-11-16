@@ -57,7 +57,7 @@ func TestMiniMaxOctoberCatalogue(t *testing.T) {
 // capability slices across models or calls. It takes t and returns nothing.
 func TestMiniMaxCurrentCatalogueOwnership(t *testing.T) {
 	t.Parallel()
-	first, second := minimaxCurrentModels(), minimaxCurrentModels()
+	first, second := minimaxMSeriesModels(), minimaxMSeriesModels()
 	cfg := first["MiniMax-M3"]
 	cfg.SupportedSamplingParameters[0] = "changed"
 	cfg.Tiers[0].Ratio = -1

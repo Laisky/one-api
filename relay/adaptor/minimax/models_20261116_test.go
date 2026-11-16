@@ -39,9 +39,9 @@ func TestMiniMaxNovemberPublishedFlash(t *testing.T) {
 	require.NotContains(t, m3.SupportedSamplingParameters, "temperature")
 	require.NotContains(t, m3.SupportedSamplingParameters, "top_p")
 	require.Empty(t, m3.SupportedReasoningEfforts)
-	copy := minimaxM31FlashModels()[id]
+	copy := minimaxMSeriesModels()[id]
 	copy.SupportedReasoningEfforts[0] = "changed"
 	copy.InputModalities[0] = "changed"
-	require.Equal(t, "low", minimaxM31FlashModels()[id].SupportedReasoningEfforts[0])
+	require.Equal(t, "low", minimaxMSeriesModels()[id].SupportedReasoningEfforts[0])
 	require.Equal(t, "text", a.GetDefaultModelPricing()[id].InputModalities[0])
 }

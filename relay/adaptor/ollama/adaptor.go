@@ -153,7 +153,7 @@ func (a *Adaptor) GetChannelName() string {
 
 // GetDefaultModelPricing returns the pricing table this channel advertises.
 //
-// Ollama runs locally with no metered billing, so constants.go keeps a deliberately
+// Ollama runs locally with no metered billing, so models.go keeps a deliberately
 // symbolic price. Without this override the embedded DefaultPricingMethods answered
 // 2.5 USD/1M for every model the channel advertises — a ~250x over-charge against
 // the intended rate.

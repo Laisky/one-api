@@ -67,8 +67,8 @@ func TestGPTImage25SnapshotParity(t *testing.T) {
 // Parameters: t is the test runner. Returns: none; shared pointers or slices fail the test.
 func TestNewGPTImage25ConfigIsolation(t *testing.T) {
 	t.Parallel()
-	first := newGPTImage25Config("first")
-	second := newGPTImage25Config("second")
+	first := newGPTImageTokenConfig("first")
+	second := newGPTImageTokenConfig("second")
 	first.Image.DefaultQuality = "high"
 	first.InputModalities[0] = "modified"
 	first.OutputModalities[0] = "modified"

@@ -2,8 +2,9 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// tencentModels returns the tencent model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// tencentModels returns independently owned tencent defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func tencentModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"tencent/hunyuan-a13b-instruct": {
@@ -54,6 +55,43 @@ func tencentModels() map[string]adaptor.ModelConfig {
 			HuggingFaceID:               "tencent/Hy-MT2-7B",
 			Description:                 "tencent/hy-mt2-7b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
+		"tencent/hy3": {
+			Ratio:            nativeRate(0.132),
+			CompletionRatio:  (0.33 * 1.0) / 0.0825,
+			CachedInputRatio: nativeRate(0.033),
+			TimeWindows: []adaptor.TimeWindow{
+				{
+					Name:     "openrouter-1",
+					TimeZone: "UTC",
+					Ranges:   []adaptor.ClockRange{{Start: "00:00", End: "16:00"}},
+					Overlay: adaptor.ModelConfig{
+						Ratio:            nativeRate(0.132),
+						CompletionRatio:  (0.528 * 1.0) / 0.132,
+						CachedInputRatio: nativeRate(0.033),
+					},
+				},
+				{
+					Name:     "openrouter-2",
+					TimeZone: "UTC",
+					Ranges:   []adaptor.ClockRange{{Start: "16:00", End: "00:00"}},
+					Overlay: adaptor.ModelConfig{
+						Ratio:            nativeRate(0.0825),
+						CompletionRatio:  (0.33 * 1.0) / 0.0825,
+						CachedInputRatio: nativeRate(0.020625),
+					},
+				},
+			},
+			ContextLength:               262144,
+			MaxOutputTokens:             128000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_completion_tokens", "max_tokens", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			SupportedReasoningEfforts:   []string{"high", "low", "none"},
+			DefaultReasoningEffort:      "high",
+			HuggingFaceID:               "tencent/Hy3",
+			Description:                 "tencent/hy3 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
 		"tencent/hy3-preview": {
 			Ratio:                       nativeRate(0.18),
 			CompletionRatio:             3.3333333333333335,
@@ -68,6 +106,33 @@ func tencentModels() map[string]adaptor.ModelConfig {
 			DefaultReasoningEffort:      "high",
 			HuggingFaceID:               "tencent/Hy3-preview",
 			Description:                 "tencent/hy3-preview on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"tencent/hy4": {
+			Ratio:                       nativeRate(0.417),
+			CompletionRatio:             2.99880095923261,
+			CachedInputRatio:            nativeRate(0.021),
+			ContextLength:               1048576,
+			MaxOutputTokens:             65536,
+			InputModalities:             []string{"text", "image"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_completion_tokens", "max_tokens", "reasoning", "reasoning_effort", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools"},
+			SupportedReasoningEfforts:   []string{"high", "low", "none"},
+			DefaultReasoningEffort:      "high",
+			HuggingFaceID:               "tencent/Hy4",
+			Description:                 "tencent/hy4 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
+		"tencent/hy4-flash": {
+			Ratio:                       nativeRate(0.04375),
+			CompletionRatio:             4.01428571428571,
+			CachedInputRatio:            nativeRate(0.001875),
+			ContextLength:               1048576,
+			MaxOutputTokens:             65536,
+			InputModalities:             []string{"text", "image"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_completion_tokens", "max_tokens", "reasoning", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools"},
+			Description:                 "tencent/hy4-flash on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"tencent/hy4-preview": {
 			Ratio:            nativeRate(0.834),

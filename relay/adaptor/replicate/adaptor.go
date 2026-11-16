@@ -351,7 +351,7 @@ func (a *Adaptor) GetChannelName() string {
 
 // Pricing methods - Replicate adapter manages its own model pricing
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
-	// Use the constants.go ModelRatios which already use ratio.MilliTokensUsd correctly
+	// Use the model-family tariffs assembled by models.go in the existing billing units.
 	return ModelRatios
 }
 

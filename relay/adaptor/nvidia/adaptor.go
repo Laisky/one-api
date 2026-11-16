@@ -117,7 +117,7 @@ func (a *Adaptor) GetChannelName() string {
 }
 
 // GetDefaultModelPricing returns the pricing information for NVIDIA models.
-// See constants.go for why every hosted model is registered as free (Ratio 0).
+// See models.go for why every hosted model is registered as free (Ratio 0).
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return ModelRatios
 }

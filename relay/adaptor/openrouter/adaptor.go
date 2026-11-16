@@ -221,7 +221,7 @@ func (a *Adaptor) GetChannelName() string {
 //
 // Reference: https://openrouter.ai/models
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
-	// Use the constants.go ModelRatios which contains the complete OpenRouter pricing database
+	// Use the models.go ModelRatios which contains the complete OpenRouter pricing database
 	// This data is maintained separately to keep pricing information organized and updatable
 	return ModelRatios
 }
@@ -236,7 +236,7 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 //   - float64: The pricing ratio for input tokens (cost per milli-token)
 //
 // Lookup order:
-//  1. Check OpenRouter-specific pricing from constants.go
+//  1. Check OpenRouter-specific pricing from models.go
 //  2. Fall back to DefaultPricingMethods if model not found
 func (a *Adaptor) GetModelRatio(modelName string) float64 {
 	// Get the complete pricing database for this adapter

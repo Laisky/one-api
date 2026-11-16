@@ -2,9 +2,10 @@ package deepinfra
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// deepseek_aiModels returns the deepseek_ai model defaults for deepinfra.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func deepseek_aiModels() map[string]adaptor.ModelConfig {
+// deepseekAiModels returns independently owned deepseek ai defaults for deepinfra.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.deepinfra.com/models/list
+func deepseekAiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"deepseek-ai/DeepSeek-R1-0528": {
 			Ratio:                       nativeRate(0.5),
@@ -133,6 +134,17 @@ func deepseek_aiModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			Description:       "deepseek-ai/DeepSeek-V4.1-Flash on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified. Includes the published 30% discount; no expiry is invented.",
 			Quantization:      "fp8",
+		},
+		"deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+			Ratio:             nativeRate(0.098),
+			CompletionRatio:   3,
+			CachedInputRatio:  nativeRate(0.00294),
+			ContextLength:     1048576,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			Quantization:      "fp8",
+			Description:       "deepseek-ai/DeepSeek-V4.1-Flash-1017 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified. Includes the published 51% discount; no expiry is invented.",
 		},
 		"deepseek-ai/Janus-Pro-1B": {
 			Ratio:           0,

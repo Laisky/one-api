@@ -111,7 +111,7 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, m *meta.Meta) 
 }
 
 // GetModelList returns the Azure AI Foundry catalog this adaptor supports: the
-// Azure OpenAI models plus the Foundry Claude models (see constants.go).
+// Azure OpenAI models plus the Foundry Claude models (see models.go).
 func (a *Adaptor) GetModelList() []string {
 	return ModelList
 }
@@ -121,7 +121,7 @@ func (a *Adaptor) GetModelList() []string {
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	merged := make(map[string]adaptor.ModelConfig)
 	for k, v := range a.Adaptor.GetDefaultModelPricing() {
-		if !unverifiedNovemberOpenAIModel(k) {
+		if !unverifiedNativeOpenAIModel(k) {
 			merged[k] = v
 		}
 	}
@@ -136,7 +136,7 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 }
 
 func (a *Adaptor) GetModelRatio(modelName string) float64 {
-	if unverifiedNovemberOpenAIModel(strings.ToLower(strings.TrimSpace(modelName))) {
+	if unverifiedNativeOpenAIModel(strings.ToLower(strings.TrimSpace(modelName))) {
 		return a.DefaultPricingMethods.GetModelRatio(modelName)
 	}
 	if meta.IsClaudeModelName(modelName) {
@@ -146,7 +146,7 @@ func (a *Adaptor) GetModelRatio(modelName string) float64 {
 }
 
 func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
-	if unverifiedNovemberOpenAIModel(strings.ToLower(strings.TrimSpace(modelName))) {
+	if unverifiedNativeOpenAIModel(strings.ToLower(strings.TrimSpace(modelName))) {
 		return a.DefaultPricingMethods.GetCompletionRatio(modelName)
 	}
 	if meta.IsClaudeModelName(modelName) {

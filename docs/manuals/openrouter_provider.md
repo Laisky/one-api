@@ -108,7 +108,7 @@ To override these for specific models, set the optional fields on
 fields are optional and have safe zero-value defaults, so partial
 overrides are fine.
 
-Example per-model override in a `constants.go`-style file:
+Example per-model override in a `models.go`-style file:
 
 ```go
 package myprovider

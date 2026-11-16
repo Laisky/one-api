@@ -2,9 +2,10 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// arcee_aiModels returns the arcee_ai model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func arcee_aiModels() map[string]adaptor.ModelConfig {
+// arceeAiModels returns independently owned arcee ai defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
+func arceeAiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"arcee-ai/coder-large": {
 			Ratio:                       nativeRate(0.5),

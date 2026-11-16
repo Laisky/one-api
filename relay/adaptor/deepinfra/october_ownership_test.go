@@ -9,7 +9,7 @@ import (
 // constructors using t. It returns no values and does not mutate global defaults.
 func TestOctoberDeepInfraOwnership(t *testing.T) {
 	t.Parallel()
-	first, second := octoberChatModels(), octoberChatModels()
+	first, second := modelCatalog(), modelCatalog()
 	first["XiaomiMiMo/MiMo-V2.6-Pro"].InputModalities[0] = "changed"
 	first["anthropic/claude-sonnet-5-5"].SupportedFeatures[0] = "changed"
 	require.Equal(t, "text", second["XiaomiMiMo/MiMo-V2.6-Pro"].InputModalities[0])

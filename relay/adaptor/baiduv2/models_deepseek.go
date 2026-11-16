@@ -1,9 +1,14 @@
 package baiduv2
 
-import "github.com/Laisky/one-api/relay/adaptor"
+import (
+	"github.com/Laisky/one-api/relay/adaptor"
+)
 
-// deepseekModels returns the deepseek model defaults for baiduv2.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// deepseekModels returns independently owned deepseek defaults for baiduv2.
+// It takes no arguments and returns the complete family catalog.
+// Sources checked 2026-10-12 and 2026-11-16:
+// https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j
+// https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya
 func deepseekModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"DeepSeek-V4-Pro-0813": {
@@ -215,6 +220,30 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			Quantization:                "fp8",
 			HuggingFaceID:               "deepseek-ai/DeepSeek-V4",
 			Description:                 "DeepSeek V4 Pro hosted on Baidu Qianfan v2: open-weight flagship chat model; primary replacement for many retiring ERNIE/DeepSeek models.",
+		},
+		"deepseek-v4.1-flash": {
+			Ratio: nativeRate(1), CompletionRatio: 4, CachedInputRatio: nativeRate(.02),
+			ContextLength: 1_000_000, MaxOutputTokens: 393_216,
+			InputModalities: []string{"text"}, OutputModalities: []string{"text"},
+			SupportedFeatures: []string{"reasoning"}, SupportedSamplingParameters: []string{"max_tokens", "max_completion_tokens"},
+			TimeWindows: []adaptor.TimeWindow{{
+				Name: "qianfan-peak", TimeZone: "Asia/Shanghai",
+				Ranges:  []adaptor.ClockRange{{Start: "08:00", End: "22:00"}},
+				Overlay: adaptor.ModelConfig{Ratio: nativeRate(2), CompletionRatio: 4, CachedInputRatio: nativeRate(.04)},
+			}},
+			Description: "DeepSeek V4.1 Flash on Qianfan v2 using the published lowercase API ID. 1M context and 393216 total output tokens. CNY/M input/cache/output 2/0.04/8 at 08:00-22:00 Asia/Shanghai, otherwise 1/0.02/4. No inherited holiday promotion, direct-provider USD price or native tool policy applies.",
+		},
+		"deepseek-v4.1-flash-1017": {
+			Ratio: nativeRate(1), CompletionRatio: 4, CachedInputRatio: nativeRate(.02),
+			ContextLength: 1_000_000, MaxOutputTokens: 393_216,
+			InputModalities: []string{"text"}, OutputModalities: []string{"text"},
+			SupportedFeatures: []string{"reasoning"}, SupportedSamplingParameters: []string{"max_tokens", "max_completion_tokens"},
+			TimeWindows: []adaptor.TimeWindow{{
+				Name: "qianfan-peak", TimeZone: "Asia/Shanghai",
+				Ranges:  []adaptor.ClockRange{{Start: "08:00", End: "22:00"}},
+				Overlay: adaptor.ModelConfig{Ratio: nativeRate(2), CompletionRatio: 4, CachedInputRatio: nativeRate(.04)},
+			}},
+			Description: "DeepSeek V4.1 Flash on Qianfan v2 using the published lowercase API ID. 1M context and 393216 total output tokens. CNY/M input/cache/output 2/0.04/8 at 08:00-22:00 Asia/Shanghai, otherwise 1/0.02/4. No inherited holiday promotion, direct-provider USD price or native tool policy applies.",
 		},
 	}
 }

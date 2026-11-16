@@ -2,8 +2,9 @@ package togetherai
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// googleModels returns the google model defaults for togetherai.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// googleModels returns independently owned google defaults for togetherai.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://docs.together.ai/docs/serverless/models
 func googleModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"google/flash-image-2.5": {

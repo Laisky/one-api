@@ -18,6 +18,22 @@ Model data remains directly maintained Go source. Each model has one complete
 provider definition, and the existing duplicate-key checks cover catalog
 assembly. No runtime catalog download or generated JSON dependency is added.
 
+### Catalog organization
+
+All 46 adaptors with catalogs have a stable `relay/adaptor/<provider>/models.go`
+entry point. Small catalogs are consolidated there; larger catalogs assemble files
+named for model families or capabilities. New entries are placed with their
+siblings, including entries previously spread across monthly research batches.
+The production layout no longer uses research dates as catalog boundaries.
+Dates remain in provenance comments and these audit records.
+
+For example, AliBailian's Qwen, DeepSeek and GLM definitions are grouped by their
+families instead of being divided between the family files and
+`models_november.go`. OpenRouter's GPT and Qwen catalogs use named subfamilies
+instead of numbered continuation files. The 800-line handwritten-file limit
+still applies. See the [maintenance guide](../relay/adaptor/MODELS.md) for the
+entry points, update rules and verification procedure.
+
 ## Detailed source and decision records
 
 | Record | Scope |
@@ -162,6 +178,8 @@ in the linked audits.
 
 ## Validation
 
+### Model and billing refresh
+
 Validation completed successfully with Go 1.27.4:
 
 ```sh
@@ -194,3 +212,34 @@ SQLite fixtures. No paid provider generation was performed. Full multi-database,
 repository-wide race and frontend qualification were not run; the existing lean
 CI gate remains unchanged. The detailed audits identify inherited limitations
 and the model/protocol contracts requiring further work.
+
+### Catalog consolidation
+
+The subsequent layout cleanup was compared against commit
+`823861c9572bce6314879e46a9534ad36e3448e2`, before moving any definitions.
+`TestCompiledAdaptorCatalogSnapshot` captured all 62 registered API/channel
+configurations before and after the cleanup. All 6,234 pricing records and
+6,115 discoverable model IDs match, including descriptions, capabilities,
+nested tariffs, thresholds and schedules. Only the top-level discovery lists
+were sorted for comparison because `GetModelListFromPricing` already iterates
+unordered Go maps; configuration slices and all numeric values were compared
+exactly. The canonical snapshots have the same SHA-256:
+`6ef23c0b221d6fd0d6318a6c1db99cd572b787293ecc292ae498bf6bcd2a1d72`.
+
+Checks repeated successfully on the consolidated tree:
+
+```sh
+make test-quick
+go test -p 2 ./relay/adaptor/... ./relay/pricing ./relay/quota ./relay/model ./relay -count=1
+go vet -p 2 ./...
+git diff --check
+```
+
+The quick gate passed all 28 selected tests and formatting for 3,081 tracked Go
+files. The broad run passed 72 test packages and compiled 12 packages without
+tests. All 260 changed Go files are within the 800-line limit; the largest has
+686 lines. No production catalog filename retains a research date or month.
+Independent review checked family registration, ownership, initialization
+order, aliases, lifecycle annotations and active documentation references.
+All 1,002 model expressions in the four aggregator catalogs are unchanged,
+and an isolated xAI comparison also confirmed identical tooling defaults.

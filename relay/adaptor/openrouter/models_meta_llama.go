@@ -2,9 +2,10 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// meta_llamaModels returns the meta_llama model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func meta_llamaModels() map[string]adaptor.ModelConfig {
+// metaLlamaModels returns independently owned meta llama defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
+func metaLlamaModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"meta-llama/llama-3-70b-instruct": {
 			Ratio:                       nativeRate(0.51),

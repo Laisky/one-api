@@ -2,8 +2,9 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// deepseekModels returns the deepseek model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// deepseekModels returns independently owned deepseek defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func deepseekModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"deepseek/deepseek-chat": {
@@ -245,6 +246,119 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			DefaultReasoningEffort:      "high",
 			HuggingFaceID:               "deepseek-ai/DeepSeek-V4.1-Flash",
 			Description:                 "deepseek/deepseek-v4.1-flash on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
+		"deepseek/deepseek-v4.1-flash-1017": {
+			Ratio:            nativeRate(0.15),
+			CompletionRatio:  4,
+			CachedInputRatio: nativeRate(0.003),
+			TimeWindows: []adaptor.TimeWindow{
+				{
+					Name:     "openrouter-1",
+					TimeZone: "UTC",
+					Ranges: []adaptor.ClockRange{
+						{
+							Start: "00:00",
+							End:   "00:00",
+						},
+					},
+					Overlay: adaptor.ModelConfig{
+						Ratio:            nativeRate(0.15),
+						CompletionRatio:  4,
+						CachedInputRatio: nativeRate(0.003),
+					},
+					DaysOfWeek: []int{6, 0},
+				},
+				{
+					Name:     "openrouter-2",
+					TimeZone: "UTC",
+					Ranges: []adaptor.ClockRange{
+						{
+							Start: "00:00",
+							End:   "01:00",
+						},
+					},
+					Overlay: adaptor.ModelConfig{
+						Ratio:            nativeRate(0.15),
+						CompletionRatio:  4,
+						CachedInputRatio: nativeRate(0.003),
+					},
+					DaysOfWeek: []int{1, 2, 3, 4, 5},
+				},
+				{
+					Name:     "openrouter-3",
+					TimeZone: "UTC",
+					Ranges: []adaptor.ClockRange{
+						{
+							Start: "01:00",
+							End:   "04:00",
+						},
+					},
+					Overlay: adaptor.ModelConfig{
+						Ratio:            nativeRate(0.3),
+						CompletionRatio:  4,
+						CachedInputRatio: nativeRate(0.006),
+					},
+					DaysOfWeek: []int{1, 2, 3, 4, 5},
+				},
+				{
+					Name:     "openrouter-4",
+					TimeZone: "UTC",
+					Ranges: []adaptor.ClockRange{
+						{
+							Start: "04:00",
+							End:   "06:00",
+						},
+					},
+					Overlay: adaptor.ModelConfig{
+						Ratio:            nativeRate(0.15),
+						CompletionRatio:  4,
+						CachedInputRatio: nativeRate(0.003),
+					},
+					DaysOfWeek: []int{1, 2, 3, 4, 5},
+				},
+				{
+					Name:     "openrouter-5",
+					TimeZone: "UTC",
+					Ranges: []adaptor.ClockRange{
+						{
+							Start: "06:00",
+							End:   "10:00",
+						},
+					},
+					Overlay: adaptor.ModelConfig{
+						Ratio:            nativeRate(0.3),
+						CompletionRatio:  4,
+						CachedInputRatio: nativeRate(0.006),
+					},
+					DaysOfWeek: []int{1, 2, 3, 4, 5},
+				},
+				{
+					Name:     "openrouter-6",
+					TimeZone: "UTC",
+					Ranges: []adaptor.ClockRange{
+						{
+							Start: "10:00",
+							End:   "00:00",
+						},
+					},
+					Overlay: adaptor.ModelConfig{
+						Ratio:            nativeRate(0.15),
+						CompletionRatio:  4,
+						CachedInputRatio: nativeRate(0.003),
+					},
+					DaysOfWeek: []int{1, 2, 3, 4, 5},
+				},
+			},
+			ContextLength:               1048576,
+			MaxOutputTokens:             393216,
+			InputModalities:             []string{"text", "image"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_completion_tokens", "max_tokens", "min_p", "parallel_tool_calls", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			SupportedReasoningEfforts:   []string{"max", "high", "low", "none"},
+			DefaultReasoningEffort:      "high",
+			HuggingFaceID:               "deepseek-ai/DeepSeek-V4.1-Flash-1017",
+			Description:                 "deepseek/deepseek-v4.1-flash-1017 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"~deepseek/deepseek-flash-latest": {
 			Ratio:                       nativeRate(0.036),

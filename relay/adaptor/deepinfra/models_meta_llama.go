@@ -2,9 +2,10 @@ package deepinfra
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// meta_llamaModels returns the meta_llama model defaults for deepinfra.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func meta_llamaModels() map[string]adaptor.ModelConfig {
+// metaLlamaModels returns independently owned meta llama defaults for deepinfra.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.deepinfra.com/models/list
+func metaLlamaModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"meta-llama/Llama-3.3-70B-Instruct-Turbo": {
 			Ratio:                       nativeRate(0.1),

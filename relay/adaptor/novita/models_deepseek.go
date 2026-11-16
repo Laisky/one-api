@@ -2,8 +2,9 @@ package novita
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// deepseekModels returns the deepseek model defaults for novita.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// deepseekModels returns independently owned deepseek defaults for novita.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.novita.ai/v3/openai/models
 func deepseekModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"deepseek/deepseek-ocr": {
@@ -234,6 +235,17 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
 			Description:       "deepseek/deepseek-v4-flash-0731 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
+		"deepseek/deepseek-v4-flash-0731-p": {
+			Ratio:             nativeRate(0.44),
+			CompletionRatio:   (1.32 * 1.0) / 0.44,
+			CachedInputRatio:  nativeRate(0.0148),
+			ContextLength:     1048576,
+			MaxOutputTokens:   393216,
+			InputModalities:   []string{"text"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+			Description:       "deepseek/deepseek-v4-flash-0731-p on Novita, verified from the public models API on 2026-10-12. Uses Novita's exact USD tariff and API identifier; no creator, priority, or clock tariff is inferred from the suffix. The source does not publish a discrete reasoning-effort vocabulary; this adaptor does not advertise one.",
+		},
 		"deepseek/deepseek-v4-flash-vision-exp": {
 			Ratio:             nativeRate(0.44),
 			CompletionRatio:   3,
@@ -270,6 +282,17 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
 			Description:       "deepseek/deepseek-v4-pro-0813 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
+		"deepseek/deepseek-v4-pro-0813-p": {
+			Ratio:             nativeRate(1.32),
+			CompletionRatio:   (3.96 * 1.0) / 1.32,
+			CachedInputRatio:  nativeRate(0.044),
+			ContextLength:     1048576,
+			MaxOutputTokens:   393216,
+			InputModalities:   []string{"text"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+			Description:       "deepseek/deepseek-v4-pro-0813-p on Novita, verified from the public models API on 2026-10-12. Uses Novita's exact USD tariff and API identifier; no creator, priority, or clock tariff is inferred from the suffix. The source does not publish a discrete reasoning-effort vocabulary; this adaptor does not advertise one.",
+		},
 		"deepseek/deepseek-v4.1-flash": {
 			Ratio:             nativeRate(0.3),
 			CompletionRatio:   4,
@@ -280,6 +303,39 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			OutputModalities:  []string{"text"},
 			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
 			Description:       "deepseek/deepseek-v4.1-flash on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"deepseek/deepseek-v4.1-flash-1017": {
+			Ratio:             nativeRate(0.3),
+			CompletionRatio:   4,
+			CachedInputRatio:  nativeRate(0.006),
+			ContextLength:     1048576,
+			MaxOutputTokens:   393216,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+			Description:       "deepseek/deepseek-v4.1-flash-1017 on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
+		},
+		"deepseek/deepseek-v4.1-flash-dst": {
+			Ratio:             nativeRate(0.3),
+			CompletionRatio:   (1.2 * 1.0) / 0.3,
+			CachedInputRatio:  nativeRate(0.006),
+			ContextLength:     1048576,
+			MaxOutputTokens:   393216,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+			Description:       "deepseek/deepseek-v4.1-flash-dst on Novita, verified from the public models API on 2026-10-12. Uses Novita's exact USD tariff and API identifier; no creator, priority, or clock tariff is inferred from the suffix. The source does not publish a discrete reasoning-effort vocabulary; this adaptor does not advertise one.",
+		},
+		"deepseek/deepseek-v4.1-flash-p": {
+			Ratio:             nativeRate(0.3),
+			CompletionRatio:   (1.2 * 1.0) / 0.3,
+			CachedInputRatio:  nativeRate(0.006),
+			ContextLength:     1048576,
+			MaxOutputTokens:   393216,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+			Description:       "deepseek/deepseek-v4.1-flash-p on Novita, verified from the public models API on 2026-10-12. Uses Novita's exact USD tariff and API identifier; no creator, priority, or clock tariff is inferred from the suffix. The source does not publish a discrete reasoning-effort vocabulary; this adaptor does not advertise one.",
 		},
 		"deepseek/deepseek-v4.1-flash-z": {
 			Ratio:             nativeRate(0.3),

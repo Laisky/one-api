@@ -117,3 +117,26 @@ func TestModelRatiosIncludeLatestWorkersAISpeechModels(t *testing.T) {
 	require.True(t, ok, "@cf/deepgram/aura-2-es missing from Cloudflare pricing map")
 	require.InDelta(t, 30.0*ratio.MilliTokensUsd, aura2EsCfg.Ratio, 1e-12)
 }
+
+// deprecatedCloudflareModels20260530 contains models whose Cloudflare Workers AI
+// deprecation date passed on May 30, 2026.
+var deprecatedCloudflareModels20260530 = []string{
+	"@cf/moonshotai/kimi-k2.5",
+	"@hf/meta-llama/meta-llama-3-8b-instruct",
+	"@cf/meta/llama-3-8b-instruct",
+	"@cf/meta/llama-3-8b-instruct-awq",
+	"@cf/meta/llama-3.1-8b-instruct",
+	"@cf/meta/llama-3.1-8b-instruct-awq",
+	"@cf/meta/llama-3.1-70b-instruct",
+	"@cf/meta/llama-2-7b-chat-int8",
+	"@cf/meta/llama-2-7b-chat-fp16",
+	"@cf/mistral/mistral-7b-instruct-v0.1",
+	"@hf/mistral/mistral-7b-instruct-v0.2",
+	"@hf/google/gemma-7b-it",
+	"@cf/google/gemma-3-12b-it",
+	"@hf/nousresearch/hermes-2-pro-mistral-7b",
+	"@cf/microsoft/phi-2",
+	"@cf/defog/sqlcoder-7b-2",
+	"@cf/unum/uform-gen2-qwen-500m",
+	"@cf/facebook/bart-large-cnn",
+}

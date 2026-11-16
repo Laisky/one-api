@@ -10,66 +10,30 @@ import (
 //   - https://fireworks.ai/models/deepseek-ai/deepseek-v4-flash-0731
 //   - https://fireworks.ai/models/deepseek-ai/deepseek-v4-flash-vision-exp
 //   - Historical per-model cards under https://fireworks.ai/models/{fireworks,deepseek-ai}/...
+//
+// Additional cards checked 2026-09-24 through 2026-11-16 against
+// https://docs.fireworks.ai/serverless/pricing
+// https://fireworks.ai/models/deepseek-ai/deepseek-v4p1-flash
+// https://fireworks.ai/models/deepseek-ai/deepseek-v4p1-flash-1017
 var deepseekModels = map[string]adaptor.ModelConfig{
-	// Official DeepSeek V4 releases (August 2026).
-	"accounts/fireworks/models/deepseek-v4-pro-0813": {
-		Ratio:                       1.32 * ratio.MilliTokensUsd,
-		CompletionRatio:             3.96 / 1.32,
-		CachedInputRatio:            0.044 * ratio.MilliTokensUsd,
-		ContextLength:               1048576,
-		MaxOutputTokens:             131072,
-		InputModalities:             fwTextOnlyModalities,
-		OutputModalities:            fwTextOnlyModalities,
-		SupportedFeatures:           fwReasoningFeatures,
-		SupportedSamplingParameters: fwChatSamplingParams,
-		Quantization:                "fp8",
-		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Pro-0813",
-		Description:                 "Official DeepSeek V4 Pro release (1.6T MoE) with DSpark speculative decoding, 1M-token context, stronger production agent performance, and function calling.",
-	},
-	"accounts/fireworks/models/deepseek-v4-flash-0731": {
-		Ratio:                       0.22 * ratio.MilliTokensUsd,
-		CompletionRatio:             0.66 / 0.22,
-		CachedInputRatio:            0.007 * ratio.MilliTokensUsd,
-		ContextLength:               1048576,
-		MaxOutputTokens:             131072,
-		InputModalities:             fwTextOnlyModalities,
-		OutputModalities:            fwTextOnlyModalities,
-		SupportedFeatures:           fwReasoningFeatures,
-		SupportedSamplingParameters: fwChatSamplingParams,
-		Quantization:                "fp8",
-		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash-0731",
-		Description:                 "Official DeepSeek V4 Flash release (304B MoE) with DSpark speculative decoding, 1M-token context, enhanced agentic capability, and function calling.",
-	},
-	"accounts/fireworks/models/deepseek-v4-flash-vision-exp": {
-		Ratio:                       0.22 * ratio.MilliTokensUsd,
-		CompletionRatio:             0.66 / 0.22,
-		CachedInputRatio:            0.007 * ratio.MilliTokensUsd,
-		ContextLength:               1048576,
-		InputModalities:             fwTextImageInModalities,
-		OutputModalities:            fwTextOnlyModalities,
-		SupportedFeatures:           fwReasoningFeatures,
-		SupportedSamplingParameters: fwChatSamplingParams,
-		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
-		Description:                 "Experimental DeepSeek V4 Flash multimodal release (305B MoE) with image input, DSpark speculative decoding, 1M-token context, and function calling.",
-	},
-
-	// DeepSeek V4 Pro preview — retained for on-demand compatibility.
-	"accounts/fireworks/models/deepseek-v4-pro": {
-		Ratio:                       1.74 * ratio.MilliTokensUsd,
-		CompletionRatio:             3.48 / 1.74,
-		CachedInputRatio:            0.145 * ratio.MilliTokensUsd,
-		ContextLength:               1048576,
-		MaxOutputTokens:             1048576,
+	"accounts/fireworks/models/deepseek-r1-0528": {
+		Ratio:                       0.56 * ratio.MilliTokensUsd,
+		CompletionRatio:             1.68 / 0.56,
+		CachedInputRatio:            0.28 * ratio.MilliTokensUsd,
+		ContextLength:               163840,
+		MaxOutputTokens:             163840,
 		InputModalities:             fwTextOnlyModalities,
 		OutputModalities:            fwTextOnlyModalities,
 		SupportedFeatures:           fwReasoningFeatures,
 		SupportedSamplingParameters: fwReasoningSamplingParams,
-		Quantization:                "fp16",
-		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Pro",
-		Description:                 "DeepSeek V4 Pro preview (1.6T MoE) with hybrid attention and 1M-token context. Fireworks now marks this preview as on-demand only; use deepseek-v4-pro-0813 for serverless inference.",
+		// Fireworks expanded reasoning_effort controls to DeepSeek-R1 (low/medium/high).
+		// Sources: https://docs.fireworks.ai/guides/reasoning, https://fireworks.ai/blog/deepseek-r1-deepdive
+		SupportedReasoningEfforts: []string{"low", "medium", "high"},
+		DefaultReasoningEffort:    "medium",
+		Quantization:              "fp8",
+		HuggingFaceID:             "deepseek-ai/DeepSeek-R1-0528",
+		Description:               "DeepSeek R1 05/28 reasoning checkpoint (674B MoE) approaching o3/Gemini 2.5 Pro on complex reasoning benchmarks. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
 	},
-
-	// DeepSeek V3 family — $0.56 in / $1.68 out, 50% cached discount.
 	"accounts/fireworks/models/deepseek-v3": {
 		Ratio:                       0.56 * ratio.MilliTokensUsd,
 		CompletionRatio:             1.68 / 0.56,
@@ -112,26 +76,6 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V3.2",
 		Description:                 "DeepSeek V3.2 (671B MoE) tuned for high computational efficiency with superior reasoning and agent performance. Retired from Fireworks serverless 2026-05-14; on-demand/dedicated only; migrate to Kimi K2.6 or GLM 5.1.",
 	},
-	"accounts/fireworks/models/deepseek-r1-0528": {
-		Ratio:                       0.56 * ratio.MilliTokensUsd,
-		CompletionRatio:             1.68 / 0.56,
-		CachedInputRatio:            0.28 * ratio.MilliTokensUsd,
-		ContextLength:               163840,
-		MaxOutputTokens:             163840,
-		InputModalities:             fwTextOnlyModalities,
-		OutputModalities:            fwTextOnlyModalities,
-		SupportedFeatures:           fwReasoningFeatures,
-		SupportedSamplingParameters: fwReasoningSamplingParams,
-		// Fireworks expanded reasoning_effort controls to DeepSeek-R1 (low/medium/high).
-		// Sources: https://docs.fireworks.ai/guides/reasoning, https://fireworks.ai/blog/deepseek-r1-deepdive
-		SupportedReasoningEfforts: []string{"low", "medium", "high"},
-		DefaultReasoningEffort:    "medium",
-		Quantization:              "fp8",
-		HuggingFaceID:             "deepseek-ai/DeepSeek-R1-0528",
-		Description:               "DeepSeek R1 05/28 reasoning checkpoint (674B MoE) approaching o3/Gemini 2.5 Pro on complex reasoning benchmarks. Retired from Fireworks serverless (confirmed via model card, 2026-07-13); on-demand/dedicated only.",
-	},
-
-	// DeepSeek V4 Flash preview — retained for dedicated/on-demand compatibility.
 	"accounts/fireworks/models/deepseek-v4-flash": {
 		Ratio:                       0.14 * ratio.MilliTokensUsd,
 		CompletionRatio:             0.28 / 0.14,
@@ -145,5 +89,79 @@ var deepseekModels = map[string]adaptor.ModelConfig{
 		Quantization:                "fp8",
 		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash",
 		Description:                 "DeepSeek V4 Flash preview with 1M-token context. No longer listed as serverless and superseded by deepseek-v4-flash-0731; retained for dedicated/on-demand deployments.",
+	},
+	"accounts/fireworks/models/deepseek-v4-flash-0731": {
+		Ratio:                       0.22 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.66 / 0.22,
+		CachedInputRatio:            0.007 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		MaxOutputTokens:             131072,
+		InputModalities:             fwTextOnlyModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		Quantization:                "fp8",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash-0731",
+		Description:                 "Official DeepSeek V4 Flash release (304B MoE) with DSpark speculative decoding, 1M-token context, enhanced agentic capability, and function calling.",
+	},
+	"accounts/fireworks/models/deepseek-v4-flash-vision-exp": {
+		Ratio:                       0.22 * ratio.MilliTokensUsd,
+		CompletionRatio:             0.66 / 0.22,
+		CachedInputRatio:            0.007 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		InputModalities:             fwTextImageInModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+		Description:                 "Experimental DeepSeek V4 Flash multimodal release (305B MoE) with image input, DSpark speculative decoding, 1M-token context, and function calling.",
+	},
+	"accounts/fireworks/models/deepseek-v4-pro": {
+		Ratio:                       1.74 * ratio.MilliTokensUsd,
+		CompletionRatio:             3.48 / 1.74,
+		CachedInputRatio:            0.145 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		MaxOutputTokens:             1048576,
+		InputModalities:             fwTextOnlyModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwReasoningSamplingParams,
+		Quantization:                "fp16",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Pro",
+		Description:                 "DeepSeek V4 Pro preview (1.6T MoE) with hybrid attention and 1M-token context. Fireworks now marks this preview as on-demand only; use deepseek-v4-pro-0813 for serverless inference.",
+	},
+	"accounts/fireworks/models/deepseek-v4-pro-0813": {
+		Ratio:                       1.32 * ratio.MilliTokensUsd,
+		CompletionRatio:             3.96 / 1.32,
+		CachedInputRatio:            0.044 * ratio.MilliTokensUsd,
+		ContextLength:               1048576,
+		MaxOutputTokens:             131072,
+		InputModalities:             fwTextOnlyModalities,
+		OutputModalities:            fwTextOnlyModalities,
+		SupportedFeatures:           fwReasoningFeatures,
+		SupportedSamplingParameters: fwChatSamplingParams,
+		Quantization:                "fp8",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V4-Pro-0813",
+		Description:                 "Official DeepSeek V4 Pro release (1.6T MoE) with DSpark speculative decoding, 1M-token context, stronger production agent performance, and function calling.",
+	},
+	"accounts/fireworks/models/deepseek-v4p1-flash": {
+		Ratio: 0.30 * ratio.MilliTokensUsd, CachedInputRatio: 0.006 * ratio.MilliTokensUsd, CompletionRatio: 1.20 / 0.30,
+		ContextLength:   1048576,
+		InputModalities: []string{"text", "image"}, OutputModalities: []string{"text"},
+		SupportedFeatures:           []string{"tools", "reasoning"},
+		SupportedSamplingParameters: []string{"temperature", "top_p", "max_tokens", "max_completion_tokens", "stop", "tools", "tool_choice", "response_format"},
+		Description:                 "DeepSeek V4.1 Flash hosted by Fireworks, with native text and image input. Uses Fireworks Standard serverless rates verified 2026-10-12: USD 0.30 input, 0.006 cached input and 1.20 output per million tokens. Priority, US-only and first-party daypart tariffs do not apply to this default.",
+		HuggingFaceID:               "deepseek-ai/DeepSeek-V4.1-Flash",
+	},
+	"accounts/fireworks/models/deepseek-v4p1-flash-1017": {
+		Ratio:                       .30 * ratio.MilliTokensUsd,
+		CachedInputRatio:            .006 * ratio.MilliTokensUsd,
+		CompletionRatio:             fireworksOutputRatio(1.20, .30),
+		ContextLength:               1_048_576,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedSamplingParameters: []string{"temperature", "top_p", "max_tokens", "max_completion_tokens", "stop", "tools", "tool_choice"},
+		Description:                 "Fireworks-hosted DeepSeek V4.1 Flash 1017 with native text/image input and 1M context. The previous unversioned Fireworks ID remains independently configured." + " Maximum output and hosted precision are unspecified. Priority, Fast, Ultra-fast and deployment-specific charges are separate operator configuration.",
+		SupportedFeatures:           []string{"tools", "reasoning"},
 	},
 }

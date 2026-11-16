@@ -253,7 +253,7 @@ func (a *Adaptor) GetChannelName() string {
 
 // Pricing methods - Ali adapter manages its own model pricing
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
-	// Return the centralized ratios map from constants.go
+	// Return the centralized ratios map from models.go
 	// Pricing from https://help.aliyun.com/zh/dashscope/developer-reference/tongyi-thousand-questions-metering-and-billing
 	return ModelRatios
 }

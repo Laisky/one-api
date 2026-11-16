@@ -2,9 +2,10 @@ package deepinfra
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// zai_orgModels returns the zai_org model defaults for deepinfra.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func zai_orgModels() map[string]adaptor.ModelConfig {
+// zaiOrgModels returns independently owned zai org defaults for deepinfra.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.deepinfra.com/models/list
+func zaiOrgModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"zai-org/GLM-4.6": {
 			Ratio:                       nativeRate(0.5),

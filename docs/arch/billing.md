@@ -278,13 +278,13 @@ graph TD
 - `relay/pricing/global.go` - Global pricing manager and four-layer pricing logic
 - `relay/billing/ratio/model.go` - Audio/video pricing constants and legacy compatibility functions
 - `relay/adaptor/interface.go` - Adapter pricing interface
-- `relay/adaptor/*/constants.go` - Adapter-specific pricing implementations (25+ adapters)
+- `relay/adaptor/*/models.go` - Adapter-specific pricing implementations (25+ adapters)
 - `model/channel.go` - Channel-specific pricing storage
 - `controller/channel.go` - Channel pricing API endpoints
 
 ### 3. Adapter System
 
-All channel adapters now use a unified, centralized pricing logic. As of July 2025, 25+ major adapters import and use a shared `ModelRatios` constant from their respective `constants.go` or subadaptor, eliminating local, hardcoded pricing maps and ensuring consistency across the system. **All pricing, quota, and billing calculations are standardized to use "per 1M tokens" (1 million tokens) as the pricing unit. All user-facing documentation and UI must use this unit.**
+All channel adapters now use a unified, centralized pricing logic. As of July 2025, 25+ major adapters import and use a shared `ModelRatios` constant from their respective `models.go` or subadaptor, eliminating local, hardcoded pricing maps and ensuring consistency across the system. **All pricing, quota, and billing calculations are standardized to use "per 1M tokens" (1 million tokens) as the pricing unit. All user-facing documentation and UI must use this unit.**
 
 **All adapters must use the shared `ModelRatios` map as the single source of truth for model pricing. Local pricing maps are deprecated.**
 
@@ -792,7 +792,7 @@ The billing system now implements a universal, robust two-step billing process f
 **7. Implementation References:**
 
 - Controller logic: `relay/controller/image.go` (see `RelayImageHelper`, `computeImageUsageQuota`, `computeGptImageTokenQuota`)
-- Pricing constants: `relay/adaptor/openai/constants.go`, `relay/billing/ratio/image.go`
+- Pricing constants: `relay/adaptor/openai/models.go`, `relay/billing/ratio/image.go`
 - Tier tables: `ratio.ImageTierTables`
 
 **8. Tests:**
@@ -1143,33 +1143,33 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 
 **Adapters with Native Pricing**:
 
-- `relay/adaptor/openai/constants.go` - 84 OpenAI GPT models
-- `relay/adaptor/anthropic/constants.go` - 15 Anthropic Claude models
-- `relay/adaptor/ali/constants.go` - 89 Alibaba Cloud models
-- `relay/adaptor/baidu/constants.go` - 16 Baidu ERNIE models
-- `relay/adaptor/tencent/constants.go` - 6 Tencent Hunyuan models
-- `relay/adaptor/geminiOpenaiCompatible/constants.go` - 26 Google Gemini models
-- `relay/adaptor/xunfei/constants.go` - 6 iFlytek Spark models
-- `relay/adaptor/vertexai/adaptor.go` - 34 Google Cloud VertexAI models
-- `relay/adaptor/zhipu/constants.go` - 23 Zhipu GLM models
-- `relay/adaptor/deepseek/constants.go` - 2 DeepSeek models
-- `relay/adaptor/groq/constants.go` - current Groq production/preview models plus retired compatibility entries
-- `relay/adaptor/mistral/constants.go` - 10+ Mistral models
-- `relay/adaptor/moonshot/constants.go` - 3 Moonshot models
-- `relay/adaptor/cohere/constant.go` - 12 Cohere Command models
-- `relay/adaptor/ai360/constants.go` - 4 AI360 models
-- `relay/adaptor/doubao/constants.go` - 20+ Doubao models
-- `relay/adaptor/novita/constants.go` - 40+ Novita models
-- `relay/adaptor/openrouter/adaptor.go` - 100+ OpenRouter models
-- `relay/adaptor/replicate/constant.go` - 48 Replicate models
-- `relay/adaptor/aws/adaptor.go` - 31 AWS Bedrock models
-- `relay/adaptor/stepfun/constants.go` - 3 StepFun models
-- `relay/adaptor/lingyiwanwu/constants.go` - 3 LingYi WanWu models
-- `relay/adaptor/minimax/constants.go` - 3 Minimax models
-- `relay/adaptor/baichuan/constants.go` - 2 Baichuan models
-- `relay/adaptor/togetherai/constants.go` - 40+ TogetherAI models
-- `relay/adaptor/siliconflow/constants.go` - 30+ SiliconFlow models
-- `relay/adaptor/xai/constants.go` - current XAI/Grok text, image, and video catalog
+- `relay/adaptor/openai/models.go` - 84 OpenAI GPT models
+- `relay/adaptor/anthropic/models.go` - 15 Anthropic Claude models
+- `relay/adaptor/ali/models.go` - 89 Alibaba Cloud models
+- `relay/adaptor/baidu/models.go` - 16 Baidu ERNIE models
+- `relay/adaptor/tencent/models.go` - 6 Tencent Hunyuan models
+- `relay/adaptor/geminiOpenaiCompatible/models.go` - 26 Google Gemini models
+- `relay/adaptor/xunfei/models.go` - 6 iFlytek Spark models
+- `relay/adaptor/vertexai/models.go` - 34 Google Cloud VertexAI models
+- `relay/adaptor/zhipu/models.go` - 23 Zhipu GLM models
+- `relay/adaptor/deepseek/models.go` - 2 DeepSeek models
+- `relay/adaptor/groq/models.go` - current Groq production/preview models plus retired compatibility entries
+- `relay/adaptor/mistral/models.go` - 10+ Mistral models
+- `relay/adaptor/moonshot/models.go` - 3 Moonshot models
+- `relay/adaptor/cohere/models.go` - 12 Cohere Command models
+- `relay/adaptor/ai360/models.go` - 4 AI360 models
+- `relay/adaptor/doubao/models.go` - 20+ Doubao models
+- `relay/adaptor/novita/models.go` - 40+ Novita models
+- `relay/adaptor/openrouter/models.go` - 100+ OpenRouter models
+- `relay/adaptor/replicate/models.go` - 48 Replicate models
+- `relay/adaptor/aws/models.go` - 31 AWS Bedrock models
+- `relay/adaptor/stepfun/models.go` - 3 StepFun models
+- `relay/adaptor/lingyiwanwu/models.go` - 3 LingYi WanWu models
+- `relay/adaptor/minimax/models.go` - 3 Minimax models
+- `relay/adaptor/baichuan/models.go` - 2 Baichuan models
+- `relay/adaptor/togetherai/models.go` - 40+ TogetherAI models
+- `relay/adaptor/siliconflow/models.go` - 30+ SiliconFlow models
+- `relay/adaptor/xai/models.go` - current XAI/Grok text, image, and video catalog
 
 ### Global Pricing Enhancement and Clean Architecture
 
@@ -1232,7 +1232,7 @@ graph TD
 **✅ Fully Implemented Features**:
 
 - **Four-Layer Pricing System**: Complete implementation with channel overrides → adapter pricing → global fallback → final default
-- **25+ Adapter Pricing**: All major adapters have native pricing in their `constants.go` files
+- **25+ Adapter Pricing**: All major adapters have native pricing in their `models.go` files
 - **Global Pricing Manager**: Automatic merging from 13 selected adapters for comprehensive fallback coverage
 - **Legacy Compatibility**: Backward compatibility maintained through legacy functions in `relay/billing/ratio/model.go`
 - **Real-time Usage**: Active usage in `relay/controller/text.go`, `relay/controller/audio.go`, and `controller/channel-test.go`

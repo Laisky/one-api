@@ -2,8 +2,9 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// baiduModels returns the baidu model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// baiduModels returns independently owned baidu defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func baiduModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"baidu/cobuddy:free": {
@@ -75,6 +76,34 @@ func baiduModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "presence_penalty", "reasoning", "repetition_penalty", "seed", "stop", "temperature", "top_k", "top_p"},
 			HuggingFaceID:               "baidu/ERNIE-4.5-VL-424B-A47B-PT",
 			Description:                 "baidu/ernie-4.5-vl-424b-a47b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"baidu/ernie-5.5-flash-preview:free": {
+			Ratio:                       nativeRate(0),
+			CompletionRatio:             1,
+			ContextLength:               1024000,
+			MaxOutputTokens:             921600,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
+			SupportedReasoningEfforts:   []string{"high"},
+			DefaultReasoningEffort:      "high",
+			HuggingFaceID:               "baidu/ERNIE-5.5-Flash-Preview",
+			Description:                 "baidu/ernie-5.5-flash-preview:free on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges. The published token tariff is explicitly free; account limits still apply.",
+		},
+		"baidu/ernie-light-dt-1.0-intl": {
+			Ratio:                       nativeRate(1.13),
+			CompletionRatio:             3.48672566371681,
+			CachedInputRatio:            nativeRate(0.113),
+			ContextLength:               1024000,
+			MaxOutputTokens:             131072,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "response_format", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
+			SupportedReasoningEfforts:   []string{"max", "high", "low", "none"},
+			DefaultReasoningEffort:      "max",
+			Description:                 "baidu/ernie-light-dt-1.0-intl on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"baidu/qianfan-ocr-fast": {
 			Ratio:                       nativeRate(0.68),

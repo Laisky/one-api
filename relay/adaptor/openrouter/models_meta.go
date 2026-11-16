@@ -2,10 +2,26 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// metaModels returns the meta model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// metaModels returns independently owned meta defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func metaModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
+		"meta/muse-ember": {
+			Ratio:                       nativeRate(0.1),
+			CompletionRatio:             5,
+			CachedInputRatio:            nativeRate(0.004),
+			CacheWrite5mRatio:           nativeRate(0.125),
+			ContextLength:               1048576,
+			MaxOutputTokens:             943718,
+			InputModalities:             []string{"text", "image", "video", "file", "audio"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			SupportedReasoningEfforts:   []string{"max", "xhigh", "high", "medium", "low", "minimal"},
+			DefaultReasoningEffort:      "max",
+			Description:                 "meta/muse-ember on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
 		"meta/muse-glimmer-30b": {
 			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             4,
@@ -90,6 +106,35 @@ func metaModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"max", "xhigh", "high", "medium", "low", "minimal"},
 			DefaultReasoningEffort:      "medium",
 			Description:                 "meta/muse-spark-1.3-contributor on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
+		"meta/muse-spark-open": {
+			Ratio:                       nativeRate(1.25),
+			CompletionRatio:             3.4,
+			CachedInputRatio:            nativeRate(0.15),
+			ContextLength:               1048576,
+			MaxOutputTokens:             943718,
+			InputModalities:             []string{"text", "image", "video", "file", "audio"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			SupportedReasoningEfforts:   []string{"xhigh", "high", "medium", "low"},
+			DefaultReasoningEffort:      "medium",
+			HuggingFaceID:               "meta-models/Muse-Spark-Open-816B-A42B",
+			Description:                 "meta/muse-spark-open on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
+		"meta/muse-wonder": {
+			Ratio:                       nativeRate(4),
+			CompletionRatio:             (20 * 1.0) / 4,
+			CachedInputRatio:            nativeRate(0.2),
+			ContextLength:               1048576,
+			MaxOutputTokens:             943718,
+			InputModalities:             []string{"text", "image", "video", "file", "audio"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			SupportedReasoningEfforts:   []string{"max", "xhigh", "high", "medium", "low", "minimal"},
+			DefaultReasoningEffort:      "medium",
+			Description:                 "meta/muse-wonder on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 	}
 }

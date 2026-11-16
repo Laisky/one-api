@@ -2,9 +2,10 @@ package togetherai
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// black_forest_labsModels returns the black_forest_labs model defaults for togetherai.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func black_forest_labsModels() map[string]adaptor.ModelConfig {
+// blackForestLabsModels returns independently owned black forest labs defaults for togetherai.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://docs.together.ai/docs/serverless/models
+func blackForestLabsModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"black-forest-labs/FLUX.1-kontext-max": {
 			Ratio:           0,

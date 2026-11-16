@@ -40,7 +40,7 @@ func TestOpenRouterSonnet55Catalog(t *testing.T) {
 func TestOpenRouterSonnet55DefinitionsOwnMetadata(t *testing.T) {
 	t.Parallel()
 	const id = "anthropic/claude-sonnet-5.5"
-	first, second := sonnet55Models(), sonnet55Models()
+	first, second := anthropicModels(), anthropicModels()
 	first[id].InputModalities[0] = "changed"
 	first[id].SupportedSamplingParameters[0] = "changed"
 	first[id].SupportedReasoningEfforts[0] = "changed"

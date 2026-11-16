@@ -2,8 +2,9 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// xiaomiModels returns the xiaomi model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// xiaomiModels returns independently owned xiaomi defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func xiaomiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"xiaomi/mimo-v2-flash": {

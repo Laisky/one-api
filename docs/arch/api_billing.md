@@ -411,7 +411,7 @@ type Log struct {
 
 #### Model Pricing
 
-- **`relay/adaptor/*/constants.go`**: Adapter-specific model pricing (25+ adapters)
+- **`relay/adaptor/*/models.go`**: Adapter-specific model pricing (25+ adapters)
 - **`relay/billing/ratio/model.go`**: Legacy pricing compatibility functions
 
 This comprehensive billing system ensures accurate cost calculation for all Chat Completion API features while maintaining backward compatibility and providing transparent pricing across all supported models and providers.

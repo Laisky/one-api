@@ -43,7 +43,7 @@ ReaderLM, Jina-VLM and catalog-only embedding weights are deliberately excluded.
 ## Models and prices
 
 The adaptor registers **25 unique inference IDs**, with context limits,
-modalities, descriptions and pricing in `constants.go`. Use the short IDs below,
+modalities, descriptions and pricing in `models.go`. Use the short IDs below,
 not the catalog's `jina-ai/` prefix.
 
 | Family | Registered IDs | Default USD / million input tokens |

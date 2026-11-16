@@ -2,9 +2,10 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// x_aiModels returns the x_ai model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func x_aiModels() map[string]adaptor.ModelConfig {
+// xAiModels returns independently owned x ai defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
+func xAiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"x-ai/grok-4.20": {
 			Ratio:            nativeRate(1.25),

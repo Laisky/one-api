@@ -2,8 +2,9 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// mistralaiModels returns the mistralai model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// mistralaiModels returns independently owned mistralai defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func mistralaiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"mistralai/codestral-2508": {
@@ -151,6 +152,21 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "mistralai/mistral-large-2512 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 			MaxOutputTokens:             209715,
 			HuggingFaceID:               "mistralai/Mistral-Large-3-675B-Instruct-2512",
+		},
+		"mistralai/mistral-large-4-0": {
+			Ratio:                       nativeRate(0.7),
+			CompletionRatio:             3,
+			CachedInputRatio:            nativeRate(0.07),
+			ContextLength:               1048576,
+			MaxOutputTokens:             262144,
+			InputModalities:             []string{"text", "image"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logprobs", "max_tokens", "presence_penalty", "reasoning", "reasoning_effort", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_logprobs", "top_p"},
+			SupportedReasoningEfforts:   []string{"high", "none"},
+			DefaultReasoningEffort:      "high",
+			Description:                 "mistralai/mistral-large-4-0 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			HuggingFaceID:               "mistralai/Mistral-Large-4-1T-A52B",
 		},
 		"mistralai/mistral-medium-3": {
 			Ratio:                       nativeRate(0.39999999999999997),
