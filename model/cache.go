@@ -334,6 +334,8 @@ func InitChannelCache() {
 // Return values:
 //   - error: wrapped query failure.
 func InitChannelCacheContext(ctx context.Context) error {
+	abilityCacheUpdateLock.Lock()
+	defer abilityCacheUpdateLock.Unlock()
 	newChannelId2channel := make(map[int]*Channel)
 	var channels []*Channel
 	if err := DB.WithContext(ctx).Where("status = ?", ChannelStatusEnabled).Find(&channels).Error; err != nil {
@@ -348,16 +350,19 @@ func InitChannelCacheContext(ctx context.Context) error {
 		return errors.Wrap(err, "list abilities for cache")
 	}
 
-	// Filter abilities: must be enabled and not currently suspended
+	// Keep enabled abilities, including cooling ones, so expiry needs no rebuild.
 	// And create a quick lookup map for valid abilities
 	// key: "group:model:channelId"
 	validAbilityMap := make(map[string]bool)
-	now := time.Now()
+	newSuspensions := make(map[cachedAbilityKey]time.Time)
 	for _, ability := range allAbilities {
 		// Ensure the ability corresponds to an enabled channel (via ability.Enabled flag)
-		// and is not currently suspended.
+		// Suspension deadlines are checked when routing, rather than dropping abilities.
 		// The ability.Enabled should have been set correctly based on channel.Status during AddAbilities/UpdateAbilities.
-		if ability.Enabled && (ability.SuspendUntil == nil || ability.SuspendUntil.Before(now)) {
+		if ability.Enabled {
+			if ability.SuspendUntil != nil {
+				newSuspensions[cachedAbilityKey{ability.Group, ability.Model, ability.ChannelId}] = *ability.SuspendUntil
+			}
 			// Check if the channel itself is in our list of enabled channels
 			if _, channelExists := newChannelId2channel[ability.ChannelId]; channelExists {
 				key := fmt.Sprintf("%s:%s:%d", ability.Group, ability.Model, ability.ChannelId)
@@ -403,6 +408,7 @@ func InitChannelCacheContext(ctx context.Context) error {
 
 	channelSyncLock.Lock()
 	group2model2channels = newGroup2model2channels
+	cachedAbilitySuspensions = newSuspensions
 	channelId2channel = newChannelId2channel
 	channelSyncLock.Unlock()
 	logger.Logger.Info("channels synced from database, considering suspensions")
@@ -480,7 +486,7 @@ func GetChannelsFromCache(group string, model string) ([]*Channel, error) {
 		return nil, errors.New("MemoryCache is disabled")
 	}
 	channelSyncLock.RLock()
-	channelsFromCache := group2model2channels[group][model]
+	channelsFromCache := availableCachedChannelsLocked(group, model, time.Now().UTC())
 	if len(channelsFromCache) == 0 {
 		channelSyncLock.RUnlock()
 		return nil, errors.New("channel not found in memory cache")
@@ -510,16 +516,9 @@ func CacheGetRandomSatisfiedChannelWithContext(ctx context.Context, group string
 	channelSyncLock.RLock()
 	// It is important to make a copy if we are going to modify or iterate outside lock,
 	// or ensure operations are safe. Here, we are just reading.
-	channelsFromCache := group2model2channels[group][model]
+	channelsFromCache := availableCachedChannelsLocked(group, model, time.Now().UTC())
 
-	// Create a new slice to operate on, to avoid issues if the underlying array is changed by a concurrent Sync.
-	// And to filter out channels that might have been suspended since cache was built.
-	// However, for simplicity and given SyncChannelCache rebuilds the map,
-	// we'll rely on SyncChannelCache to clear out suspended channels periodically.
-	// A live check here would add DB calls, negating some cache benefits.
-	// The current InitChannelCache already filters by suspension.
-	// If a channel is suspended *between* syncs, this cache might serve it.
-	// The application's retry logic will then handle it.
+	// The snapshot includes cooling abilities; deadline filtering above also restores expired ones.
 
 	if len(channelsFromCache) == 0 {
 		channelSyncLock.RUnlock()
@@ -611,7 +610,7 @@ func CacheGetRandomSatisfiedChannelExcludingWithContext(ctx context.Context, gro
 	}
 	lg := logger.FromContext(ctx)
 	channelSyncLock.RLock()
-	channelsFromCache := group2model2channels[group][model]
+	channelsFromCache := availableCachedChannelsLocked(group, model, time.Now().UTC())
 
 	if len(channelsFromCache) == 0 {
 		channelSyncLock.RUnlock()

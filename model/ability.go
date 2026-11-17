@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -415,7 +416,35 @@ func GetGroupModelsV2(ctx context.Context, group string) ([]dto.EnabledAbility, 
 	return models, nil
 }
 
-// SuspendAbility sets the SuspendUntil timestamp for a given ability.
+// cachedAbilityKey identifies one exact routing ability without string-key collisions.
+type cachedAbilityKey struct {
+	group     string
+	model     string
+	channelID int
+}
+
+// abilityCacheUpdateLock serializes database suspension writes with cache rebuilds.
+// It is separate from channelSyncLock so readers remain available during database I/O.
+var abilityCacheUpdateLock sync.Mutex
+
+// cachedAbilitySuspensions stores deadlines under channelSyncLock; expired entries are harmless.
+var cachedAbilitySuspensions map[cachedAbilityKey]time.Time
+
+// availableCachedChannelsLocked returns an independent slice of currently routable cached channels.
+// The caller must hold channelSyncLock for reading; now is the UTC selection time.
+func availableCachedChannelsLocked(group, model string, now time.Time) []*Channel {
+	channels := group2model2channels[group][model]
+	available := make([]*Channel, 0, len(channels))
+	for _, channel := range channels {
+		until, suspended := cachedAbilitySuspensions[cachedAbilityKey{group, model, channel.Id}]
+		if !suspended || until.Before(now) {
+			available = append(available, channel)
+		}
+	}
+	return available
+}
+
+// SuspendAbility persists and immediately publishes a cooldown for one exact ability.
 func SuspendAbility(ctx context.Context, group string, modelName string, channelId int, duration time.Duration) error {
 	if DB == nil {
 		return errors.New("database not initialized")
@@ -423,6 +452,8 @@ func SuspendAbility(ctx context.Context, group string, modelName string, channel
 	if group == "" || modelName == "" || channelId == 0 {
 		return errors.New("group, modelName, and channelId must be specified for suspending ability")
 	}
+	abilityCacheUpdateLock.Lock()
+	defer abilityCacheUpdateLock.Unlock()
 	suspendTime := time.Now().UTC().Add(duration)
 
 	// Handle database-specific identifier quoting like other functions
@@ -449,6 +480,12 @@ func SuspendAbility(ctx context.Context, group string, modelName string, channel
 				group, modelName, channelId, result.RowsAffected),
 			LookupChannelRef(ctx, channelId))
 	}
+	channelSyncLock.Lock()
+	if cachedAbilitySuspensions == nil {
+		cachedAbilitySuspensions = make(map[cachedAbilityKey]time.Time)
+	}
+	cachedAbilitySuspensions[cachedAbilityKey{group, modelName, channelId}] = suspendTime
+	channelSyncLock.Unlock()
 	return nil
 }
 

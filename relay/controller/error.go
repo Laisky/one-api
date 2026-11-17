@@ -16,11 +16,14 @@ import (
 )
 
 type GeneralErrorResponse struct {
-	Error    model.Error `json:"error"`
-	Message  string      `json:"message"`
-	Msg      string      `json:"msg"`
-	Err      string      `json:"err"`
-	ErrorMsg string      `json:"error_msg"`
+	Error    model.Error     `json:"error"`
+	Message  string          `json:"message"`
+	Type     model.ErrorType `json:"type"`
+	Code     any             `json:"code"`
+	Param    *string         `json:"param"`
+	Msg      string          `json:"msg"`
+	Err      string          `json:"err"`
+	ErrorMsg string          `json:"error_msg"`
 	Header   struct {
 		Message string `json:"message"`
 	} `json:"header"`
@@ -113,6 +116,17 @@ func RelayErrorHandler(resp *http.Response) (ErrorWithStatusCode *model.ErrorWit
 		}
 	} else {
 		ErrorWithStatusCode.Error.Message = errResponse.ToMessage()
+		// Flat OpenAI-compatible envelopes carry the same attribution as nested
+		// errors. Keep defaults only for fields the provider did not supply.
+		if errResponse.Type != "" {
+			ErrorWithStatusCode.Error.Type = errResponse.Type
+		}
+		if errResponse.Code != nil {
+			ErrorWithStatusCode.Error.Code = errResponse.Code
+		}
+		if errResponse.Param != nil {
+			ErrorWithStatusCode.Error.Param = *errResponse.Param
+		}
 		if ErrorWithStatusCode.Error.RawError == nil && ErrorWithStatusCode.Error.Message != "" {
 			ErrorWithStatusCode.Error.RawError = errors.New(ErrorWithStatusCode.Error.Message)
 		}
