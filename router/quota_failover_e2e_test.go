@@ -37,29 +37,64 @@ type quotaRouterResult struct {
 	healthyUsed      int64
 }
 
+// quotaFlatBody is the provider's flat AccountQuotaExceeded envelope from issue #625.
+const quotaFlatBody = `{"message":"You have exceeded the monthly usage quota","type":"TooManyRequests","param":"quota","code":"AccountQuotaExceeded"}`
+
+// quotaRouterSpec scripts the failing provider and the routing configuration.
+type quotaRouterSpec struct {
+	// failStatus and failBody are the failing provider's response; zero values
+	// select the issue #625 HTTP 429 flat AccountQuotaExceeded envelope.
+	failStatus int
+	failBody   string
+	retries    int
+	memory     bool
+	alternate  string
+	requests   int
+}
+
+// quotaFailure returns the issue #625 HTTP 429 failure in its flat or nested envelope.
+func quotaFailure(nested bool) quotaRouterSpec {
+	body := quotaFlatBody
+	if nested {
+		body = `{"error":` + body + `}`
+	}
+	return quotaRouterSpec{failStatus: http.StatusTooManyRequests, failBody: body}
+}
+
 // runQuotaRouter sends one authenticated HTTP request through the shipped router,
 // real channel distribution, OpenAI-compatible adaptor and billing machinery.
 // Parameters select envelope shape, budget, cache path and alternate eligibility.
 // Returns the client response, provider counters and final account debit.
 func runQuotaRouter(t *testing.T, nested bool, retries int, memory bool, alternate string) quotaRouterResult {
-	return runQuotaRouterRequests(t, nested, retries, memory, alternate, 1)
+	spec := quotaFailure(nested)
+	spec.retries, spec.memory, spec.alternate, spec.requests = retries, memory, alternate, 1
+	return runQuotaRouterSpec(t, spec)
 }
 
 // runQuotaRouterRequests sends sequential public HTTP requests without rebuilding
 // the channel cache, so persisted cooldown must influence the next request.
 func runQuotaRouterRequests(t *testing.T, nested bool, retries int, memory bool, alternate string, requests int) quotaRouterResult {
+	spec := quotaFailure(nested)
+	spec.retries, spec.memory, spec.alternate, spec.requests = retries, memory, alternate, requests
+	return runQuotaRouterSpec(t, spec)
+}
+
+// runQuotaRouterSpec runs spec.requests sequential public HTTP requests against a
+// failing provider (the higher-priority channel) and an optional healthy alternate.
+func runQuotaRouterSpec(t *testing.T, spec quotaRouterSpec) quotaRouterResult {
 	t.Helper()
+	retries, memory, alternate, requests := spec.retries, spec.memory, spec.alternate, max(spec.requests, 1)
+	if spec.failStatus == 0 {
+		failure := quotaFailure(false)
+		spec.failStatus, spec.failBody = failure.failStatus, failure.failBody
+	}
 	var failedCalls, healthyCalls atomic.Int64
 	failed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		failedCalls.Add(1)
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusTooManyRequests)
-		body := `{"message":"You have exceeded the monthly usage quota","type":"TooManyRequests","param":"quota","code":"AccountQuotaExceeded"}`
-		if nested {
-			body = `{"error":` + body + `}`
-		}
-		if _, err := io.WriteString(w, body); err != nil {
-			t.Errorf("write quota response: %v", err)
+		w.WriteHeader(spec.failStatus)
+		if _, err := io.WriteString(w, spec.failBody); err != nil {
+			t.Errorf("write failing provider response: %v", err)
 		}
 	}))
 	t.Cleanup(failed.Close)
@@ -219,6 +254,74 @@ func TestQuotaErrorMetadataPublicRouter(t *testing.T) {
 			require.Equal(t, "AccountQuotaExceeded", envelope.Error.Code)
 			require.Equal(t, "TooManyRequests", envelope.Error.Type)
 			require.Equal(t, "quota", envelope.Error.Param)
+		})
+	}
+}
+
+// TestQuotaErrorMetadataPublicRouterToleratesObjectParam is the public-boundary
+// regression for the review's P1: a flat envelope whose optional param is an
+// object must keep the provider message and attribution, and the client must
+// never receive the raw provider body with its internal identifiers. HTTP 402
+// shows the provider message verbatim; the relay replaces 429 messages with its
+// saturation text, so only attribution is observable there.
+func TestQuotaErrorMetadataPublicRouterToleratesObjectParam(t *testing.T) {
+	const secret = "internal-account-123"
+	for _, status := range []int{http.StatusPaymentRequired, http.StatusTooManyRequests} {
+		t.Run(fmt.Sprintf("status=%d", status), func(t *testing.T) {
+			got := runQuotaRouterSpec(t, quotaRouterSpec{
+				failStatus: status,
+				failBody:   `{"message":"You have exceeded the monthly usage quota","type":"TooManyRequests","code":"AccountQuotaExceeded","param":{"account":"` + secret + `"}}`,
+				alternate:  "absent",
+			})
+			require.Equal(t, status, got.status, got.body)
+			require.NotContains(t, got.body, secret, "the client must not receive the raw provider body")
+			require.NotContains(t, got.body, "failed to unmarshal response body")
+			var envelope struct {
+				Error struct {
+					Message string `json:"message"`
+					Code    any    `json:"code"`
+					Type    string `json:"type"`
+				} `json:"error"`
+			}
+			require.NoError(t, json.Unmarshal([]byte(got.body), &envelope))
+			if status == http.StatusPaymentRequired {
+				require.Contains(t, envelope.Error.Message, "You have exceeded the monthly usage quota")
+			}
+			require.Equal(t, "AccountQuotaExceeded", envelope.Error.Code)
+			require.Equal(t, "TooManyRequests", envelope.Error.Type)
+		})
+	}
+}
+
+// TestUpstreamOneAPIErrorTypeCannotVetoFailoverPublicRouter covers the review's
+// error-origin trust boundary with the realistic chained-gateway case: the
+// channel points at another one-api whose key ran out of quota, so that gateway
+// answers 403 with its OWN local error type and a user-quota code. That type
+// describes the upstream gateway, not this one; it must not be mistaken for this
+// gateway's caller error, which would veto failover and leave the exhausted
+// channel in rotation.
+func TestUpstreamOneAPIErrorTypeCannotVetoFailoverPublicRouter(t *testing.T) {
+	const chainedQuota = `{"error":{"message":"user quota is not enough","type":"one_api_error","code":"insufficient_user_quota"}}`
+	for _, memory := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cache=%t/403_failover", memory), func(t *testing.T) {
+			got := runQuotaRouterSpec(t, quotaRouterSpec{failStatus: http.StatusForbidden, failBody: chainedQuota, retries: 1, memory: memory, alternate: "eligible"})
+			require.Equal(t, http.StatusOK, got.status, got.body)
+			require.EqualValues(t, 1, got.failedCalls)
+			require.EqualValues(t, 1, got.healthyCalls)
+			require.Equal(t, 1, got.positiveConsumes)
+			require.Zero(t, got.failedUsed)
+		})
+		t.Run(fmt.Sprintf("cache=%t/5xx_cooldown", memory), func(t *testing.T) {
+			// A provider 5xx typed as one_api_error must still cool the ability, so
+			// the next request avoids the failing channel even with no retry budget.
+			got := runQuotaRouterSpec(t, quotaRouterSpec{
+				failStatus: http.StatusInternalServerError,
+				failBody:   `{"error":{"message":"upstream gateway failed","type":"one_api_error","code":"do_request_failed"}}`,
+				memory:     memory, alternate: "eligible", requests: 2,
+			})
+			require.Equal(t, http.StatusOK, got.status, got.body)
+			require.EqualValues(t, 1, got.failedCalls)
+			require.EqualValues(t, 1, got.healthyCalls)
 		})
 	}
 }

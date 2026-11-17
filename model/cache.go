@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -311,14 +310,6 @@ func CacheGetGroupModelsV2(ctx context.Context, group string) (models []dto.Enab
 	return models, nil
 }
 
-var group2model2channels map[string]map[string][]*Channel
-
-// channelId2channel is the id -> channel snapshot rebuilt by InitChannelCache.
-// Guarded by channelSyncLock. It makes channel log enrichment free for code that
-// holds only an integer channel id. It contains ENABLED channels only.
-var channelId2channel map[int]*Channel
-var channelSyncLock sync.RWMutex
-
 func InitChannelCache() {
 	if err := InitChannelCacheContext(context.Background()); err != nil {
 		logger.Logger.Error("failed to sync channels from database", zap.Error(err))
@@ -350,24 +341,22 @@ func InitChannelCacheContext(ctx context.Context) error {
 		return errors.Wrap(err, "list abilities for cache")
 	}
 
-	// Keep enabled abilities, including cooling ones, so expiry needs no rebuild.
-	// And create a quick lookup map for valid abilities
-	// key: "group:model:channelId"
-	validAbilityMap := make(map[string]bool)
+	// Keep enabled abilities, including cooling ones, so expiry needs no rebuild:
+	// suspension deadlines are checked when routing rather than dropping abilities.
+	// ability.Enabled mirrors channel.Status (maintained by AddAbilities/UpdateAbilities).
+	validAbilities := make(map[cachedAbilityKey]struct{}, len(allAbilities))
 	newSuspensions := make(map[cachedAbilityKey]time.Time)
 	for _, ability := range allAbilities {
-		// Ensure the ability corresponds to an enabled channel (via ability.Enabled flag)
-		// Suspension deadlines are checked when routing, rather than dropping abilities.
-		// The ability.Enabled should have been set correctly based on channel.Status during AddAbilities/UpdateAbilities.
-		if ability.Enabled {
-			if ability.SuspendUntil != nil {
-				newSuspensions[cachedAbilityKey{ability.Group, ability.Model, ability.ChannelId}] = *ability.SuspendUntil
-			}
-			// Check if the channel itself is in our list of enabled channels
-			if _, channelExists := newChannelId2channel[ability.ChannelId]; channelExists {
-				key := fmt.Sprintf("%s:%s:%d", ability.Group, ability.Model, ability.ChannelId)
-				validAbilityMap[key] = true
-			}
+		if !ability.Enabled {
+			continue
+		}
+		key := cachedAbilityKey{ability.Group, ability.Model, ability.ChannelId}
+		if ability.SuspendUntil != nil {
+			newSuspensions[key] = *ability.SuspendUntil
+		}
+		// The ability must also belong to a channel in the enabled-channel snapshot.
+		if _, channelExists := newChannelId2channel[ability.ChannelId]; channelExists {
+			validAbilities[key] = struct{}{}
 		}
 	}
 
@@ -384,8 +373,7 @@ func InitChannelCacheContext(ctx context.Context) error {
 			}
 			for _, modelName := range channelModels {
 				// Check if this specific ability (group, model, channel.Id) is in our valid map
-				abilityKey := fmt.Sprintf("%s:%s:%d", groupName, modelName, channel.Id)
-				if _, isValidAbility := validAbilityMap[abilityKey]; isValidAbility {
+				if _, isValidAbility := validAbilities[cachedAbilityKey{groupName, modelName, channel.Id}]; isValidAbility {
 					if _, ok := newGroup2model2channels[groupName][modelName]; !ok {
 						newGroup2model2channels[groupName][modelName] = make([]*Channel, 0)
 					}
@@ -481,21 +469,27 @@ func SyncChannelCacheContext(ctx context.Context, frequency int) {
 	}
 }
 
+// GetChannelsFromCache returns a caller-owned slice of the cached channels that
+// can currently serve (group, model), in priority order, excluding abilities that
+// are cooling down.
+//
+// Parameters:
+//   - group, model: the exact routing pool.
+//
+// Return values:
+//   - []*Channel: the routable channels.
+//   - error: when the memory cache is disabled or no channel is routable.
 func GetChannelsFromCache(group string, model string) ([]*Channel, error) {
 	if !config.MemoryCacheEnabled {
 		return nil, errors.New("MemoryCache is disabled")
 	}
+	now := time.Now().UTC()
 	channelSyncLock.RLock()
-	channelsFromCache := availableCachedChannelsLocked(group, model, time.Now().UTC())
-	if len(channelsFromCache) == 0 {
-		channelSyncLock.RUnlock()
+	candidateChannels, _ := routableCachedChannelsLocked(group, model, nil, now)
+	channelSyncLock.RUnlock()
+	if len(candidateChannels) == 0 {
 		return nil, errors.New("channel not found in memory cache")
 	}
-
-	candidateChannels := make([]*Channel, len(channelsFromCache))
-	copy(candidateChannels, channelsFromCache)
-	channelSyncLock.RUnlock()
-
 	return candidateChannels, nil
 }
 
@@ -513,32 +507,20 @@ func CacheGetRandomSatisfiedChannelWithContext(ctx context.Context, group string
 		return GetRandomSatisfiedChannel(group, model, ignoreFirstPriority)
 	}
 	lg := logger.FromContext(ctx)
+	now := time.Now().UTC()
 	channelSyncLock.RLock()
-	// It is important to make a copy if we are going to modify or iterate outside lock,
-	// or ensure operations are safe. Here, we are just reading.
-	channelsFromCache := availableCachedChannelsLocked(group, model, time.Now().UTC())
-
-	// The snapshot includes cooling abilities; deadline filtering above also restores expired ones.
-
-	if len(channelsFromCache) == 0 {
-		channelSyncLock.RUnlock()
-		return nil, errors.New("channel not found in memory cache")
-	}
-
-	// Make a copy to safely work with outside the lock for selection logic
-	candidateChannels := make([]*Channel, len(channelsFromCache))
-	copy(candidateChannels, channelsFromCache)
+	// The snapshot includes cooling abilities; the eligibility pass filters them by
+	// deadline (so expiry restores them) and returns a caller-owned slice that the
+	// selection below may sort in place outside the lock.
+	candidateChannels, _ := routableCachedChannelsLocked(group, model, nil, now)
 	channelSyncLock.RUnlock()
 
 	if len(candidateChannels) == 0 {
-		return nil, errors.Errorf("no channels in cache support model %s", model)
+		return nil, errors.New("channel not found in memory cache")
 	}
 
 	endIdx := len(candidateChannels)
 	// choose by priority
-	if endIdx == 0 { // Should be caught by earlier check, but as a safeguard
-		return nil, errors.New("no channels available after cache check")
-	}
 	firstChannel := candidateChannels[0]
 	if firstChannel.GetPriority() > 0 {
 		for i := range candidateChannels {
@@ -609,27 +591,24 @@ func CacheGetRandomSatisfiedChannelExcludingWithContext(ctx context.Context, gro
 		return GetRandomSatisfiedChannelExcluding(group, model, ignoreFirstPriority, excludeChannelIds)
 	}
 	lg := logger.FromContext(ctx)
+	now := time.Now().UTC()
 	channelSyncLock.RLock()
-	channelsFromCache := availableCachedChannelsLocked(group, model, time.Now().UTC())
+	// One eligibility pass applies both the cooldown deadlines and the exclusions.
+	candidateChannels, routable := routableCachedChannelsLocked(group, model, excludeChannelIds, now)
 
-	if len(channelsFromCache) == 0 {
+	if routable == 0 {
 		channelSyncLock.RUnlock()
 		return nil, errors.New("channel not found in memory cache")
-	}
-
-	// Filter out excluded channels
-	var candidateChannels []*Channel
-	for _, channel := range channelsFromCache {
-		if !excludeChannelIds[channel.Id] {
-			candidateChannels = append(candidateChannels, channel)
-		}
 	}
 
 	// For HTTP Code 413
 	// Filter out small max_tokens channels
 	if tryLargerMaxTokens {
+		// Read the rejected sizes from the full snapshot, not the routable
+		// candidates: a channel that returned 413 may have been cooled by a
+		// concurrent request since, and its size must still be skipped.
 		smallerMaxTokensSizes := make(map[int32]bool)
-		for _, channel := range channelsFromCache {
+		for _, channel := range group2model2channels[group][model] {
 			if excludeChannelIds[channel.Id] {
 				modelConfig := channel.GetModelConfig(model)
 				if modelConfig != nil {
@@ -638,18 +617,15 @@ func CacheGetRandomSatisfiedChannelExcludingWithContext(ctx context.Context, gro
 			}
 		}
 
-		var LargerMaxTokensSizeChannels []*Channel
-		// Work on already-filtered candidateChannels, not the original channelsFromCache
+		// candidateChannels is caller-owned, so filter it in place.
+		largerMaxTokensChannels := candidateChannels[:0]
 		for _, channel := range candidateChannels {
 			modelConfig := channel.GetModelConfig(model)
-			if modelConfig != nil && !smallerMaxTokensSizes[modelConfig.MaxTokens] {
-				LargerMaxTokensSizeChannels = append(LargerMaxTokensSizeChannels, channel)
-			} else if modelConfig == nil {
-				LargerMaxTokensSizeChannels = append(LargerMaxTokensSizeChannels, channel)
+			if modelConfig == nil || !smallerMaxTokensSizes[modelConfig.MaxTokens] {
+				largerMaxTokensChannels = append(largerMaxTokensChannels, channel)
 			}
 		}
-
-		candidateChannels = LargerMaxTokensSizeChannels
+		candidateChannels = largerMaxTokensChannels
 	}
 	channelSyncLock.RUnlock()
 

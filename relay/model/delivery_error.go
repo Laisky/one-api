@@ -32,8 +32,9 @@ var deliveryFailureCodes = map[string]struct{}{
 }
 
 // IsDeliveryFailure reports whether e is a downstream delivery failure generated
-// by one-api. Only one-api 5xx errors qualify, so a provider-supplied error body
-// cannot spoof the classification by echoing a delivery code.
+// by one-api. Only locally produced one-api 5xx errors qualify (IsOneAPIError), so
+// a provider-supplied error body cannot spoof the classification by echoing the
+// one_api_error type and a delivery code.
 //
 // Parameters:
 //   - e: the normalized relay failure; nil is not a delivery failure.
@@ -41,7 +42,7 @@ var deliveryFailureCodes = map[string]struct{}{
 // Returns:
 //   - bool: true when the failure is local to the gateway/client connection.
 func IsDeliveryFailure(e *ErrorWithStatusCode) bool {
-	if e == nil || e.Type != ErrorTypeOneAPI || e.StatusCode < http.StatusInternalServerError {
+	if e == nil || !e.IsOneAPIError() || e.StatusCode < http.StatusInternalServerError {
 		return false
 	}
 	code, ok := e.Code.(string)

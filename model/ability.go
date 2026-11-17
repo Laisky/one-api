@@ -5,7 +5,6 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Laisky/errors/v2"
@@ -416,35 +415,20 @@ func GetGroupModelsV2(ctx context.Context, group string) ([]dto.EnabledAbility, 
 	return models, nil
 }
 
-// cachedAbilityKey identifies one exact routing ability without string-key collisions.
-type cachedAbilityKey struct {
-	group     string
-	model     string
-	channelID int
-}
-
-// abilityCacheUpdateLock serializes database suspension writes with cache rebuilds.
-// It is separate from channelSyncLock so readers remain available during database I/O.
-var abilityCacheUpdateLock sync.Mutex
-
-// cachedAbilitySuspensions stores deadlines under channelSyncLock; expired entries are harmless.
-var cachedAbilitySuspensions map[cachedAbilityKey]time.Time
-
-// availableCachedChannelsLocked returns an independent slice of currently routable cached channels.
-// The caller must hold channelSyncLock for reading; now is the UTC selection time.
-func availableCachedChannelsLocked(group, model string, now time.Time) []*Channel {
-	channels := group2model2channels[group][model]
-	available := make([]*Channel, 0, len(channels))
-	for _, channel := range channels {
-		until, suspended := cachedAbilitySuspensions[cachedAbilityKey{group, model, channel.Id}]
-		if !suspended || until.Before(now) {
-			available = append(available, channel)
-		}
-	}
-	return available
-}
-
-// SuspendAbility persists and immediately publishes a cooldown for one exact ability.
+// SuspendAbility persists and immediately publishes a cooldown for one exact
+// (group, model, channel) ability. The database write and the cache publication
+// run under abilityCacheUpdateLock (see ability_cache.go), and the cache is only
+// updated after the write succeeded. Other replicas observe the persisted
+// deadline on their next cache rebuild.
+//
+// Parameters:
+//   - ctx: lifecycle scope for the database write.
+//   - group, modelName: the exact ability; modelName is the caller-facing name.
+//   - channelId: the channel whose ability is suspended.
+//   - duration: how long routing must avoid the ability, from now.
+//
+// Return values:
+//   - error: a wrapped failure when the write fails or does not affect exactly one row.
 func SuspendAbility(ctx context.Context, group string, modelName string, channelId int, duration time.Duration) error {
 	if DB == nil {
 		return errors.New("database not initialized")
@@ -480,12 +464,7 @@ func SuspendAbility(ctx context.Context, group string, modelName string, channel
 				group, modelName, channelId, result.RowsAffected),
 			LookupChannelRef(ctx, channelId))
 	}
-	channelSyncLock.Lock()
-	if cachedAbilitySuspensions == nil {
-		cachedAbilitySuspensions = make(map[cachedAbilityKey]time.Time)
-	}
-	cachedAbilitySuspensions[cachedAbilityKey{group, modelName, channelId}] = suspendTime
-	channelSyncLock.Unlock()
+	publishCachedAbilitySuspension(cachedAbilityKey{group, modelName, channelId}, suspendTime)
 	return nil
 }
 
