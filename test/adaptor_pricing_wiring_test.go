@@ -2,18 +2,24 @@ package test
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"sort"
 	"testing"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/common/ctxkey"
+	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
+	"github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
 	"github.com/Laisky/one-api/relay/quota"
@@ -38,6 +44,37 @@ func pricingAdaptorForChannel(channelType int) adaptor.Adaptor {
 		aware.SetChannelType(channelType)
 	}
 	return provider
+}
+
+// requestPricingFailsClosed reports whether provider refuses to dispatch
+// modelName for a channel that has no explicit model_configs. Such a model has no
+// built-in tariff by design (for example a newly listed model without a verified
+// published price), and its adaptor's RequestPricingValidator blocks the upstream
+// call before any usage exists, so billing never reaches the default fallback.
+//
+// Parameters:
+//   - provider: the billing-path adaptor for the channel type.
+//   - channelType: the channel type under test.
+//   - modelName: an advertised model with no resolvable price.
+//   - now: the request start time used for pricing windows.
+//
+// Return values:
+//   - bool: true when pre-dispatch pricing validation rejects the request.
+func requestPricingFailsClosed(provider adaptor.Adaptor, channelType int, modelName string, now time.Time) bool {
+	validator, ok := provider.(adaptor.RequestPricingValidator)
+	if !ok {
+		return false
+	}
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	c.Set(ctxkey.ChannelModel, &dbmodel.Channel{Id: 1, Type: channelType, Models: modelName})
+	return validator.ValidateRequestPricing(c, &meta.Meta{
+		ChannelType:     channelType,
+		OriginModelName: modelName,
+		ActualModelName: modelName,
+		StartTime:       now,
+	}) != nil
 }
 
 // unpricedByDesign lists unconditional pricing exemptions. Keep this empty:
@@ -101,6 +138,11 @@ func TestEveryAdvertisedModelIsPricedByItsChannel(t *testing.T) {
 				continue
 			}
 			if _, found := pricing.ResolveModelConfigRatioOnly(modelName, nil, provider, now); !found {
+				if requestPricingFailsClosed(provider, channelType, modelName, now) {
+					// Administrator-priced native model: dispatch refuses it until the
+					// channel carries explicit model_configs, so no default tariff is billed.
+					continue
+				}
 				unpriced = append(unpriced, modelName)
 			}
 		}
