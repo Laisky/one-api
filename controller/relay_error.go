@@ -725,6 +725,12 @@ func isUserOriginatedRelayError(e *model.ErrorWithStatusCode) bool {
 		code = strings.ToLower(v)
 	}
 
+	// The explicit-proxy boundary is a local request-policy rejection, not an
+	// upstream credential failure. Keep provider-originated 401/403 handling intact.
+	if code == "proxy_channel_required" {
+		return true
+	}
+
 	if code == "insufficient_user_quota" || code == "insufficient_token_quota" ||
 		code == "invalid_api_key" || code == "token_expired" || code == "token_disabled" || code == "token_not_found" ||
 		code == "model_not_allowed" || code == "model_not_available" || code == "tool_not_allowed" {
