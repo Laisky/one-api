@@ -2,13 +2,14 @@ package novita
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// moonshotaiModels returns the moonshotai model defaults for novita.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// moonshotaiModels returns independently owned moonshotai defaults for novita.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.novita.ai/v3/openai/models
 func moonshotaiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"moonshotai/kimi-k2-0905": {
 			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             4.166666666666667,
+			CompletionRatio:             2.5 / 0.6,
 			ContextLength:               262144,
 			MaxOutputTokens:             98304,
 			InputModalities:             []string{"text"},
@@ -21,7 +22,7 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 		},
 		"moonshotai/kimi-k2-instruct": {
 			Ratio:                       nativeRate(0.57),
-			CompletionRatio:             4.035087719298246,
+			CompletionRatio:             2.3 / 0.57,
 			ContextLength:               131072,
 			MaxOutputTokens:             98304,
 			InputModalities:             []string{"text"},
@@ -34,7 +35,7 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 		},
 		"moonshotai/kimi-k2-thinking": {
 			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             4.166666666666667,
+			CompletionRatio:             2.5 / 0.6,
 			CachedInputRatio:            nativeRate(0.15),
 			ContextLength:               262144,
 			MaxOutputTokens:             98304,
@@ -76,7 +77,7 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 		},
 		"moonshotai/kimi-k2.7-code": {
 			Ratio:                       nativeRate(0.95),
-			CompletionRatio:             4.2105263157894735,
+			CompletionRatio:             4.0 / 0.95,
 			CachedInputRatio:            nativeRate(0.19),
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,
@@ -98,7 +99,46 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"max_tokens", "stop"},
-			Description:                 "moonshotai/kimi-k3 on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "moonshotai/kimi-k3 on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
+			CacheWrite5mRatio:           nativeRate(3),
+			CacheWrite1hRatio:           nativeRate(6),
+		},
+		"moonshotai/kimi-k3-p": {
+			Ratio:             nativeRate(3),
+			CompletionRatio:   (15 * 1.0) / 3,
+			CachedInputRatio:  nativeRate(0.3),
+			ContextLength:     1048576,
+			MaxOutputTokens:   1048576,
+			InputModalities:   []string{"text", "image", "video"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+			Description:       "moonshotai/kimi-k3-p on Novita, verified from the public models API on 2026-10-12. Uses Novita's exact USD tariff and API identifier; no creator, priority, or clock tariff is inferred from the suffix. The source does not publish a discrete reasoning-effort vocabulary; this adaptor does not advertise one.",
+		},
+		"moonshotai/kimi-k3.1-pro": {
+			Ratio:             nativeRate(2),
+			CompletionRatio:   5,
+			CachedInputRatio:  nativeRate(0.2),
+			CacheWrite5mRatio: nativeRate(2),
+			CacheWrite1hRatio: nativeRate(4),
+			ContextLength:     1048576,
+			MaxOutputTokens:   1048576,
+			InputModalities:   []string{"text", "image", "video"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+			Description:       "moonshotai/kimi-k3.1-pro on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
+		},
+		"moonshotai/kimi-k3.1-pro-highspeed": {
+			Ratio:             nativeRate(4),
+			CompletionRatio:   5,
+			CachedInputRatio:  nativeRate(0.2),
+			CacheWrite5mRatio: nativeRate(4),
+			CacheWrite1hRatio: nativeRate(8),
+			ContextLength:     1048576,
+			MaxOutputTokens:   1048576,
+			InputModalities:   []string{"text", "image", "video"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+			Description:       "moonshotai/kimi-k3.1-pro-highspeed on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
 		},
 	}
 }

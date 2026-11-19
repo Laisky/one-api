@@ -30,6 +30,7 @@
     - [Model Pricing Structure](#model-pricing-structure)
       - [Tier Resolution Engine](#tier-resolution-engine)
       - [Multimedia Pricing Merge Path](#multimedia-pricing-merge-path)
+      - [Realtime (Live) Modality Rates](#realtime-live-modality-rates)
     - [Global Pricing System](#global-pricing-system)
       - [Architecture](#architecture)
       - [Configuration](#configuration)
@@ -44,6 +45,7 @@
       - [Key Functions](#key-functions-2)
     - [Post-consumption Phase](#post-consumption-phase)
       - [Key Functions](#key-functions-3)
+    - [Paid Upstream Error Receipts](#paid-upstream-error-receipts)
     - [Provisional Request Cost Reconciliation (2025-09)](#provisional-request-cost-reconciliation-2025-09)
     - [Streaming Incremental Billing (2025-09)](#streaming-incremental-billing-2025-09)
     - [Quota Calculation](#quota-calculation)
@@ -278,13 +280,13 @@ graph TD
 - `relay/pricing/global.go` - Global pricing manager and four-layer pricing logic
 - `relay/billing/ratio/model.go` - Audio/video pricing constants and legacy compatibility functions
 - `relay/adaptor/interface.go` - Adapter pricing interface
-- `relay/adaptor/*/constants.go` - Adapter-specific pricing implementations (25+ adapters)
+- `relay/adaptor/*/models.go` - Adapter-specific pricing implementations (25+ adapters)
 - `model/channel.go` - Channel-specific pricing storage
 - `controller/channel.go` - Channel pricing API endpoints
 
 ### 3. Adapter System
 
-All channel adapters now use a unified, centralized pricing logic. As of July 2025, 25+ major adapters import and use a shared `ModelRatios` constant from their respective `constants.go` or subadaptor, eliminating local, hardcoded pricing maps and ensuring consistency across the system. **All pricing, quota, and billing calculations are standardized to use "per 1M tokens" (1 million tokens) as the pricing unit. All user-facing documentation and UI must use this unit.**
+All channel adapters now use a unified, centralized pricing logic. As of July 2025, 25+ major adapters import and use a shared `ModelRatios` constant from their respective `models.go` or subadaptor, eliminating local, hardcoded pricing maps and ensuring consistency across the system. **All pricing, quota, and billing calculations are standardized to use "per 1M tokens" (1 million tokens) as the pricing unit. All user-facing documentation and UI must use this unit.**
 
 **All adapters must use the shared `ModelRatios` map as the single source of truth for model pricing. Local pricing maps are deprecated.**
 
@@ -459,6 +461,37 @@ The system uses a **comprehensive four-layer pricing hierarchy** to handle custo
 
 This four-layer approach ensures that custom channels with common models can automatically receive appropriate pricing even when the channel adapter doesn't have specific pricing for those models. The global pricing system merges pricing from 13 major adapters to provide comprehensive fallback coverage.
 
+#### Effective tariff precedence
+
+The effective tariff of a request is resolved once, at request start, for the mapped model: channel `model_configs` → adaptor (provider) defaults → global pricing → final default.
+
+- **An explicit channel entry wins, including a stale one.** Updating a provider default in code does not change what a channel bills while its `model_configs` carries an entry for that model; the historical price stays effective until the operator edits or removes the entry.
+- **Token prices merge field by field:** an entry's `ratio` or `completion_ratio` left at 0 inherits the provider value for that field only. Cache prices do not inherit: an entry without `cached_input_ratio` bills cached input at the entry's own input price (a negative value makes it free), so an override drops the provider's cache discount unless it sets one.
+- **Admission and settlement use the same tariff.** The reservation (prompt estimate, plus `PreConsumedQuota` on the Chat Completions and Responses-to-Chat paths, plus `max_tokens` at the completion price), the final receipt charge and the reconciled `user_request_costs` row all use the resolved tariff. A provider that reports no usage, such as the AIProxy library API, settles at the reservation priced at that tariff.
+- **Operator-only exception:** for models covered by `OperatorTariffPolicy` (below), only the channel entry can price the model; the lower layers are never consulted.
+
+`relay/controller/effective_tariff_precedence_test.go` proves these rules end to end on Azure and native OpenAI channels for Chat Completions, Claude Messages and Responses clients, checking the balance, consume log and request cost against hand-computed charges.
+
+#### Operator-only tariffs
+
+A model name is not a pricing identity: a host can serve a model without a provider-qualified tariff for it (for example, the native-only OpenAI IDs `gpt-6-cyber` and `gpt-image-2.6-*` on Azure AI Foundry or the AIProxy library, Claude 5.2 and Gemini 4 Argon Cyber on Vertex AI, or legacy/trial slugs on xAI, Groq and Ali). An adaptor declares such models through `adaptor.OperatorTariffPolicy` (`RequiresOperatorTariff(model)`), and the system enforces the declaration at both boundaries:
+
+- **Resolution:** every tariff resolver (`ResolveModelConfig`, `ResolveModelConfigRatioOnly`, `ResolveAudioPricing`, `ResolveImagePricing`, `GetVideoPricingWithThreeLayers`, `GetModelRatioWithThreeLayers`, `GetCompletionRatioWithThreeLayers`, `ResolveEffectivePricingForUsage`) consults only layer 1 for a declared model, so neither the adaptor's defaults nor another provider's global tariff can price it. Non-tariff limits such as context length and maximum output tokens remain available through `pricing.ResolveModelMetadata`, which admission uses for conservative output and context bounds.
+- **Dispatch:** the adaptor implements `adaptor.RequestPricingValidator` and calls `pricing.ValidateOperatorTariff`, so `DoRequestHelper` rejects the request before any upstream contact unless the channel's `model_configs` carries a complete positive input and output tariff for the mapped model. `test/adaptor_pricing_wiring_test.go` proves this for every advertised declared model and fails if a provider declares the policy without the validator.
+- **Refusal contract:** every caller runs the validator through `adaptor.ValidateRequestPricing` (REST dispatch in `DoRequestHelper`, and Claude Messages local admission before any reservation). A missing or incomplete tariff matches `adaptor.ErrRequestPricingNotConfigured` (`adaptor.IsRequestPricingNotConfigured`): validators mark only tariff refusals (`adaptor.RequestPricingNotConfigured`); other refusals, such as Groq's retired-model refusal or missing request metadata, keep their own semantics (Claude Messages: 400 `invalid_model_pricing`). A tariff refusal is a one-api configuration fault, never a client error: it never counts against channel health, and like a REST transport mismatch it is a local refusal that consumes no paid retry slot (`isLocalDispatchRefusal` in `controller/relay.go`), so the retry loop walks on to a priced candidate. If a provider was actually tried, the client sees that provider's failure; when every candidate refused, it receives HTTP 503 with code `model_pricing_not_configured` — the same contract as image requests' `image_billing_not_configured` — instead of a generic 500 `do_request_failed`. `controller/operator_tariff_relay_status_test.go` drives the real relay loop for Chat Completions and Claude Messages clients through the all-unpriced, fail-over, retry-budget, real-error-precedence and transport-failure (still 500) cases; before this contract a Claude Messages client got a terminal 400 even when a priced channel was available.
+- **Pre-save warning:** the Modern channel editor posts the draft (`type`, comma-separated `models`, and the `model_mapping`/`model_configs` JSON text, encoded like the save payload) to the admin route `POST /api/channel/pricing-readiness` (`controller.CheckChannelPricingReadiness`). `relaycontroller.EvaluateChannelPricingReadiness` resolves the admission adaptor and runs, per Supported Model after Model Mapping, the admission validators themselves: the strict GPT Image reservation check (`image_price_per_image_usd`), `pricing.ValidateExplicitTokenTariffConfigs` (the request-free core of `RequireExplicitTokenPricing`, `token_tariff`), the provider's `pricing.OperatorTariffSupplementValidator` such as Vertex's cache prices (`tariff_supplement`), and `quota.ValidateRealtimeModelPricing` for Live-only Google models (`live_tariff`). The response is `{"success":true,"data":{"gaps":[{"model","upstream_model","requirement","message"}]}}`; bad or oversized drafts get HTTP 400. The editor shows the gaps in its save-warning dialog as confirm-to-save-anyway and fails open (no warning, a string-only console message) when the check errors. `relay/controller/channel_pricing_readiness_test.go` proves the verdict matches `adaptor.ValidateRequestPricing` for every shipped catalog, and `channel_pricing_readiness_image_test.go` matches it against `RelayImageHelper`.
+
+Native-only OpenAI IDs are listed once, in `openai.IsNativeOnlyModel`; hosts that inherit OpenAI's catalog derive their discovery and pricing from `openai.InheritedModelRatios()`/`InheritedModelList()` instead of maintaining their own exclusion lists.
+
+GPT Image 2.6 IDs also need `image.price_per_image_usd`. It sets the reservation and the fallback charge; a usable receipt settles at the channel's token prices. The AIProxy library has no image endpoint, so the distributor never routes image requests to it.
+
+End-to-end coverage, with a fake provider and the SQLite ledger:
+
+- `relay/controller/operator_tariff_effective_pricing_test.go`: `gpt-6-cyber` on Azure and the AIProxy library, for Chat Completions, Claude Messages and Responses clients.
+- `relay/controller/operator_tariff_image_test.go`: GPT Image 2.6.
+
+Both prove that an unpriced channel is refused with zero upstream calls and a full refund, and that a priced channel is dispatched once and charged exactly the operator tariff.
+
 ### Pricing Constants
 
 ```go
@@ -536,6 +569,28 @@ type ModelRatioTier struct {
 - Audio and image configs piggy-back on the same `cloneModelConfig()` pathway, so all multimedia pricing features stay in sync when global pricing is rebuilt.
 - Controllers read these merged configs to compute per-second and per-image quotas (e.g., `relay/controller/video.go`, `relay/controller/image.go`) while still charging prompt tokens through the tiered resolver.
 - `VideoPricingConfig.ResolutionMultipliers`, `AudioPricingConfig.PromptTokensPerSecond`, and `ImagePricingConfig.QualitySizeMultipliers` let adapters express tiered pricing for 720p vs 4K renders, streaming vs transcription seconds, and HD vs SD images without duplicating models; those multipliers remain editable at the channel layer.
+
+#### Realtime (Live) Modality Rates
+
+Realtime receipts (OpenAI Realtime, Gemini Live, Vertex AI Live) are priced per modality in `relay/quota/realtime.go` and `relay/quota/gemini_live.go`. Every modality price is a ratio, so time windows and context tiers that change `ratio` move all of them together:
+
+| Receipt bucket | Channel `model_configs` key | Rate |
+| --- | --- | --- |
+| Text input / output | `ratio`, `completion_ratio` | `ratio`, `ratio × completion_ratio` |
+| Audio input / output | `audio.prompt_ratio`, `audio.completion_ratio` | `ratio × prompt_ratio`, audio input × `completion_ratio` |
+| Image and video input (Gemini Live) | `image.prompt_ratio` | `ratio × prompt_ratio` |
+| VIDEO output (Gemini Live avatar) | `video.output_token_ratio` | `ratio × output_token_ratio` |
+
+Vertex AI requires explicit Live rates. `ValidateRealtimeModelPricing` requires `completion_ratio`, both audio ratios and `image.prompt_ratio`. It does not require `video.output_token_ratio`. When a receipt attributes response tokens to `VIDEO` and no layer sets the key, the tokens are charged with the unattributed output at the cheaper of text and audio output. The receipt is flagged unpriced (`video output` billing issue, `realtime_billing_complete=false`) rather than settled as exact. This was the only behaviour before the key existed. Example for Gemini 3.8 Live on Vertex (Non-global, [Vertex AI pricing](https://cloud.google.com/vertex-ai/generative-ai/pricing), checked 2026-11-18: text $0.75 in / $4.50 out, audio $3.00 / $12.00, video/image input $1.00, "Output: video (avatar)" $1.00 per 1M tokens):
+
+```json
+{"gemini-3.8-live": {"ratio": 0.375, "completion_ratio": 6,
+  "audio": {"prompt_ratio": 4, "completion_ratio": 4},
+  "image": {"prompt_ratio": 1.3333333333333333},
+  "video": {"output_token_ratio": 1.3333333333333333}}}
+```
+
+`video.output_token_ratio` is a realtime token rate, not a video-generation tariff. `VideoPricingConfig.HasData()` ignores it, so a Live model's `video` block never enables per-second video billing. It resolves through `pricing.ResolveRealtimeVideoOutputRatio` (channel override, then provider defaults and global catalog unless the provider declares an operator-only tariff), merges in `time_windows` overlays, and is ignored unless positive and finite. Only tokens the provider explicitly attributes to `VIDEO` use it; an unattributed remainder never does. Regression coverage: `relay/quota/realtime_video_output_tariff_test.go` and `controller/vertex_live_video_output_test.go`.
 
 ### Global Pricing System
 
@@ -668,6 +723,75 @@ After request completion, final billing is calculated:
 - `PostConsumeQuota()` in `relay/billing/billing.go`
 - Usage logging and metrics recording
 
+### Paid Upstream Error Receipts
+
+A non-2xx provider response normally proves no completed work. An explicit 4xx answer means the provider rejected the request before inference (invalid body, authentication, permission, unknown model, conflict, payload size, unprocessable input, rate limit or request timeout), so its admission hold is refunded at once whether or not the relay retries (`recordUpstreamClientRejection`; Jina and Cohere keep their own documented rejection statuses). A 5xx answer is uncertain: the attempt keeps its retained hold, the retry loop refunds it before failing over (`ResetPerAttemptBillingForRetry`), and a terminal failure keeps it visibly (see below). A provider can, however, report billable work in an error body. Before deciding to refund or replay, the Chat Completions, native Responses, Responses-through-Chat, Claude Messages and MCP-round paths call `paidUpstreamErrorUsage`, which reads at most `adaptor.MaxPaidErrorReceiptBytes` (1 MiB) of the body, restores it for unchanged error rendering, and asks the serving adaptor's `adaptor.PaidErrorReceiptReader`:
+
+- **Native OpenAI and Azure OpenAI** (`openai.Adaptor`, `azure.Adaptor`) accept an explicit receipt only: a root `usage` object (Chat style or a Responses object) or a failed Responses envelope's `response.usage`, with at least one positive counter. OpenAI's documented error schema carries no usage, so this closes a possible rather than an observed window. Foundry Claude deployments and every other provider return nil.
+- **A receipt is settled, not refunded:** the attempt is billed exactly like a 2xx response with the same usage (tiers, cache, service tier and the GPT-6 Cyber pricing guard included) plus the web searches a failed Responses envelope lists, the client still receives the provider error, and `markResponseSettlement` vetoes a cross-channel replay. In an MCP tool loop the paid round's usage is retained by the loop.
+- **No receipt:** a 4xx is refunded; a 5xx keeps its retained hold (refunded on fail-over, published when terminal). Either way the error stays retryable.
+
+`relay/controller/paid_upstream_error_test.go` proves that a paid 500 settles exactly the charge of the same 2xx receipt for gpt-4o-mini and gpt-6-cyber on native OpenAI (Chat, Responses fallback, native Responses, Claude Messages) and gpt-4o-mini on Azure, and that a plain 500 keeps only the retained hold and stays retryable. `relay/controller/paid_upstream_error_matrix_test.go` extends this to HTTP 400, 429 and 500 with and without a receipt. It checks the user balance, token `remain_quota`, consume log, `user_request_costs` and the retry veto, plus Cyber receipt dimensions: a non-Standard tier and 12h writes stay unpriced estimates, and 30m writes bill at the $25/M write rate. The router-level suite `router/e2e_paid_error_test.go` drives the same matrix through the shipped router with a failing primary and a healthy secondary channel.
+
+### Oversized Receipts (2026-11)
+
+`relay/model.ResponseUsageAccumulator` observes provider bytes for billing without retaining a whole response: it keeps at most 2 MiB of a JSON body or of one SSE event. Providers put the receipt after the bytes that make a response large (OpenAI renders `service_tier` and `usage` after `output`, and a Responses stream restates both in `response.completed`, whose `output` repeats every item), so a reasoning `encrypted_content`, an image result or long text used to push the receipt out of the window. The observer then billed estimates: the Claude Messages stream converter, whose only usage source is this accumulator, settled a 10,500-quota gpt-4o-mini receipt at its 78-quota reservation, and native GPT-6 Cyber responses lost their actual service tier and retained their whole reservation.
+
+Past the window the accumulator now hands the envelope to `responseReceiptScanner` (`relay/model/response_usage_scanner.go`), a byte-level JSON follower that retains only the receipt members `consumeJSON` reads: root `type`, `usage`, `service_tier` and `system_fingerprint`, and `usage`/`service_tier` inside a root `response` or `message` object. Memory is bounded by those members (64 KiB each); string content is skipped at memory-scan speed (~3.7 GB/s). Member names are unescaped and later duplicates replace earlier ones, exactly as `encoding/json` decodes the in-window path, and `TestResponseUsageOversizedEnvelopeDifferential` proves an oversized envelope yields the same receipt as the same envelope without its padding for Responses, Chat Completions and Claude, JSON and SSE.
+
+An oversized envelope the scanner cannot follow (cut off, malformed, a root array, trailing data, or an oversized receipt member) keeps the previous behavior: missing counters are labelled `response_usage_capture_limit` and settlement retains at least the reservation. Its actual tier is unknown, so the accumulator also sets the server-only `Usage.ServiceTierUnverified` (cleared when a later Responses terminal event restates the receipt). A tier-restricted tariff (`ModelBillingPolicy.SupportedServiceTiers`, e.g. GPT-6 Cyber and GPT-6.1 Terra) treats such a receipt as unpriced instead of assuming Standard; MCP tool rounds that ran on different tiers are merged as unverified for the same reason. Router coverage: `router/e2e_cyber_oversized_test.go`.
+
+### Megapixel Image Tariffs (2026-11)
+
+Some image hosts price by output and reference-image area rather than per image. A catalog entry opts in with `ImagePricingConfig.Megapixel` (`adaptor.ImageMegapixelPricing`). The block holds:
+
+- the first-megapixel price and the additional-megapixel price;
+- the reference-image price per megapixel;
+- the pixels per megapixel and the rounding rule (`ceil` per started megapixel, or `exact` pro-rata);
+- the output size step;
+- a fallback megapixel count for references whose dimensions cannot be measured.
+
+`pricing.QuoteImageMegapixels` prices one request with exact fractions. The image controller (`relay/controller/image_megapixel.go`) quotes before the reservation, so the hold and the settlement are the same charge. Models without the block bill exactly as before.
+
+- **DeepInfra FLUX-2-max / FLUX-2-pro:**
+  - Rates are Black Forest Labs' pass-through tariff: max $0.07 first MP plus $0.03 per additional MP; pro $0.03 plus $0.015.
+  - A megapixel is 1024x1024 px. Every started megapixel is billed, separately for the output and for each reference image, and sides round up to a multiple of 32.
+  - Reference images are measured from multipart uploads with `image.DecodeConfig`. An unmeasurable reference is billed at 16 MP and flagged `image_reference_dimensions_unknown_fallback`.
+  - Previously both were flat per image, which under-billed outputs above 1 MP, every edit, and every FLUX-2-pro request (its headline price was the additional-MP rate).
+- **Together AI:**
+  - Together's image API has no `size` field and renders the raw `width`/`height` it receives.
+  - For Together channels (`relay/controller/image_together.go`), the gateway resolves one billed size: the client's `width`/`height`, else its `size`, else the model default. It prices that size and forwards it as `width`/`height`.
+  - Per-MP models (FLUX.2-max, Kontext, FLUX1.1-pro) use the exact pro-rata tariff, `MP = W x H / 1e6`. Steps above the published default add a `steps / default` surcharge.
+  - Per-image models use a megapixel tariff floored at their listed price.
+  - Conflicting `size` and `width`/`height`, ambiguous key spellings, non-JSON bodies and `aspect_ratio` on size-priced models are refused with 400.
+
+Regression: `router/e2e_deepinfra_megapixel_test.go`, `router/e2e_togetherai_image_test.go`.
+
+### Provider-Reported Cost Floor (OpenRouter)
+
+OpenRouter lists each model at its top provider's price but load-balances requests across providers whose prices can be 10-200x higher. It reports the real charge of every request in `usage.cost` (USD; for BYOK, `cost` plus `cost_details.upstream_inference_cost`) on Chat and Responses JSON and on the terminal SSE usage frame. An adaptor that implements `adaptor.ReportedCostBillingPolicy` (the OpenAI adaptor for OpenRouter channels, and the dedicated OpenRouter adaptor) makes settlement charge `max(catalog price, ceil(cost x QuotaPerUsd x group ratio))` (`relay/quota/reported_cost.go`); a free group stays free and a cheaper reported cost keeps the catalog price. `openrouter.ObserveReportedCost` reads the cost from the raw body before presentation converters run and attaches it to the settled usage as `Usage.UpstreamCostUSD` (`json:"-"`, never serialized), and `openrouter.ScrubReportedCostLine` removes `cost`, `is_byok` and `cost_details` from streamed Chat usage chunks so clients never see the operator's provider cost. Previously such requests settled at the listed promo price, e.g. 7,150 quota for a request OpenRouter charged $10 (5,000,000 quota). Regression: `router/e2e_openrouter_cost_test.go`.
+
+#### Terminal retained reservations
+
+When the conservative policy keeps a possibly-forwarded attempt's hold, the attempt is marked pending, because no receipt proved its cost. A cross-channel retry refunds a pending hold (`ResetPerAttemptBillingForRetry`). When the relay stops retrying, `controller.Relay` calls `SettleTerminalRetainedReservation`. It publishes the hold without another debit: the provisional log becomes a consume log flagged `billing_estimated` with reason `retained_reservation_<refund reason>`, used quota grows by the hold, and `user_request_costs` records it. Before this, a terminal failure kept the debit but every ledger except the wallet showed nothing. That includes the default `RetryTimes=0`, where every upstream 5xx is terminal (a 4xx is refunded instead, see above). The provisional row stayed filtered out of every Logs query, and `user_request_costs` was reset to 0. The amount charged is unchanged, so only visibility differs. Regression: `router/e2e_regressions_test.go` (`TestE2ETerminalErrorHoldIsVisible`) and `controller/incident_body_reset_*_test.go`.
+
+### Native OpenAI Prompt-Cache Admission (2026-11)
+
+OpenAI's GPT-5.6+ prompt-cache contract ([prompt caching guide](https://developers.openai.com/api/docs/guides/prompt-caching.md)) bills cache **writes**, and caching is on by default. Without `prompt_cache_options.mode = "explicit"`, OpenAI places one implicit breakpoint and bills the written prefix as a 30-minute write (1.25× uncached input). Explicit `prompt_cache_breakpoint` controls (on content parts, including `function_call_output` output) add writes. `mode = "explicit"` without any breakpoint disables caching, so the request has no write and no read. A 12h lifetime bills 2.5× input and is not metered here.
+
+`openai.ImplicitPromptCacheWrites` (native OpenAI channel + catalog entry with a `CacheWrite5mRatio`) selects the models this applies to. `openai.InspectPromptCacheWriteIntent` is the single parser for these controls, used by both the request guard and admission. Every tiered admission path calls `decideTierAdmissionCacheWrites`: Chat, native Responses, Claude Messages, MCP rounds and WebSocket frames.
+
+- **Short-context tiers fund implicit writes.** The hold prices the whole admitted prompt at `max(input, 30m write)`, so it covers the highest charge the request can incur. Previously the hold assumed no write and under-covered GPT-6 Cyber by 20% of the prompt cost.
+- **Unpublished write tiers are disabled, not guessed.** OpenAI publishes no GPT-6 Cyber cache-write price above 272,000 input tokens (`ModelBillingPolicy.CacheWriteUnpricedFromInputTokens`). `pricing.CacheWriteUnpriced` is shared by admission and settlement. Unless an explicit operator tier supplies `cache_write_5m_ratio`:
+  - Explicit client write controls are refused with HTTP 400 before dispatch: breakpoints, `mode = "implicit"`, or `prewarm`.
+  - Requests without such controls are pinned to `prompt_cache_options.mode = "explicit"`. Admission records the pin with `openai.SetPromptCacheExplicitPin`, and `openai.Adaptor.DoRequest` applies it to exactly that channel/model attempt. The receipt then has no write and settles exactly at the published long-context rates.
+  - Previously, implicit caching wrote nearly every long-context request. Each such receipt settled the whole reservation as an unpriced estimate (2.2× the exact charge in the regression fixture).
+- **Residual window.** The tier is chosen on the admission estimate. A request estimated just below 272,001 tokens whose actual input crosses the threshold can still write in the unpriced tier. Such a receipt stays an unpriced estimate (`unpriced_usage_retained_reservation`, at least the reservation), and its writes are priced no lower than OpenAI's documented generic 30m rule, 1.25x the tier's uncached input (`ModelBillingPolicy.UnpricedCacheWriteInputMultiplier`), instead of the cheaper short-context write rate the tier resolver would otherwise inherit.
+- **Client options are honored.** For metered models, a sanitized `prompt_cache_options` (`mode`, `ttl`, `prewarm`, lower-cased) is forwarded on the native Responses route. `comparison_response_id` diagnostics are dropped because they reference provider response IDs outside the gateway's ownership model. Before, the field was always stripped, so a client that opted out of implicit writes was still billed for them. Other channels and models keep never forwarding the field.
+- **Client control refusals are HTTP 400.** These are marked `adaptor.ErrUnbillableRequestControl` and mapped to 400 `invalid_request_error` at every conversion boundary (`wrapConvertRequestError`): unsupported service tiers, unmetered lifetimes, malformed cache controls, and unpriced explicit writes. They previously surfaced as 500 `convert_request_failed`.
+
+Regression coverage: `relay/controller/native_prompt_cache_billing_test.go` (HTTP ledgers for Chat, Responses and Claude Messages), `relay/controller/native_prompt_cache_admission_test.go` (the 272,000/272,001 boundary, scope and 400 mapping), and `relay/adaptor/openai/prompt_cache_contract_test.go` (parser, sanitizer, attempt-scoped pin).
+
 ### Provisional Request Cost Reconciliation (2025-09)
 
 To prevent lost billing in early client disconnect scenarios, controllers now record a provisional per-request cost at dispatch and reconcile to the final cost when usage becomes available.
@@ -767,6 +891,8 @@ The billing system now implements a universal, robust two-step billing process f
 - gpt-image-1-mini reuses the same bucket logic with prices of $2.00, $0.20, $2.50, $0.25, and $8.00 per 1M tokens respectively.
 - Cached tokens are apportioned between text/image proportionally.
 - The group ratio is applied as a final multiplier.
+- **Strict GPT Image 2.5/2.6 settlement** (`usesStrictGPTImageTokenBilling`) never guesses a modality split. The receipt's token totals are authoritative: input tokens not attributed to text or image are priced at the higher of the two input rates, and a cache-read count without a modality split is credited to the bucket with the smallest cache discount. The result is the most expensive charge consistent with the receipt, logged as `billing_source=provider_tokens_upper_bound` with `billing_estimated` metadata (reason `gpt_image_receipt_modality_upper_bound`). The input count is the larger of `input_tokens` and `total_tokens − output_tokens`, so a receipt that omits `input_tokens` is not billed as output only. A receipt that is missing its input or output count, or whose buckets contradict its totals, settles the larger of the operator's `image.price_per_image_usd` fallback and the receipt's own ceiling (every reported token at the highest applicable rate, `gpt_image_receipt_incomplete_upper_bound`); the fallback alone is flagged too (`gpt_image_receipt_unusable_configured_fallback`). An omitted cache split is flagged only when it could change the charge (not when every input token is cached or both modalities share one discount). Covered by `relay/controller/image_modality_upper_bound_test.go`.
+- **Azure image requests** omit `safety_identifier` and `complexity`, which Azure does not document for images; native OpenAI channels forward both.
 
 - If usage data is missing or unreliable, the system falls back to the pre-consumed per-image price.
 
@@ -792,7 +918,7 @@ The billing system now implements a universal, robust two-step billing process f
 **7. Implementation References:**
 
 - Controller logic: `relay/controller/image.go` (see `RelayImageHelper`, `computeImageUsageQuota`, `computeGptImageTokenQuota`)
-- Pricing constants: `relay/adaptor/openai/constants.go`, `relay/billing/ratio/image.go`
+- Pricing constants: `relay/adaptor/openai/models.go`, `relay/billing/ratio/image.go`
 - Tier tables: `ratio.ImageTierTables`
 
 **8. Tests:**
@@ -1143,33 +1269,33 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 
 **Adapters with Native Pricing**:
 
-- `relay/adaptor/openai/constants.go` - 84 OpenAI GPT models
-- `relay/adaptor/anthropic/constants.go` - 15 Anthropic Claude models
-- `relay/adaptor/ali/constants.go` - 89 Alibaba Cloud models
-- `relay/adaptor/baidu/constants.go` - 16 Baidu ERNIE models
-- `relay/adaptor/tencent/constants.go` - 6 Tencent Hunyuan models
-- `relay/adaptor/geminiOpenaiCompatible/constants.go` - 26 Google Gemini models
-- `relay/adaptor/xunfei/constants.go` - 6 iFlytek Spark models
-- `relay/adaptor/vertexai/adaptor.go` - 34 Google Cloud VertexAI models
-- `relay/adaptor/zhipu/constants.go` - 23 Zhipu GLM models
-- `relay/adaptor/deepseek/constants.go` - 2 DeepSeek models
-- `relay/adaptor/groq/constants.go` - current Groq production/preview models plus retired compatibility entries
-- `relay/adaptor/mistral/constants.go` - 10+ Mistral models
-- `relay/adaptor/moonshot/constants.go` - 3 Moonshot models
-- `relay/adaptor/cohere/constant.go` - 12 Cohere Command models
-- `relay/adaptor/ai360/constants.go` - 4 AI360 models
-- `relay/adaptor/doubao/constants.go` - 20+ Doubao models
-- `relay/adaptor/novita/constants.go` - 40+ Novita models
-- `relay/adaptor/openrouter/adaptor.go` - 100+ OpenRouter models
-- `relay/adaptor/replicate/constant.go` - 48 Replicate models
-- `relay/adaptor/aws/adaptor.go` - 31 AWS Bedrock models
-- `relay/adaptor/stepfun/constants.go` - 3 StepFun models
-- `relay/adaptor/lingyiwanwu/constants.go` - 3 LingYi WanWu models
-- `relay/adaptor/minimax/constants.go` - 3 Minimax models
-- `relay/adaptor/baichuan/constants.go` - 2 Baichuan models
-- `relay/adaptor/togetherai/constants.go` - 40+ TogetherAI models
-- `relay/adaptor/siliconflow/constants.go` - 30+ SiliconFlow models
-- `relay/adaptor/xai/constants.go` - current XAI/Grok text, image, and video catalog
+- `relay/adaptor/openai/models.go` - 84 OpenAI GPT models
+- `relay/adaptor/anthropic/models.go` - 15 Anthropic Claude models
+- `relay/adaptor/ali/models.go` - 89 Alibaba Cloud models
+- `relay/adaptor/baidu/models.go` - 16 Baidu ERNIE models
+- `relay/adaptor/tencent/models.go` - 6 Tencent Hunyuan models
+- `relay/adaptor/geminiOpenaiCompatible/models.go` - 26 Google Gemini models
+- `relay/adaptor/xunfei/models.go` - 6 iFlytek Spark models
+- `relay/adaptor/vertexai/models.go` - 34 Google Cloud VertexAI models
+- `relay/adaptor/zhipu/models.go` - 23 Zhipu GLM models
+- `relay/adaptor/deepseek/models.go` - 2 DeepSeek models
+- `relay/adaptor/groq/models.go` - current Groq production/preview models plus retired compatibility entries
+- `relay/adaptor/mistral/models.go` - 10+ Mistral models
+- `relay/adaptor/moonshot/models.go` - 3 Moonshot models
+- `relay/adaptor/cohere/models.go` - 12 Cohere Command models
+- `relay/adaptor/ai360/models.go` - 4 AI360 models
+- `relay/adaptor/doubao/models.go` - 20+ Doubao models
+- `relay/adaptor/novita/models.go` - 40+ Novita models
+- `relay/adaptor/openrouter/models.go` - 100+ OpenRouter models
+- `relay/adaptor/replicate/models.go` - 48 Replicate models
+- `relay/adaptor/aws/models.go` - 31 AWS Bedrock models
+- `relay/adaptor/stepfun/models.go` - 3 StepFun models
+- `relay/adaptor/lingyiwanwu/models.go` - 3 LingYi WanWu models
+- `relay/adaptor/minimax/models.go` - 3 Minimax models
+- `relay/adaptor/baichuan/models.go` - 2 Baichuan models
+- `relay/adaptor/togetherai/models.go` - 40+ TogetherAI models
+- `relay/adaptor/siliconflow/models.go` - 30+ SiliconFlow models
+- `relay/adaptor/xai/models.go` - current XAI/Grok text, image, and video catalog
 
 ### Global Pricing Enhancement and Clean Architecture
 
@@ -1232,7 +1358,7 @@ graph TD
 **✅ Fully Implemented Features**:
 
 - **Four-Layer Pricing System**: Complete implementation with channel overrides → adapter pricing → global fallback → final default
-- **25+ Adapter Pricing**: All major adapters have native pricing in their `constants.go` files
+- **25+ Adapter Pricing**: All major adapters have native pricing in their `models.go` files
 - **Global Pricing Manager**: Automatic merging from 13 selected adapters for comprehensive fallback coverage
 - **Legacy Compatibility**: Backward compatibility maintained through legacy functions in `relay/billing/ratio/model.go`
 - **Real-time Usage**: Active usage in `relay/controller/text.go`, `relay/controller/audio.go`, and `controller/channel-test.go`

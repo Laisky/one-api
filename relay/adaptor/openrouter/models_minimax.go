@@ -2,13 +2,14 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// minimaxModels returns the minimax model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// minimaxModels returns independently owned minimax defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func minimaxModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"minimax/minimax-01": {
-			Ratio:                       nativeRate(0.19999999999999998),
-			CompletionRatio:             5.500000000000001,
+			Ratio:                       nativeRate(0.2),
+			CompletionRatio:             5.5,
 			ContextLength:               1000192,
 			MaxOutputTokens:             900172,
 			InputModalities:             []string{"text", "image"},
@@ -67,17 +68,17 @@ func minimaxModels() map[string]adaptor.ModelConfig {
 			Description:                 "minimax/minimax-m2.1 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"minimax/minimax-m2.5": {
-			Ratio:                       nativeRate(0.27),
-			CompletionRatio:             4,
-			CachedInputRatio:            nativeRate(0.027),
-			ContextLength:               204800,
-			MaxOutputTokens:             128000,
+			Ratio:                       nativeRate(0.295),
+			CompletionRatio:             1.2 / 0.295,
+			CachedInputRatio:            nativeRate(0.06),
+			ContextLength:               198000,
+			MaxOutputTokens:             176947,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "MiniMaxAI/MiniMax-M2.5",
-			Description:                 "minimax/minimax-m2.5 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "minimax/minimax-m2.5 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"minimax/minimax-m2.5:free": {
 			Ratio:                       0,
@@ -95,14 +96,14 @@ func minimaxModels() map[string]adaptor.ModelConfig {
 			Ratio:                       nativeRate(0.21),
 			CompletionRatio:             (0.84 * 1.0) / 0.21,
 			CachedInputRatio:            nativeRate(0.042),
-			ContextLength:               204800,
+			ContextLength:               196608,
 			MaxOutputTokens:             176947,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_tokens", "reasoning", "response_format", "seed", "stop", "temperature", "tool_choice", "tools", "top_p"},
 			HuggingFaceID:               "MiniMaxAI/MiniMax-M2.7",
-			Description:                 "minimax/minimax-m2.7 on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified. Reasoning is mandatory.",
+			Description:                 "minimax/minimax-m2.7 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"minimax/minimax-m3": {
 			Ratio:                       nativeRate(0.3),
@@ -116,6 +117,57 @@ func minimaxModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "MiniMaxAI/Minimax-M3",
 			Description:                 "minimax/minimax-m3 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"minimax/minimax-m3.1-flash": {
+			// OpenRouter's top-level price is whichever UTC override is active when the
+			// listing is read; the two windows below cover the whole day. The base
+			// keeps the higher 01:00-15:00 quote (as tencent/hy3 does) so any path that
+			// reads the base without a window never prices below a published rate.
+			Ratio:            nativeRate(0.15),
+			CompletionRatio:  0.6 / 0.15,
+			CachedInputRatio: nativeRate(0.015),
+			TimeWindows: []adaptor.TimeWindow{
+				{
+					Name:     "openrouter-1",
+					TimeZone: "UTC",
+					Ranges: []adaptor.ClockRange{
+						{
+							Start: "15:00",
+							End:   "01:00",
+						},
+					},
+					Overlay: adaptor.ModelConfig{
+						Ratio:            nativeRate(0.075),
+						CompletionRatio:  4,
+						CachedInputRatio: nativeRate(0.0075),
+					},
+				},
+				{
+					Name:     "openrouter-2",
+					TimeZone: "UTC",
+					Ranges: []adaptor.ClockRange{
+						{
+							Start: "01:00",
+							End:   "15:00",
+						},
+					},
+					Overlay: adaptor.ModelConfig{
+						Ratio:            nativeRate(0.15),
+						CompletionRatio:  4,
+						CachedInputRatio: nativeRate(0.015),
+					},
+				},
+			},
+			ContextLength:               1048576,
+			MaxOutputTokens:             524288,
+			InputModalities:             []string{"text", "image", "video"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			SupportedReasoningEfforts:   []string{"max", "xhigh", "high", "medium", "low"},
+			DefaultReasoningEffort:      "max",
+			HuggingFaceID:               "MiniMaxAI/MiniMax-M3.1-Flash",
+			Description:                 "minimax/minimax-m3.1-flash on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 	}
 }

@@ -26,7 +26,7 @@ Fill in accurate metadata for every model defined in every adaptor's `ModelRatio
 
 ## Scope
 
-The 34 adaptors with `constants.go` ModelRatios maps are:
+The 34 adaptors with `models.go` ModelRatios maps are:
 
 ```
 ai360, aiproxy, ali, alibailian, anthropic, baichuan, baidu, baiduv2,
@@ -59,7 +59,7 @@ For each adaptor, for each model in its `ModelRatios` map, obtain the following 
 Each adaptor's `ModelRatios` is currently constructed via small per-model helper functions or struct literals. Pattern to add the new fields varies but is straightforward — extend the existing literal:
 
 ```go
-// Example (adaptor/anthropic/constants.go)
+// Example (adaptor/anthropic/models.go)
 "claude-sonnet-4-6": {
     Ratio:           3 * ratio.MilliTokensUsd,
     CompletionRatio: 5,
@@ -113,7 +113,7 @@ Avoid third-party blog summaries — they go stale fast.
 - **English only** — code, comments, commit messages, PR descriptions.
 - **Error wrapping** — use `github.com/Laisky/errors/v2` (`Wrap`/`Wrapf`/`WithStack`); never return bare errors.
 - **Comments** — every function/type comment must start with the function or type name.
-- **File length** — Go files preferably ≤ 600 lines. If a `constants.go` would exceed this after enrichment, split by model family (e.g., `constants_gpt4.go`, `constants_o_series.go`).
+- **File length** — Go files preferably ≤ 600 lines. If a `models.go` would exceed this after enrichment, split by model family (e.g., `models_gpt4.go`, `models_reasoning.go`).
 - **Logger usage** — request-scoped logger via `gmw.GetLogger(c)` once per function (not relevant to constants, but applies to any controller-level changes).
 - **Do not modify pricing fields** (`Ratio`, `CompletionRatio`, `CachedInputRatio`, `CacheWrite5mRatio`, `CacheWrite1hRatio`, `Tiers`, `Image`, `Audio`, `Video`, `Embedding`). They are out of scope and have their own audit cycle.
 - **Do not change adaptor interfaces or method signatures** — this is purely additive data.
@@ -145,7 +145,7 @@ Avoid third-party blog summaries — they go stale fast.
 - Field definitions: [relay/adaptor/interface.go:21](../../relay/adaptor/interface.go#L21).
 - Mapping logic + defaults: [relay/openrouterprovider/mapping.go](../../relay/openrouterprovider/mapping.go).
 - Controller and route: [controller/openrouter_provider.go](../../controller/openrouter_provider.go), [router/relay.go](../../router/relay.go).
-- Pricing helper conventions per adaptor: see e.g. [relay/adaptor/openrouter/constants.go](../../relay/adaptor/openrouter/constants.go) for a builder pattern, or [relay/adaptor/anthropic/constants.go](../../relay/adaptor/anthropic/constants.go) for direct struct literals.
+- Pricing helper conventions per adaptor: see e.g. [relay/adaptor/openrouter/models.go](../../relay/adaptor/openrouter/models.go) for a builder pattern, or [relay/adaptor/anthropic/models.go](../../relay/adaptor/anthropic/models.go) for direct struct literals.
 - OpenRouter spec used for validation: <https://openrouter.ai/docs/guides/get-started/for-providers>.
 
 ## Suggested execution order

@@ -2,8 +2,9 @@ package deepinfra
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// bytedanceModels returns the bytedance model defaults for deepinfra.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// bytedanceModels returns independently owned bytedance defaults for deepinfra.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.deepinfra.com/models/list
 func bytedanceModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"ByteDance/Seed-1.8": {
@@ -19,7 +20,7 @@ func bytedanceModels() map[string]adaptor.ModelConfig {
 		},
 		"ByteDance/Seed-2.0-code": {
 			Ratio:                       nativeRate(0.5),
-			CompletionRatio:             5.999999999999999,
+			CompletionRatio:             6,
 			CachedInputRatio:            nativeRate(0.1),
 			ContextLength:               256000,
 			InputModalities:             []string{"text", "image"},
@@ -31,7 +32,7 @@ func bytedanceModels() map[string]adaptor.ModelConfig {
 		"ByteDance/Seed-2.0-mini": {
 			Ratio:                       nativeRate(0.1),
 			CompletionRatio:             4,
-			CachedInputRatio:            nativeRate(0.020000000000000004),
+			CachedInputRatio:            nativeRate(0.02),
 			ContextLength:               256000,
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
@@ -41,7 +42,7 @@ func bytedanceModels() map[string]adaptor.ModelConfig {
 		},
 		"ByteDance/Seed-2.0-pro": {
 			Ratio:                       nativeRate(0.5),
-			CompletionRatio:             5.999999999999999,
+			CompletionRatio:             6,
 			CachedInputRatio:            nativeRate(0.1),
 			ContextLength:               256000,
 			InputModalities:             []string{"text", "image"},

@@ -116,6 +116,10 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	fullTextResponse.Created = createdTime
 	if len(palmResponse.Candidates) > 0 {
 		responseText = palmResponse.Candidates[0].Content
+	} else {
+		// A body without candidates (e.g. a JSON error) is not an answer;
+		// report it so a Claude client never sees the stream as complete.
+		openai_compatible.MarkStreamInterrupted(c)
 	}
 
 	if err := openai_compatible.RenderStreamChunkWithBridge(c, fullTextResponse); err != nil {

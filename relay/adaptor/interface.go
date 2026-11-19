@@ -4,6 +4,7 @@ import (
 	"io"
 	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -303,9 +304,16 @@ type VideoPricingConfig struct {
 	// ResolutionMultipliers scales the base price for specific resolutions. Keys should be
 	// normalized via normalizeResolutionKey and values must be positive.
 	ResolutionMultipliers map[string]float64 `json:"resolution_multipliers,omitempty"`
+	// OutputTokenRatio prices realtime VIDEO output tokens (a Gemini Live
+	// avatar) as a multiple of the text input Ratio, the same convention as
+	// AudioPricingConfig.PromptRatio and ImagePricingConfig.PromptRatio. Zero
+	// leaves such tokens unpriced. It is a token rate, not a generation tariff,
+	// so HasData ignores it and video-generation billing never sees it.
+	OutputTokenRatio float64 `json:"output_token_ratio,omitempty"`
 }
 
-// HasData reports whether the configuration contains any pricing information.
+// HasData reports whether the configuration contains any video-generation
+// pricing information. OutputTokenRatio is deliberately excluded.
 func (cfg *VideoPricingConfig) HasData() bool {
 	if cfg == nil {
 		return false
@@ -322,11 +330,12 @@ func (cfg *VideoPricingConfig) Clone() *VideoPricingConfig {
 		return nil
 	}
 	clone := &VideoPricingConfig{
-		TotalUsd:        cfg.TotalUsd,
-		TotalUsdDecimal: cfg.TotalUsdDecimal,
-		PerSecondUsd:    cfg.PerSecondUsd,
-		InputImageUsd:   cfg.InputImageUsd,
-		BaseResolution:  cfg.BaseResolution,
+		TotalUsd:         cfg.TotalUsd,
+		TotalUsdDecimal:  cfg.TotalUsdDecimal,
+		PerSecondUsd:     cfg.PerSecondUsd,
+		InputImageUsd:    cfg.InputImageUsd,
+		BaseResolution:   cfg.BaseResolution,
+		OutputTokenRatio: cfg.OutputTokenRatio,
 	}
 	if len(cfg.ResolutionMultipliers) > 0 {
 		clone.ResolutionMultipliers = make(map[string]float64, len(cfg.ResolutionMultipliers))
@@ -478,6 +487,51 @@ type ImagePricingConfig struct {
 	SizeMultipliers        map[string]float64            `json:"size_multipliers,omitempty"`
 	QualityMultipliers     map[string]float64            `json:"quality_multipliers,omitempty"`
 	QualitySizeMultipliers map[string]map[string]float64 `json:"quality_size_multipliers,omitempty"`
+	// Megapixel opts a model into a megapixel tariff that replaces
+	// PricePerImageUsd as the per-image price; nil keeps flat per-image billing.
+	Megapixel *ImageMegapixelPricing `json:"megapixel,omitempty"`
+}
+
+// Rounding rules accepted by ImageMegapixelPricing.Rounding.
+const (
+	// ImageMegapixelRoundingCeil bills every started megapixel, separately for
+	// the output and for each reference image. It is the default.
+	ImageMegapixelRoundingCeil = "ceil"
+	// ImageMegapixelRoundingExact bills fractional megapixels pro rata; the first
+	// output megapixel remains a minimum charge.
+	ImageMegapixelRoundingExact = "exact"
+)
+
+// DefaultPixelsPerMegapixel is one megapixel when a tariff does not define it:
+// 1024 x 1024 = 1,048,576 pixels, the Black Forest Labs FLUX.2 definition.
+const DefaultPixelsPerMegapixel int64 = 1024 * 1024
+
+// ImageMegapixelPricing is an opt-in image tariff billed by output and
+// reference-image megapixels. Each generated image costs FirstMegapixelUsd for
+// its first output megapixel, AdditionalMegapixelUsd for each further one, and
+// ReferenceMegapixelUsd for every megapixel of every reference (input) image.
+type ImageMegapixelPricing struct {
+	// FirstMegapixelUsd is the USD price of the first output megapixel; it is
+	// also the minimum price of one generated image and must be positive.
+	FirstMegapixelUsd float64 `json:"first_megapixel_usd"`
+	// AdditionalMegapixelUsd is the USD price of each output megapixel after the first.
+	AdditionalMegapixelUsd float64 `json:"additional_megapixel_usd,omitempty"`
+	// ReferenceMegapixelUsd is the USD price of each megapixel of each reference
+	// image, charged once per generated image.
+	ReferenceMegapixelUsd float64 `json:"reference_megapixel_usd,omitempty"`
+	// PixelsPerMegapixel defines one megapixel; 0 means DefaultPixelsPerMegapixel.
+	PixelsPerMegapixel int64 `json:"pixels_per_megapixel,omitempty"`
+	// Rounding is ImageMegapixelRoundingCeil (default when empty) or
+	// ImageMegapixelRoundingExact.
+	Rounding string `json:"rounding,omitempty"`
+	// OutputDimensionStep, when positive, rounds each requested output side up
+	// to a multiple of this many pixels before counting, for providers that
+	// snap sizes to a grid; 0 counts the requested pixels as-is.
+	OutputDimensionStep int `json:"output_dimension_step,omitempty"`
+	// ReferenceFallbackMegapixels is the conservative megapixel count billed
+	// for a reference image whose dimensions cannot be decoded. It is required
+	// when ReferenceMegapixelUsd is positive.
+	ReferenceFallbackMegapixels int `json:"reference_fallback_megapixels,omitempty"`
 }
 
 // HasData reports whether the image configuration contains any pricing metadata.
@@ -491,7 +545,7 @@ func (cfg *ImagePricingConfig) HasData() bool {
 	if len(cfg.SizeMultipliers) > 0 || len(cfg.QualityMultipliers) > 0 || len(cfg.QualitySizeMultipliers) > 0 {
 		return true
 	}
-	return false
+	return cfg.Megapixel != nil
 }
 
 // Clone returns a deep copy of the image pricing configuration.
@@ -500,6 +554,10 @@ func (cfg *ImagePricingConfig) Clone() *ImagePricingConfig {
 		return nil
 	}
 	clone := *cfg
+	if cfg.Megapixel != nil {
+		megapixel := *cfg.Megapixel
+		clone.Megapixel = &megapixel
+	}
 	if len(cfg.SizeMultipliers) > 0 {
 		clone.SizeMultipliers = make(map[string]float64, len(cfg.SizeMultipliers))
 		for k, v := range cfg.SizeMultipliers {
@@ -622,12 +680,16 @@ func (d *DefaultPricingMethods) ConvertClaudeRequest(c *gin.Context, request *mo
 	return nil, errors.New("Claude Messages API not supported by this adaptor")
 }
 
-// GetModelListFromPricing derives model list from pricing map keys
-// This eliminates the need for separate ModelList variables
+// GetModelListFromPricing derives an adaptor's advertised model list from the
+// keys of its pricing map, so a catalog needs no separate ModelList variable.
+// Parameters: pricing is the adaptor's model pricing table (nil allowed).
+// Returns: a new non-nil slice holding every model ID exactly once in ascending
+// byte order, so /v1/models discovery and catalog snapshots are deterministic
+// instead of following Go's randomized map iteration order.
 func GetModelListFromPricing(pricing map[string]ModelConfig) []string {
-	models := make([]string, 0, len(pricing))
-	for model := range pricing {
-		models = append(models, model)
+	models := slices.Sorted(maps.Keys(pricing))
+	if models == nil {
+		return []string{}
 	}
 	return models
 }

@@ -74,7 +74,7 @@ Permanent tests decode actual public JSON/SSE using string-based content structs
 
 ## Native system-instruction capabilities
 
-The five new Google IDs use the existing shared native system-instruction capability invariant: gemini-4-hydrogen, gemini-4-carbon, gemini-4-carbon-cyber-permissive, gemini-4-argon-cyber-permissive and gemini-3.8-flash-cyber. This fixes both native system-field promotion and tool-history content alignment without accepting unknown IDs by prefix. Transport fixtures exercise mapped Chat, Claude and Responses requests, source ownership, legacy supported models and unsupported/unknown fallback controls. Official model capability references are recorded beside the exact entries in gemini/constants.go. No catalog, routing or tariff changes are included in this follow-up.
+The five new Google IDs use the existing shared native system-instruction capability invariant: gemini-4-hydrogen, gemini-4-carbon, gemini-4-carbon-cyber-permissive, gemini-4-argon-cyber-permissive and gemini-3.8-flash-cyber. This fixes both native system-field promotion and tool-history content alignment without accepting unknown IDs by prefix. Transport fixtures exercise mapped Chat, Claude and Responses requests, source ownership, legacy supported models and unsupported/unknown fallback controls. Official model capability references are recorded beside the exact entries in gemini/models.go. No catalog, routing or tariff changes are included in this follow-up.
 
 ## Provider metadata alias boundary and buffered Claude SSE
 

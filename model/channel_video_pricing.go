@@ -13,6 +13,9 @@ type VideoPricingLocal struct {
 	PerSecondUsd          float64            `json:"per_second_usd,omitempty"`
 	BaseResolution        string             `json:"base_resolution,omitempty"`
 	ResolutionMultipliers map[string]float64 `json:"resolution_multipliers,omitempty"`
+	// OutputTokenRatio mirrors adaptor.VideoPricingConfig.OutputTokenRatio: the
+	// realtime VIDEO output token price as a multiple of the text input ratio.
+	OutputTokenRatio float64 `json:"output_token_ratio,omitempty"`
 }
 
 // normalizeVideoPricingLocal validates and copies channel video prices and resolution labels.
@@ -26,8 +29,9 @@ func normalizeVideoPricingLocal(cfg *VideoPricingLocal) (*VideoPricingLocal, err
 	}
 
 	normalized := &VideoPricingLocal{
-		PerSecondUsd:  cfg.PerSecondUsd,
-		InputImageUsd: cfg.InputImageUsd,
+		PerSecondUsd:     cfg.PerSecondUsd,
+		InputImageUsd:    cfg.InputImageUsd,
+		OutputTokenRatio: cfg.OutputTokenRatio,
 	}
 	if strings.TrimSpace(cfg.BaseResolution) != "" {
 		normalized.BaseResolution = normalizeVideoResolutionKey(cfg.BaseResolution)
@@ -59,7 +63,8 @@ func validateVideoPricingLocal(cfg *VideoPricingLocal, modelName string) (bool, 
 		return false, errors.Errorf("video per_second_usd cannot be negative for model %s", modelName)
 	}
 	if math.IsNaN(cfg.PerSecondUsd) || math.IsInf(cfg.PerSecondUsd, 0) ||
-		cfg.InputImageUsd < 0 || math.IsNaN(cfg.InputImageUsd) || math.IsInf(cfg.InputImageUsd, 0) {
+		cfg.InputImageUsd < 0 || math.IsNaN(cfg.InputImageUsd) || math.IsInf(cfg.InputImageUsd, 0) ||
+		cfg.OutputTokenRatio < 0 || math.IsNaN(cfg.OutputTokenRatio) || math.IsInf(cfg.OutputTokenRatio, 0) {
 		return false, errors.Errorf("video rates must be finite and nonnegative for model %s", modelName)
 	}
 	for key, value := range cfg.ResolutionMultipliers {
@@ -78,7 +83,7 @@ func hasVideoPricingData(cfg *VideoPricingLocal) bool {
 	if cfg == nil {
 		return false
 	}
-	if cfg.PerSecondUsd > 0 || cfg.InputImageUsd > 0 {
+	if cfg.PerSecondUsd > 0 || cfg.InputImageUsd > 0 || cfg.OutputTokenRatio > 0 {
 		return true
 	}
 	return len(cfg.ResolutionMultipliers) > 0

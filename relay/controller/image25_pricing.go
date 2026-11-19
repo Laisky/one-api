@@ -10,12 +10,12 @@ import (
 	"github.com/Laisky/one-api/relay/pricing"
 )
 
-// resolveGPTImage25UsageConfig captures effective pricing at request start.
+// resolveStrictGPTImageUsageConfig captures effective pricing at request start.
 // Parameters: name selects the model, configs/ratios contain channel overrides,
 // provider supplies defaults, and at anchors time windows. Returns: a private
 // configuration with unspecified fields inherited and explicit overrides retained.
-func resolveGPTImage25UsageConfig(name string, configs map[string]model.ModelConfigLocal, ratios map[string]float64, provider adaptor.Adaptor, at time.Time) adaptor.ModelConfig {
-	if !isGPTImage25Model(name) {
+func resolveStrictGPTImageUsageConfig(name string, configs map[string]model.ModelConfigLocal, ratios map[string]float64, provider adaptor.Adaptor, at time.Time) adaptor.ModelConfig {
+	if !usesStrictGPTImageTokenBilling(name) {
 		return adaptor.ModelConfig{}
 	}
 	base, _ := pricing.ResolveModelConfig(name, nil, provider, at)
@@ -37,14 +37,27 @@ func resolveGPTImage25UsageConfig(name string, configs map[string]model.ModelCon
 	return base
 }
 
-// computeGPTImage25ConfiguredQuota honors channel prices across all token buckets.
+// computeStrictGPTImageConfiguredQuote honors channel prices across all token buckets.
 // Parameters: usage is normalized provider usage, cfg is request-start pricing,
-// and group scales quota. Returns: billable quota, or zero for unusable usage.
-func computeGPTImage25ConfiguredQuota(usage *relaymodel.Usage, cfg adaptor.ModelConfig, group float64) float64 {
+// and group scales quota. Returns: the strict quote (zero quota for unusable
+// usage; upperBound when the receipt omitted part of its modality/cache split).
+func computeStrictGPTImageConfiguredQuote(usage *relaymodel.Usage, cfg adaptor.ModelConfig, group float64) strictGPTImageQuote {
 	if usage == nil {
-		return 0
+		return strictGPTImageQuote{}
 	}
-	effective := pricing.ResolveEffectivePricingForUsageFromConfig(usage.PromptTokens, usage.CompletionTokens, cfg)
+	return computeStrictGPTImageTokenQuote(usage, strictGPTImageConfiguredPrices(usage, cfg), group)
+}
+
+// strictGPTImageConfiguredPrices converts request-start channel pricing into
+// the five strict bucket prices for the tier the receipt reaches. Parameters:
+// usage selects the tier and cfg is the resolved configuration. Returns: USD
+// per million tokens for each bucket.
+func strictGPTImageConfiguredPrices(usage *relaymodel.Usage, cfg adaptor.ModelConfig) gptImageTokenBucketPricing {
+	completion := 0
+	if usage != nil {
+		completion = usage.CompletionTokens
+	}
+	effective := pricing.ResolveEffectivePricingForUsageFromConfig(strictGPTImageInputTokens(usage), completion, cfg)
 	imageRatio := 8.0 / 5.0
 	if cfg.Image != nil && cfg.Image.PromptRatio != 0 {
 		imageRatio = cfg.Image.PromptRatio
@@ -55,12 +68,24 @@ func computeGPTImage25ConfiguredQuota(usage *relaymodel.Usage, cfg adaptor.Model
 	} else if cached < 0 {
 		cached = 0
 	}
-	prices := gptImageTokenBucketPricing{
+	return gptImageTokenBucketPricing{
 		inputTextUSD:        effective.InputRatio / billingratio.MilliTokensUsd,
 		cachedInputTextUSD:  cached / billingratio.MilliTokensUsd,
 		inputImageUSD:       effective.InputRatio * imageRatio / billingratio.MilliTokensUsd,
 		cachedInputImageUSD: cached * imageRatio / billingratio.MilliTokensUsd,
 		outputImageUSD:      effective.OutputRatio / billingratio.MilliTokensUsd,
 	}
-	return computeGPTImage25TokenQuota(usage, prices, group)
+}
+
+// strictGPTImagePrices returns the bucket prices settlement applies to a
+// strict GPT Image receipt: request-start channel pricing when supplied, else
+// the model's published catalog prices. Parameters: name is the mapped model,
+// usage selects the tier, and configs optionally carries channel pricing.
+// Returns: the prices and whether any are known for the model.
+func strictGPTImagePrices(name string, usage *relaymodel.Usage, configs []adaptor.ModelConfig) (gptImageTokenBucketPricing, bool) {
+	if len(configs) > 0 {
+		return strictGPTImageConfiguredPrices(usage, configs[0]), true
+	}
+	prices, ok := gptImageTokenBucketPrices[name]
+	return prices, ok
 }

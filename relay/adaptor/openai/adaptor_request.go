@@ -51,6 +51,15 @@ func AzureRequiresResponseAPI(modelName string) bool {
 	return azureRequiresResponseAPI(modelName)
 }
 
+// ShouldForceResponseAPI reports whether this adaptor sends a Chat
+// Completions request to the provider's Responses API surface, so callers
+// that bypass ConvertRequest (raw Chat passthrough) can keep the wire format in
+// sync with the adaptor's routing. Parameter metaInfo is the attempt metadata.
+// It returns true when the upstream request must be a Responses body.
+func ShouldForceResponseAPI(metaInfo *meta.Meta) bool {
+	return shouldForceResponseAPI(metaInfo)
+}
+
 // shouldForceResponseAPI reports whether the upstream request must use the Response API surface.
 func shouldForceResponseAPI(metaInfo *meta.Meta) bool {
 	if metaInfo == nil {
@@ -111,7 +120,9 @@ func (a *Adaptor) GetRequestURL(meta *meta.Meta) (string, error) {
 		if idx := strings.Index(requestPath, "?"); idx >= 0 {
 			requestPath = requestPath[:idx]
 		}
-		if strings.TrimSpace(requestPath) == "" {
+		// Claude Messages requests are converted to Chat Completions for Azure
+		// OpenAI deployments; Foundry exposes no deployment-scoped /messages route.
+		if strings.TrimSpace(requestPath) == "" || requestPath == "/v1/messages" {
 			requestPath = "/v1/chat/completions"
 		}
 		if useResponseAPI {
@@ -215,6 +226,8 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 
 	metaInfo := meta.GetByContext(c)
 	lg := gmw.GetLogger(c)
+	// Scope before any Chat-to-Responses conversion copies the key.
+	ScopePromptCacheKey(lg, metaInfo, &request.PromptCacheKey, "chat_completions")
 	if shouldNormalizeToolMessageContentForDeepSeek(metaInfo, request) {
 		normalizeClaudeThinkingForDeepSeek(lg, request)
 		enforceDeepSeekHistoryContract(lg, request)
@@ -312,14 +325,14 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 	if meta != nil {
 		channelType = meta.ChannelType
 	}
-	// Terra's published model tariff currently covers Standard only. Force a
-	// stable default rather than allowing the upstream project's auto/Fast tier
-	// to incur a higher bill than the quota reserved by this gateway.
-	if channelType == channeltype.OpenAI && normalizedModelName(actualModel) == "gpt-6.1-terra" {
-		if request.ServiceTier != nil && normalizedModelName(*request.ServiceTier) != "default" {
-			return errors.Errorf("GPT-6.1 Terra Standard billing does not support service_tier %q", *request.ServiceTier)
+	// Models whose catalog prices only some service tiers pin the supported
+	// tier rather than allowing the upstream project's auto/Fast tier to incur a
+	// higher bill than the quota reserved by this gateway.
+	if policy, restricted := NativeModelBillingPolicy(channelType, actualModel); restricted && policy.RestrictsServiceTier() {
+		if request.ServiceTier != nil && !policy.SupportsServiceTier(*request.ServiceTier) {
+			return adaptor.UnbillableRequestControl(errors.Errorf("%s Standard billing does not support service_tier %q", actualModel, *request.ServiceTier))
 		}
-		request.ServiceTier = stringRef("default")
+		request.ServiceTier = stringRef(policy.PinnedServiceTier())
 	}
 	supportsReasoning := isModelSupportedReasoning(actualModel)
 	isGemini4Compatible := channelType == channeltype.GeminiOpenAICompatible && geminiOpenaiCompatible.IsGemini4Model(normalizedModelName(actualModel))
@@ -482,6 +495,10 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	openaiRequest.Thinking = request.Thinking
 
 	metaInfo := meta.GetByContext(c)
+	// The shared Claude converter is used by every OpenAI-compatible adaptor and
+	// never carries the key; only this native-aware path scopes and copies it.
+	openaiRequest.PromptCacheKey = request.PromptCacheKey
+	ScopePromptCacheKey(gmw.GetLogger(c), metaInfo, &openaiRequest.PromptCacheKey, "claude_messages")
 	if shouldNormalizeToolMessageContentForDeepSeek(metaInfo, openaiRequest) {
 		normalizeClaudeThinkingForDeepSeek(gmw.GetLogger(c), openaiRequest)
 		enforceDeepSeekHistoryContract(gmw.GetLogger(c), openaiRequest)

@@ -290,8 +290,12 @@ func TestIncidentBodyResetChannelImpactRouting(t *testing.T) {
 					require.Contains(t, recorder.Body.String(), "read_response_body_failed")
 					require.Equal(t, incidentBodyResetBalance-hold, owner.Quota)
 					require.Len(t, rows, 1)
-					require.Equal(t, dbmodel.LogTypeProvisional, rows[0].Type)
+					// The terminal relay publishes the retained hold as a visible,
+					// estimate-flagged consume row instead of stranding it as a
+					// provisional row that every Logs query filters out.
+					require.Equal(t, dbmodel.LogTypeConsume, rows[0].Type)
 					require.EqualValues(t, hold, rows[0].Quota)
+					require.Equal(t, true, rows[0].Metadata["billing_estimated"])
 				}
 			})
 		}

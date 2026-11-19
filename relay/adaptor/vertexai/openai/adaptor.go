@@ -7,6 +7,7 @@ import (
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 
+	"github.com/Laisky/one-api/relay/adaptor"
 	openai_compatible "github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -22,6 +23,7 @@ type Adaptor struct{}
 //  1. Creating a copy of the original request to avoid modification
 //  2. Mapping max_completion_tokens to max_tokens if needed (GPT-OSS only supports max_tokens)
 //  3. Clearing max_completion_tokens to avoid conflicts
+//  4. Keeping reasoning_effort only when the model's catalog lists it
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	// OpenAI GPT-OSS models are fully OpenAI-compatible
 	if request == nil {
@@ -40,6 +42,10 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	// Clear max_completion_tokens to avoid conflicts
 	openaiRequest.MaxCompletionTokens = nil
 
+	// Shared catalog policy: forward only a listed (normalized) effort; any
+	// other value is omitted so Vertex applies its default.
+	openaiRequest.ReasoningEffort = adaptor.SupportedReasoningEffort(ModelRatios, openaiRequest.Model, openaiRequest.ReasoningEffort)
+
 	return &openaiRequest, nil
 }
 
@@ -53,7 +59,12 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 // DoResponse handles the response from OpenAI GPT-OSS API and converts it to a standard format.
 // Since GPT-OSS models are fully OpenAI-compatible, it uses the standard OpenAI-compatible response handlers.
 // For streaming responses, it uses the StreamHandler, otherwise the standard Handler.
+// A Claude Messages client receives the GPT-OSS answer converted to Claude
+// Messages, as on every other OpenAI-compatible adaptor.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	if openai_compatible.ClaudeChatBridgeActive(c, meta) {
+		return openai_compatible.HandleClaudeMessagesResponse(c, resp, meta, openai_compatible.Handler)
+	}
 	// Use standard OpenAI-compatible response handling since GPT-OSS is OpenAI-compatible
 	if meta.IsStream {
 		err, usage = openai_compatible.StreamHandler(c, resp, meta.PromptTokens, meta.ActualModelName)

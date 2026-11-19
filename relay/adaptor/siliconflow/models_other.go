@@ -7,7 +7,7 @@ import "github.com/Laisky/one-api/relay/adaptor"
 func otherModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"01-ai/Yi-1.5-6B-Chat": {
-			Ratio:                       nativeRate(0.49000000000000005),
+			Ratio:                       nativeRate(0.49),
 			CompletionRatio:             1,
 			ContextLength:               4096,
 			MaxOutputTokens:             4096,
@@ -19,7 +19,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "01.AI Yi 1.5 6B chat model with 4K context.",
 		},
 		"01-ai/Yi-1.5-9B-Chat-16K": {
-			Ratio:                       nativeRate(0.9800000000000001),
+			Ratio:                       nativeRate(0.98),
 			CompletionRatio:             1,
 			ContextLength:               16384,
 			MaxOutputTokens:             4096,
@@ -64,7 +64,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"ByteDance-Seed/Seed-OSS-36B-Instruct": {
 			Ratio:           nativeRate(1.5),
-			CompletionRatio: 2.6666666666666665,
+			CompletionRatio: 4.0 / 1.5,
 			Description:     "ByteDance-Seed/Seed-OSS-36B-Instruct on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"Bytedance/Z-Image-Turbo": {
@@ -85,7 +85,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Ratio:           0,
 			CompletionRatio: 0,
 			Audio: &adaptor.AudioPricingConfig{
-				InputPriceQuantity: 1e+06,
+				InputPriceQuantity: 1000000,
 				InputUnit:          "utf8_bytes",
 				InputPriceUsd:      7.15,
 			},
@@ -132,7 +132,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:     "THUDM/GLM-4-32B-0414 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"THUDM/chatglm3-6b": {
-			Ratio:                       nativeRate(0.49000000000000005),
+			Ratio:                       nativeRate(0.49),
 			CompletionRatio:             1,
 			ContextLength:               8192,
 			MaxOutputTokens:             4096,
@@ -144,7 +144,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "Zhipu THUDM ChatGLM3 6B legacy chat model with 8K context.",
 		},
 		"THUDM/glm-4-9b-chat": {
-			Ratio:                       nativeRate(0.9800000000000001),
+			Ratio:                       nativeRate(0.98),
 			CompletionRatio:             1,
 			ContextLength:               131072,
 			MaxOutputTokens:             8192,
@@ -247,7 +247,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:       "FLUX.2 [pro] high-resolution text-to-image and multi-reference editing on SiliconFlow.",
 		},
 		"deepseek-chat": {
-			Ratio:                       nativeRate(0.9800000000000001),
+			Ratio:                       nativeRate(0.98),
 			CompletionRatio:             1,
 			ContextLength:               65536,
 			MaxOutputTokens:             8192,
@@ -260,7 +260,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "SiliconFlow legacy alias for DeepSeek V2.5 chat (fp8, 64K context).",
 		},
 		"deepseek-coder": {
-			Ratio:                       nativeRate(0.9800000000000001),
+			Ratio:                       nativeRate(0.98),
 			CompletionRatio:             1,
 			ContextLength:               65536,
 			MaxOutputTokens:             8192,
@@ -273,7 +273,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "SiliconFlow legacy alias for DeepSeek Coder V2 instruct (fp8, 64K context).",
 		},
 		"google/gemma-2-27b-it": {
-			Ratio:                       nativeRate(1.9600000000000002),
+			Ratio:                       nativeRate(1.96),
 			CompletionRatio:             1,
 			ContextLength:               8192,
 			MaxOutputTokens:             8192,
@@ -285,7 +285,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "Google Gemma 2 27B instruction-tuned chat model with 8K context.",
 		},
 		"google/gemma-2-9b-it": {
-			Ratio:                       nativeRate(0.9800000000000001),
+			Ratio:                       nativeRate(0.98),
 			CompletionRatio:             1,
 			ContextLength:               8192,
 			MaxOutputTokens:             8192,
@@ -297,7 +297,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "Google Gemma 2 9B instruction-tuned chat model with 8K context.",
 		},
 		"google/gemma-4-12B-it": {
-			Ratio:                       nativeRate(0.7000000000000001),
+			Ratio:                       nativeRate(0.7),
 			CompletionRatio:             3,
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,
@@ -311,7 +311,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"google/gemma-4-26b-a4b-it": {
 			Ratio:                       nativeRate(0.84),
-			CompletionRatio:             3.3333333333333335,
+			CompletionRatio:             2.8 / 0.84,
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,
 			InputModalities:             []string{"text", "image"},
@@ -326,7 +326,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"google/gemma-4-31b-it": {
 			Ratio:                       nativeRate(0.91),
-			CompletionRatio:             3.076923076923077,
+			CompletionRatio:             2.8 / 0.91,
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,
 			InputModalities:             []string{"text", "image"},
@@ -347,10 +347,10 @@ func otherModels() map[string]adaptor.ModelConfig {
 		"inclusionAI/Ling-mini-2.0": {
 			Ratio:           nativeRate(0.5),
 			CompletionRatio: 4,
-			Description:     "inclusionAI/Ling-mini-2.0 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:     "inclusionAI/Ling-mini-2.0 on siliconflow; official catalog snapshot 2026-09-24. SiliconFlow announced retirement on 2026-11-16; the historical ID and tariff remain for administrator configurations. Source: https://docs.siliconflow.cn/docs/release-notes/overview",
 		},
 		"internlm/internlm2_5-7b-chat": {
-			Ratio:                       nativeRate(0.49000000000000005),
+			Ratio:                       nativeRate(0.49),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -369,7 +369,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:      "meituan-longcat/LongCat-2.0 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"meta-llama/Meta-Llama-3-70B-Instruct": {
-			Ratio:                       nativeRate(3.9200000000000004),
+			Ratio:                       nativeRate(3.92),
 			CompletionRatio:             1,
 			ContextLength:               8192,
 			MaxOutputTokens:             8192,
@@ -382,7 +382,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "Meta Llama 3 70B Instruct dense chat model with 8K context.",
 		},
 		"meta-llama/Meta-Llama-3-8B-Instruct": {
-			Ratio:                       nativeRate(0.49000000000000005),
+			Ratio:                       nativeRate(0.49),
 			CompletionRatio:             1,
 			ContextLength:               8192,
 			MaxOutputTokens:             8192,
@@ -408,7 +408,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "Meta Llama 3.1 405B Instruct flagship dense chat model with 128K context; served at fp8 by SiliconFlow.",
 		},
 		"meta-llama/Meta-Llama-3.1-70B-Instruct": {
-			Ratio:                       nativeRate(3.9200000000000004),
+			Ratio:                       nativeRate(3.92),
 			CompletionRatio:             1,
 			ContextLength:               131072,
 			MaxOutputTokens:             8192,
@@ -421,7 +421,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "Meta Llama 3.1 70B Instruct dense chat model with 128K context and tool support.",
 		},
 		"meta-llama/Meta-Llama-3.1-8B-Instruct": {
-			Ratio:                       nativeRate(0.49000000000000005),
+			Ratio:                       nativeRate(0.49),
 			CompletionRatio:             1,
 			ContextLength:               131072,
 			MaxOutputTokens:             8192,
@@ -434,7 +434,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "Meta Llama 3.1 8B Instruct chat model with 128K context and tool support.",
 		},
 		"mistralai/Mistral-7B-Instruct-v0.2": {
-			Ratio:                       nativeRate(0.49000000000000005),
+			Ratio:                       nativeRate(0.49),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -446,7 +446,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "Mistral 7B Instruct v0.2 chat model with 32K context (legacy build, no native tool calling).",
 		},
 		"mistralai/Mixtral-8x7B-Instruct-v0.1": {
-			Ratio:                       nativeRate(3.9200000000000004),
+			Ratio:                       nativeRate(3.92),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -459,7 +459,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "Mistral Mixtral 8x7B Instruct v0.1 sparse MoE chat model with 32K context.",
 		},
 		"openai/gpt-oss-120b": {
-			Ratio:                       nativeRate(0.35000000000000003),
+			Ratio:                       nativeRate(0.35),
 			CompletionRatio:             9,
 			ContextLength:               131072,
 			MaxOutputTokens:             8192,
@@ -482,8 +482,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"stepfun-ai/Step-3.5-Flash": {
 			Ratio:           nativeRate(0.7),
-			CompletionRatio: 3.0000000000000004,
-			Description:     "stepfun-ai/Step-3.5-Flash on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			CompletionRatio: 3,
+			Description:     "stepfun-ai/Step-3.5-Flash on siliconflow; official catalog snapshot 2026-09-24. SiliconFlow announced retirement on 2026-11-16; the historical ID and tariff remain for administrator configurations. Source: https://docs.siliconflow.cn/docs/release-notes/overview",
 		},
 		"tencent/Hunyuan-A13B-Instruct": {
 			Ratio:           nativeRate(1),
@@ -527,7 +527,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "max_tokens", "stop", "presence_penalty", "frequency_penalty", "seed", "response_format", "tools", "tool_choice"},
 			Quantization:                "fp8",
 			HuggingFaceID:               "tencent/Hunyuan-A13B-Instruct",
-			Description:                 "tencent/Hunyuan-A13B-Instruct on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "tencent/Hunyuan-A13B-Instruct on siliconflow; official catalog snapshot 2026-09-24. SiliconFlow announced retirement on 2026-11-16; the historical ID and tariff remain for administrator configurations. Source: https://docs.siliconflow.cn/docs/release-notes/overview",
 		},
 		"tencent/Hunyuan-MT-7B": {
 			Ratio:           0,
@@ -536,7 +536,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"tencent/Hy3-preview": {
 			Ratio:                       nativeRate(0.462),
-			CompletionRatio:             3.9393939393939394,
+			CompletionRatio:             1.82 / 0.462,
 			CachedInputRatio:            nativeRate(0.203),
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,

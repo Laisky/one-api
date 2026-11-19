@@ -12,14 +12,25 @@ import (
 	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
-// validateClaudeRequestPricing applies the provider's shared tariff contract before quota admission.
+// validateClaudeRequestPricing applies the provider's shared tariff contract
+// before quota admission. A missing or incomplete channel tariff is a channel
+// configuration fault, not a client error: it answers 503
+// model_pricing_not_configured so the relay loop fails over to another
+// (possibly priced) channel and never penalises channel health, matching the
+// Chat Completions and Responses dispatch contract. Other validator refusals
+// (a retired model, missing metadata) keep the historical 400. Parameters: c
+// carries the channel, m the mapped model, a the serving adaptor. Returns: the
+// refusal, or nil when admission may proceed.
 func validateClaudeRequestPricing(c *gin.Context, m *meta.Meta, a adaptor.Adaptor) *relaymodel.ErrorWithStatusCode {
-	if validator, ok := a.(adaptor.RequestPricingValidator); ok {
-		if err := validator.ValidateRequestPricing(c, m); err != nil {
-			return openai.ErrorWrapper(err, "invalid_model_pricing", http.StatusBadRequest)
-		}
+	err := adaptor.ValidateRequestPricing(a, c, m)
+	switch {
+	case err == nil:
+		return nil
+	case adaptor.IsRequestPricingNotConfigured(err):
+		return openai.ErrorWrapper(err, "model_pricing_not_configured", http.StatusServiceUnavailable)
+	default:
+		return openai.ErrorWrapper(err, "invalid_model_pricing", http.StatusBadRequest)
 	}
-	return nil
 }
 
 // settleUnforwardedClaudeReservation handles terminal local preparation failures before the audit fallback.

@@ -78,10 +78,10 @@ func (a *Adaptor) GetChannelName() string {
 }
 
 // GetDefaultModelPricing returns the pricing information for StepFun models.
-// It returns the full ModelRatios table from constants.go (the single source of
+// It returns the full ModelRatios table from models.go (the single source of
 // truth, kept in sync with https://platform.stepfun.com/docs/pricing/details).
 // Previously this method returned a stale hardcoded 9-model map that shadowed
-// ModelRatios, so the audited constants.go rates (step-3, step-3.5-flash, the
+// ModelRatios, so the audited models.go rates (step-3, step-3.5-flash, the
 // tiered/cache-aware entries, etc.) were never actually used for billing.
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return ModelRatios

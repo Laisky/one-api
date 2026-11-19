@@ -19,9 +19,15 @@ A price-only override preserves the catalog request defaults (`auto` size/qualit
 The prompt limit counts Unicode code points, not UTF-8 bytes.
 An absent, nonpositive, nonfinite, or unrepresentable reservation produces
 `503 image_billing_not_configured` before any paid upstream request.
+The Modern channel editor runs the same check when a channel is saved: if a
+Supported Model (after Model Mapping) is one of these IDs without a positive
+`image.price_per_image_usd`, the save dialog names the model and the field to
+set. The warning never blocks saving ("Save Anyway" keeps the channel as entered).
 
 Reservation is `ceil(tariff × tier × group multiplier × quota/USD)` per image,
-multiplied by the requested count. Both user and limited-token quota use the
+multiplied by the requested count. A free group (group multiplier 0) is served
+without a reservation and settles at zero; the per-image fallback must still be
+configured. Both user and limited-token quota use the
 existing pre-consumption path before HTTP dispatch. This is an advance estimate,
 not a provider cost ceiling: actual usage can exceed it and require an additional
 debit under the existing quota policy. Configure adequate reserves and balances.

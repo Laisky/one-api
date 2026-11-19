@@ -16,11 +16,15 @@ import (
 func TestNorthCatalogAndChat(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		id              string
+		id, wire        string
 		context, output int32
 	}{
-		{"north-mini-code-1-0", 256000, 64000},
-		{"north-small-translate-1-0", 16000, 16000},
+		// Historical gateway spellings stay in the catalog for existing channel
+		// mappings but are sent upstream as Cohere's published dotted IDs.
+		{"north-mini-code-1-0", "north-mini-code-1.0", 256000, 64000},
+		{"north-mini-code-1.0", "north-mini-code-1.0", 256000, 64000},
+		{"north-small-translate-1-0", "north-small-translate-1.0", 16000, 16000},
+		{"north-small-translate-1.0", "north-small-translate-1.0", 16000, 16000},
 	} {
 		t.Run(tc.id, func(t *testing.T) {
 			t.Parallel()
@@ -44,7 +48,7 @@ func TestNorthCatalogAndChat(t *testing.T) {
 			require.NoError(t, err)
 			var payload map[string]any
 			require.NoError(t, json.Unmarshal(encoded, &payload))
-			require.Equal(t, tc.id, payload["model"])
+			require.Equal(t, tc.wire, payload["model"])
 			require.Equal(t, "Translate hello to French.", payload["message"])
 			require.Equal(t, float64(123), payload["max_tokens"])
 			url, err := a.GetRequestURL(&meta.Meta{BaseURL: "https://api.cohere.com", ActualModelName: tc.id})

@@ -168,6 +168,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	lg := gmw.GetLogger(c)
 	var streamErr error
+	providerEnded := false
 	for {
 		line, err := lineReader.Next()
 		if err != nil {
@@ -186,6 +187,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 				continue
 			}
 
+			providerEnded = providerEnded || (len(tencentResponse.Choices) > 0 && tencentResponse.Choices[0].FinishReason != "")
 			response := streamResponseTencent2OpenAI(c, &tencentResponse)
 			if len(response.Choices) != 0 {
 				responseText += conv.AsString(response.Choices[0].Delta.Content)
@@ -210,6 +212,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			continue
 		}
 
+		providerEnded = providerEnded || (len(tencentResponse.Choices) > 0 && tencentResponse.Choices[0].FinishReason != "")
 		response := streamResponseTencent2OpenAI(c, &tencentResponse)
 		if len(response.Choices) != 0 {
 			responseText += conv.AsString(response.Choices[0].Delta.Content)
@@ -223,6 +226,11 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	if streamErr != nil {
 		lg.Error("error reading stream", zap.Error(streamErr))
+	}
+	// A read error or EOF before the provider's end event is an interruption;
+	// report it so a Claude client never sees the stream as complete.
+	if streamErr != nil || !providerEnded {
+		openai_compatible.MarkStreamInterrupted(c)
 	}
 
 	openai_compatible.FinalizeStreamWithBridge(c, nil)

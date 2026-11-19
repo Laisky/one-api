@@ -2,19 +2,22 @@ package deepinfra
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// meta_llamaModels returns the meta_llama model defaults for deepinfra.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func meta_llamaModels() map[string]adaptor.ModelConfig {
+// metaLlamaModels returns independently owned meta llama defaults for deepinfra.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.deepinfra.com/models/list
+func metaLlamaModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"meta-llama/Llama-3.3-70B-Instruct-Turbo": {
 			Ratio:                       nativeRate(0.1),
-			CompletionRatio:             3.1999999999999997,
+			CompletionRatio:             3.2,
 			ContextLength:               131072,
+			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "meta-llama/Llama-3.3-70B-Instruct-Turbo on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "meta-llama/Llama-3.3-70B-Instruct-Turbo on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Published output limit checked 2026-11-18; reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8": {
 			Ratio:                       nativeRate(0.2),
@@ -28,13 +31,14 @@ func meta_llamaModels() map[string]adaptor.ModelConfig {
 		},
 		"meta-llama/Llama-4-Scout-17B-16E-Instruct": {
 			Ratio:                       nativeRate(0.1),
-			CompletionRatio:             2.9999999999999996,
+			CompletionRatio:             3,
 			ContextLength:               327680,
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "meta-llama/Llama-4-Scout-17B-16E-Instruct on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "meta-llama/Llama-4-Scout-17B-16E-Instruct on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"meta-llama/Llama-Guard-4-12B": {
 			Ratio:                       nativeRate(0.18),
@@ -44,7 +48,8 @@ func meta_llamaModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "meta-llama/Llama-Guard-4-12B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "meta-llama/Llama-Guard-4-12B on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "bf16",
 		},
 		"meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo": {
 			Ratio:                       nativeRate(0.4),
@@ -64,7 +69,8 @@ func meta_llamaModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 	}
 }

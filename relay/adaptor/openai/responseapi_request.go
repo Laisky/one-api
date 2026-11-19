@@ -23,6 +23,7 @@ type ResponseAPIRequest struct {
 	ParallelToolCalls  *bool                          `json:"parallel_tool_calls,omitempty"`  // Optional: Whether to allow the model to run tool calls in parallel
 	PreviousResponseId *string                        `json:"previous_response_id,omitempty"` // Optional: The unique ID of the previous response
 	Prompt             *ResponseAPIPrompt             `json:"prompt,omitempty"`               // Optional: Prompt template configuration - mutually exclusive with input
+	PromptCacheKey     model.PromptCacheKey           `json:"prompt_cache_key,omitzero"`      // Optional: Cache routing key; only a tenant-scoped value for native OpenAI is encoded
 	Reasoning          *model.OpenAIResponseReasoning `json:"reasoning,omitempty"`            // Optional: Configuration options for reasoning models
 	ServiceTier        *string                        `json:"service_tier,omitempty"`         // Optional: Latency tier to use for processing
 	Store              *bool                          `json:"store,omitempty"`                // Optional: Whether to store the generated model response

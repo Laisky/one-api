@@ -268,10 +268,10 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	// XAI is OpenAI-compatible, so we can pass the request through with minimal changes.
 	// Use the catalog as the source of truth instead of maintaining a second model allowlist.
 	config, knownModel := ModelRatios[request.Model]
-	if request.ReasoningEffort != nil &&
-		(!knownModel || !supportsStringValue(config.SupportedReasoningEfforts, *request.ReasoningEffort)) {
-		request.ReasoningEffort = nil
-	}
+	// Shared catalog policy: forward only a listed effort (trimmed and
+	// lowercased to the catalog's canonical spelling); unknown models, models
+	// without a vocabulary and unlisted values omit it for xAI's default.
+	request.ReasoningEffort = adaptor.SupportedReasoningEffort(ModelRatios, request.Model, request.ReasoningEffort)
 
 	// Retired aliases retain their historical compatibility filtering even when
 	// their copied metadata advertises a wider sampling set than the redirect target.
@@ -329,6 +329,10 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 	}
 	request.Size = ""
 	request.Style = ""
+	// OpenAI-only GPT Image controls are not part of xAI's image contract.
+	request.OutputFormat = ""
+	request.Complexity = ""
+	request.SafetyIdentifier = ""
 
 	return request, nil
 }
@@ -468,7 +472,7 @@ func (a *Adaptor) handleImageResponse(c *gin.Context, resp *http.Response) (usag
 }
 
 // GetModelList returns a list of supported model names for X.AI.
-// The list is derived from the pricing configuration in constants.go.
+// The list is derived from the pricing catalog assembled in models.go.
 func (a *Adaptor) GetModelList() []string {
 	return adaptor.GetModelListFromPricing(ModelRatios)
 }
@@ -482,7 +486,7 @@ func (a *Adaptor) GetChannelName() string {
 // Based on XAI pricing: https://console.x.ai/
 // The pricing includes input, output, and cached input token ratios.
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
-	// Use the constants.go ModelRatios which already use ratio.MilliTokensUsd correctly
+	// Use the models.go ModelRatios catalog, which already uses ratio.MilliTokensUsd correctly
 	return ModelRatios
 }
 

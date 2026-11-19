@@ -331,7 +331,7 @@ func TestChannel(c *gin.Context) {
 	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
 		lg.Debug("invalid channel id", zap.Error(err))
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 

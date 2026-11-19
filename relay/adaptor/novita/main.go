@@ -9,8 +9,12 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
+// GetRequestURL returns the Novita chat completions URL. Claude Messages
+// requests are converted to Chat Completions, so they use the same URL.
+// Parameters: meta is the request meta. Returns: the URL or an error for any
+// other relay mode.
 func GetRequestURL(meta *meta.Meta) (string, error) {
-	if meta.Mode == relaymode.ChatCompletions {
+	if meta.Mode == relaymode.ChatCompletions || meta.Mode == relaymode.ClaudeMessages {
 		return fmt.Sprintf("%s/chat/completions", meta.BaseURL), nil
 	}
 	return "", errors.Errorf("unsupported relay mode %d for novita", meta.Mode)

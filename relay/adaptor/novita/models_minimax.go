@@ -2,8 +2,9 @@ package novita
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// minimaxModels returns the minimax model defaults for novita.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// minimaxModels returns independently owned minimax defaults for novita.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.novita.ai/v3/openai/models
 func minimaxModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"minimax/minimax-m2": {
@@ -78,6 +79,11 @@ func minimaxModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "max_tokens", "stop", "presence_penalty", "frequency_penalty", "repetition_penalty", "seed", "n", "logit_bias", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice"},
 			Description:                 "minimax/minimax-m2.7-highspeed on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
+		// Novita's tiered_billing_configs (https://api.novita.ai/v3/openai/models,
+		// re-verified 2026-11-18) list {min_tokens 1, max_tokens 524288} and
+		// {min_tokens 524288, max_tokens 1000000}. min_tokens is inclusive (the
+		// first tier starts at 1) and 524288 sits in both ranges, so the boundary
+		// is billed at the dearer tier: threshold = 524288, never under-billing.
 		"minimax/minimax-m3": {
 			Ratio:            nativeRate(0.3),
 			CompletionRatio:  4,
@@ -96,6 +102,29 @@ func minimaxModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "max_tokens", "stop", "presence_penalty", "frequency_penalty", "repetition_penalty", "seed", "n", "logit_bias", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice"},
 			Description:                 "MiniMax M3 multimodal reasoning chat model with 1M context and tiered pricing.",
+		},
+		"minimax/minimax-m3.1-flash": {
+			Ratio:             nativeRate(0.15),
+			CompletionRatio:   4,
+			CachedInputRatio:  nativeRate(0.015),
+			ContextLength:     1000000,
+			MaxOutputTokens:   524288,
+			InputModalities:   []string{"text", "image", "video"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+			Description:       "minimax/minimax-m3.1-flash on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
+		},
+		"minimaxai/minimax-m1-80k": {
+			Ratio:                       nativeRate(0.55),
+			CompletionRatio:             4,
+			ContextLength:               1000000,
+			MaxOutputTokens:             40000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "max_tokens", "stop", "presence_penalty", "frequency_penalty", "repetition_penalty", "seed", "n", "logit_bias", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice"},
+			HuggingFaceID:               "MiniMaxAI/MiniMax-M1-80k",
+			Description:                 "minimaxai/minimax-m1-80k on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 	}
 }

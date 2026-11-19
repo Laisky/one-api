@@ -401,9 +401,10 @@ func PasskeyDelete(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := resolvePasskeyCredentialRef(idStr)
 	if err != nil {
-		// Inherit the resolver's attribution so a database outage during UUID
-		// resolution stays Unknown (ERROR) instead of being blamed on the client.
-		helper.RespondError(c, errkind.Mark(errors.New("invalid credential id"), errkind.Of(err)))
+		// The override keeps the resolver error as its cause, so a database
+		// outage still logs at ERROR with that cause instead of being blamed
+		// on the client.
+		respondResourceRefErrorAs(c, err, "invalid credential id")
 		return
 	}
 
@@ -424,9 +425,10 @@ func PasskeyRename(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := resolvePasskeyCredentialRef(idStr)
 	if err != nil {
-		// Inherit the resolver's attribution so a database outage during UUID
-		// resolution stays Unknown (ERROR) instead of being blamed on the client.
-		helper.RespondError(c, errkind.Mark(errors.New("invalid credential id"), errkind.Of(err)))
+		// The override keeps the resolver error as its cause, so a database
+		// outage still logs at ERROR with that cause instead of being blamed
+		// on the client.
+		respondResourceRefErrorAs(c, err, "invalid credential id")
 		return
 	}
 

@@ -405,6 +405,9 @@ func ConvertChatCompletionToResponseAPI(request *model.GeneralOpenAIRequest) *Re
 	responseReq.User = &request.User
 	responseReq.Store = request.Store
 	responseReq.Metadata = request.Metadata
+	// Carries the client value plus any tenant-scoped forwarded value; only a
+	// value the native OpenAI converter scoped is ever encoded upstream.
+	responseReq.PromptCacheKey = request.PromptCacheKey
 
 	if request.ServiceTier != nil {
 		responseReq.ServiceTier = request.ServiceTier

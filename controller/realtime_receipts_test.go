@@ -65,3 +65,25 @@ func TestRealtimeReceiptMetadataMarksUnattributedPricing(t *testing.T) {
 		require.True(t, metadata["realtime_billing_complete"].(bool))
 	}
 }
+
+// TestRealtimeReceiptPricedVideoOutputIsNotLowerBound proves explicitly
+// labelled VIDEO output priced by video.output_token_ratio does not mark the
+// receipt as a lower-bound estimate, while unlabelled output still does.
+// Defect: every Live receipt with avatar video output was flagged
+// realtime_pricing_lower_bound because OutputVideo is counted inside
+// OutputUnallocated.
+func TestRealtimeReceiptPricedVideoOutputIsNotLowerBound(t *testing.T) {
+	t.Parallel()
+	ledger := realtime.NewLedger()
+	ledger.Records = []realtime.Record{{Tokens: realtime.Tokens{Input: 100, Text: 100, Output: 1000, OutputUnallocated: 1000, OutputVideo: 1000}}}
+	metadata := realtimeReceiptMetadata(&rmodel.Usage{Realtime: ledger}, quota.ComputeResult{})
+	require.NotContains(t, metadata, "realtime_pricing_lower_bound", "priced video output is not an unlabelled lower bound")
+
+	ledger.Records = []realtime.Record{{Tokens: realtime.Tokens{Input: 100, Text: 100, Output: 1000, OutputUnallocated: 1000, OutputVideo: 400}}}
+	metadata = realtimeReceiptMetadata(&rmodel.Usage{Realtime: ledger}, quota.ComputeResult{})
+	require.Equal(t, true, metadata["realtime_pricing_lower_bound"], "the unlabelled remainder is still a lower bound")
+
+	ledger.Records = []realtime.Record{{Tokens: realtime.Tokens{Input: 100, Text: 100, Output: 1000, OutputUnallocated: 1000, OutputVideo: 1000}}}
+	metadata = realtimeReceiptMetadata(&rmodel.Usage{Realtime: ledger}, quota.ComputeResult{UnpricedUsage: true})
+	require.Equal(t, true, metadata["realtime_pricing_lower_bound"], "unpriced video output stays a lower bound")
+}

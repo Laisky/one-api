@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	stdlog "log"
 	"os"
 	"path/filepath"
@@ -45,24 +46,37 @@ func init() {
 	glogger.Default = gormLogger
 }
 
-// newGormLogger builds the shared GORM logger.
+// newGormLogger builds the shared GORM logger writing to stdout.
 //
 // Return values:
-//   - glogger.Interface: a logger that ignores record-not-found errors, and that
-//     stays silent under `go test` unless LOG_LEVEL or DEBUG asks otherwise.
+//   - glogger.Interface: see newGormLoggerTo.
 func newGormLogger() glogger.Interface {
+	return newGormLoggerTo(os.Stdout, config.DebugSQLEnabled)
+}
+
+// newGormLoggerTo builds a GORM logger that ignores record-not-found errors
+// and stays silent under `go test` unless LOG_LEVEL asks otherwise. Every
+// query is logged parameterized: bound values (relay token keys, access
+// tokens, password hashes) never reach the log, whatever the level. Per-query
+// logging is enabled only by DEBUG_SQL; DEBUG alone used to switch it on and
+// printed token keys inside SQL text to stdout.
+//
+// Parameters: out receives log lines and debugSQL enables per-query logging.
+// It returns the logger.
+func newGormLoggerTo(out io.Writer, debugSQL bool) glogger.Interface {
 	level := glogger.Warn
 	if logger.QuietForTests() {
 		level = glogger.Silent
 	}
-	if config.DebugEnabled {
+	if debugSQL {
 		level = glogger.Info
 	}
 
-	return glogger.New(stdlog.New(os.Stdout, "\r\n", stdlog.LstdFlags), glogger.Config{
+	return glogger.New(stdlog.New(out, "\r\n", stdlog.LstdFlags), glogger.Config{
 		SlowThreshold:             200 * time.Millisecond,
 		LogLevel:                  level,
 		IgnoreRecordNotFoundError: true,
+		ParameterizedQueries:      true,
 		Colorful:                  true,
 	})
 }

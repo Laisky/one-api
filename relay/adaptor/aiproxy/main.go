@@ -95,6 +95,7 @@ func streamResponseAIProxyLibrary2OpenAI(c *gin.Context, response *LibraryStream
 func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	var usage model.Usage
 	var documents []LibraryDocument
+	providerFinished := false
 	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)
 
 	common.SetEventStreamHeaders(c)
@@ -121,6 +122,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			if len(aiProxyLibraryResponse.Documents) != 0 {
 				documents = aiProxyLibraryResponse.Documents
 			}
+			providerFinished = providerFinished || aiProxyLibraryResponse.Finish
 			response := streamResponseAIProxyLibrary2OpenAI(c, &aiProxyLibraryResponse)
 			if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
 				lg.Error("render object data error", zap.Error(err))
@@ -143,6 +145,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		if len(AIProxyLibraryResponse.Documents) != 0 {
 			documents = AIProxyLibraryResponse.Documents
 		}
+		providerFinished = providerFinished || AIProxyLibraryResponse.Finish
 		response := streamResponseAIProxyLibrary2OpenAI(c, &AIProxyLibraryResponse)
 		err = openai_compatible.RenderStreamChunkWithBridge(c, response)
 		if err != nil {
@@ -159,6 +162,11 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 		return openai.ErrorWrapper(streamErr, "read_stream_failed", http.StatusInternalServerError), &usage
 	}
 
+	if !providerFinished {
+		// EOF before the library's finish event is an interruption; report it
+		// so a Claude client never sees the stream as complete.
+		openai_compatible.MarkStreamInterrupted(c)
+	}
 	response := documentsAIProxyLibrary(c, documents)
 	err := openai_compatible.RenderStreamChunkWithBridge(c, response)
 	if err != nil {

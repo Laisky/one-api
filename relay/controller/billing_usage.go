@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"maps"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -74,16 +75,24 @@ func retainUnpricedUsage(ctx context.Context, usage *relaymodel.Usage, result qu
 	return true
 }
 
+// cloneLogMetadata returns a writable copy of metadata so a caller can add
+// keys without mutating the map it was given. Parameter metadata may be nil.
+// It returns a non-nil map holding the same entries.
+func cloneLogMetadata(metadata model.LogMetadata) model.LogMetadata {
+	out := maps.Clone(metadata)
+	if out == nil {
+		out = make(model.LogMetadata)
+	}
+	return out
+}
+
 // billingEstimateMetadata adds an explicit estimation label without mutating an
 // existing metadata map. An empty reason preserves measured-usage metadata.
 func billingEstimateMetadata(metadata model.LogMetadata, reason string) model.LogMetadata {
 	if reason == "" {
 		return metadata
 	}
-	out := make(model.LogMetadata, len(metadata)+2)
-	for key, value := range metadata {
-		out[key] = value
-	}
+	out := cloneLogMetadata(metadata)
 	out["billing_estimated"] = true
 	out[model.LogMetadataKeyEstimatedCharge] = true
 	out["billing_estimate_reason"] = reason
@@ -100,4 +109,20 @@ func recordZeroCostAfterFailure(c *gin.Context, userID int, requestID string) er
 		return errors.Wrap(err, "record zero cost after confirmed failure")
 	}
 	return nil
+}
+
+// reportedCostFloorMetadata records that settlement charged the provider's
+// reported cost because it exceeded the catalog price (OpenRouter's
+// usage.cost), so an auditor can tell the charge from a catalog price.
+// Parameters: metadata is the consume-log metadata (not mutated), usage the
+// settled receipt and result its computed price. It returns metadata
+// unchanged unless the floor applied.
+func reportedCostFloorMetadata(metadata model.LogMetadata, usage *relaymodel.Usage, result quotautil.ComputeResult) model.LogMetadata {
+	if usage == nil || !result.ReportedCostFloor {
+		return metadata
+	}
+	out := cloneLogMetadata(metadata)
+	out["billing_source"] = "provider_reported_cost"
+	out["upstream_cost_usd"] = usage.UpstreamCostUSD
+	return out
 }

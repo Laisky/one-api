@@ -60,13 +60,13 @@ func maybeHandleResponseAPIWebSocket(c *gin.Context, meta *metalib.Meta) (bool, 
 		)
 	}
 
-	// Terra's WebSocket response.create frames bypass native HTTP's Standard
+	// WebSocket response.create frames bypass native HTTP's Standard
 	// service-tier and cache-lifetime guard. Until frame-level price contracts
-	// and actual-tier receipts are qualified, never forward this newly added
-	// model over an unmetered transport. Other model handshakes are unchanged.
-	if strings.EqualFold(strings.TrimSpace(meta.ActualModelName), "gpt-6.1-terra") {
+	// and actual-tier receipts are qualified, models whose billing policy is
+	// HTTP-only must use HTTP. Other model handshakes are unchanged.
+	if policy, declared := openai.NativeModelBillingPolicy(meta.ChannelType, meta.ActualModelName); declared && !policy.PermitsWebSocket() {
 		return true, openai.ErrorWrapper(
-			errors.New("GPT-6.1 Terra WebSocket billing is not qualified; use HTTP Responses"),
+			errors.Errorf("%s WebSocket billing is not qualified; use HTTP Responses", meta.ActualModelName),
 			"response_websocket_model_billing_not_supported",
 			http.StatusBadRequest,
 		)
@@ -233,7 +233,7 @@ func responseWebSocketHandshakeTierRequest(meta *metalib.Meta, configs map[strin
 		output = int(effective.MaxTokens)
 	}
 	if output <= 0 {
-		upstream, _ := pricing.ResolveModelConfig(meta.ActualModelName, nil, provider, meta.StartTime)
+		upstream, _ := pricing.ResolveModelMetadata(meta.ActualModelName, provider, meta.StartTime)
 		output = int(upstream.MaxOutputTokens)
 	}
 	if output > 0 {

@@ -154,7 +154,9 @@ func serveLogCursorPage(c *gin.Context, endpoint string, scope model.LogListScop
 
 	req, err := parseLogCursorRequest(c, endpoint, scope)
 	if err != nil {
-		helper.RespondError(c, err)
+		// A malformed channel reference answers 400; other request errors keep
+		// the /api/* convention.
+		respondResourceRefError(c, err)
 		return
 	}
 

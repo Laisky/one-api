@@ -405,8 +405,18 @@
         "confirm": "このまま保存",
         "description": "以下の Model Mapping キーはサポートモデルに含まれていません。マッピングを保存しても、これらのエイリアス宛てのリクエストはルーターに拒否されます：",
         "hint": "各項目を修正するか、このまま保存してマッピングを現状のまま保持してください。",
+        "pricing_description": "このチャンネルのモデル設定で価格を設定するまで、以下のモデルへのリクエストは拒否されます：",
+        "pricing_hint": "不足している価格を今すぐ追加するか、このまま保存して、これらのモデルにトラフィックを送る前に価格を設定してください。",
+        "pricing_requirement": {
+          "image_price_per_image_usd": "正の image.price_per_image_usd（画像 1 枚あたりの予約価格およびフォールバック価格）を設定してください。",
+          "live_tariff": "Live の価格を設定してください：ratio、completion_ratio、音声の prompt と completion の倍率、画像の prompt_ratio。",
+          "tariff_supplement": "このプロバイダーが必要とするキャッシュ価格を設定してください：cached_input_ratio、および必要に応じて cache_write_5m_ratio と cache_write_1h_ratio。",
+          "token_tariff": "正の ratio と completion_ratio を、すべての段階を含めて設定してください。"
+        },
         "target_description": "以下の Model Mapping ターゲットは、このチャンネルのモデルとして認識されません。上流プロバイダーがこれらのリクエストを拒否する可能性があります：",
-        "title": "Model Mapping に疑わしい項目があります"
+        "title": "Model Mapping に疑わしい項目があります",
+        "title_combined": "保存する前にチャンネル設定を確認してください",
+        "title_pricing": "一部のモデルにチャンネル価格の設定が必要です"
       },
       "spark": {
         "api_key": {

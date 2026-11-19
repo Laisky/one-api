@@ -110,8 +110,20 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, m *meta.Meta) 
 	return a.Adaptor.DoResponse(c, resp, m)
 }
 
+// PaidErrorReceipt implements adaptor.PaidErrorReceiptReader. Azure OpenAI
+// deployments share the OpenAI wire receipt; Foundry Claude errors carry no
+// usage and keep the generic retained-hold path. Parameters: c receives tool
+// invocation counts, m identifies the deployment, statusCode is the upstream
+// status, and body is the bounded error body. Returns: the receipt usage, or nil.
+func (a *Adaptor) PaidErrorReceipt(c *gin.Context, m *meta.Meta, statusCode int, body []byte) *model.Usage {
+	if m != nil && m.AzureTargetsAnthropic() {
+		return nil
+	}
+	return a.Adaptor.PaidErrorReceipt(c, m, statusCode, body)
+}
+
 // GetModelList returns the Azure AI Foundry catalog this adaptor supports: the
-// Azure OpenAI models plus the Foundry Claude models (see constants.go).
+// Azure OpenAI models plus the Foundry Claude models (see models.go).
 func (a *Adaptor) GetModelList() []string {
 	return ModelList
 }
@@ -120,8 +132,12 @@ func (a *Adaptor) GetModelList() []string {
 // pricing UI and global pricing fallback see both families' models.
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	merged := make(map[string]adaptor.ModelConfig)
+	// An initialized embedded adaptor already serves openai.InheritedModelRatios;
+	// filter again so an adaptor used before Init cannot advertise native-only IDs.
 	for k, v := range a.Adaptor.GetDefaultModelPricing() {
-		merged[k] = v
+		if !a.RequiresOperatorTariff(k) {
+			merged[k] = v
+		}
 	}
 	for k, v := range a.claude.GetDefaultModelPricing() {
 		// Foundry 5.2 supports xhigh but not the native max effort level.
@@ -134,6 +150,10 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 }
 
 func (a *Adaptor) GetModelRatio(modelName string) float64 {
+	if a.RequiresOperatorTariff(modelName) {
+		// No Foundry tariff exists; dispatch requires an operator channel price.
+		return a.DefaultPricingMethods.GetModelRatio(modelName)
+	}
 	if meta.IsClaudeModelName(modelName) {
 		return a.claude.GetModelRatio(modelName)
 	}
@@ -141,6 +161,10 @@ func (a *Adaptor) GetModelRatio(modelName string) float64 {
 }
 
 func (a *Adaptor) GetCompletionRatio(modelName string) float64 {
+	if a.RequiresOperatorTariff(modelName) {
+		// No Foundry tariff exists; dispatch requires an operator channel price.
+		return a.DefaultPricingMethods.GetCompletionRatio(modelName)
+	}
 	if meta.IsClaudeModelName(modelName) {
 		return a.claude.GetCompletionRatio(modelName)
 	}

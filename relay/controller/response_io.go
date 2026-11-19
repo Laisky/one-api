@@ -144,6 +144,11 @@ func getResponseAPIRequestBody(c *gin.Context, meta *metalib.Meta, responseAPIRe
 		return nil, errors.Wrap(err, "get raw Response API request body")
 	}
 
+	// Scope (or withhold) prompt_cache_key for this destination before the raw
+	// body is rebuilt; the client's raw value is never forwarded.
+	if responseAPIRequest != nil {
+		openai.ScopePromptCacheKey(lg, meta, &responseAPIRequest.PromptCacheKey, "responses")
+	}
 	patched, stats, changed, err := normalizeResponseAPIRawBody(rawBody, responseAPIRequest, meta.ChannelType)
 	if err != nil {
 		return nil, errors.Wrap(err, "normalize Response API request body")
@@ -219,7 +224,7 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 	// also forces a re-marshal, so exact duplicate keys in the raw body cannot
 	// survive on the unchanged-raw passthrough path below.
 	changed := openai.StripResponseBackgroundKeys(root)
-	guardChanged, guardErr := normalizeOpenAITerraStandardPricing(root, request.Model, channelType)
+	guardChanged, guardErr := normalizeNativeOpenAIStandardTier(root, request.Model, channelType)
 	if guardErr != nil {
 		return nil, stats, false, errors.Wrap(guardErr, "validate native OpenAI Standard pricing")
 	}
@@ -229,6 +234,11 @@ func normalizeResponseAPIRawBody(rawBody []byte, request *openai.ResponseAPIRequ
 			delete(root, key)
 			changed = true
 		}
+	}
+	if keyChanged, err := syncResponsePromptCacheKey(root, request.PromptCacheKey); err != nil {
+		return nil, stats, false, err
+	} else if keyChanged {
+		changed = true
 	}
 
 	if request.Model != "" {

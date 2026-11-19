@@ -94,6 +94,24 @@ func buildToolResultMessage(callID string, result *mcp.CallToolResult) (relaymod
 	return message, nil
 }
 
+// mergeServiceTier combines the actual service tiers of two tool-round
+// receipts. Parameters: left is the accumulated receipt and right the next
+// round. It returns the tier to report and whether the merged receipt's tier is
+// unverified: either operand already was, or the rounds ran on different tiers,
+// which one tier field cannot represent. Matching ignores case and whitespace.
+func mergeServiceTier(left, right relaymodel.Usage) (string, bool) {
+	unverified := left.ServiceTierUnverified || right.ServiceTierUnverified
+	leftTier, rightTier := strings.TrimSpace(left.ServiceTier), strings.TrimSpace(right.ServiceTier)
+	switch {
+	case leftTier == "":
+		return right.ServiceTier, unverified
+	case rightTier == "" || strings.EqualFold(leftTier, rightTier):
+		return left.ServiceTier, unverified
+	default:
+		return left.ServiceTier, true
+	}
+}
+
 // mergeUsage accumulates independent upstream receipts across tool rounds.
 // Parameters: base is the owned accumulator and next is a provider snapshot.
 // Returns: merged counters or an error before mutating either operand when a
@@ -151,6 +169,7 @@ func mergeUsage(base *relaymodel.Usage, next *relaymodel.Usage) (*relaymodel.Usa
 	} else {
 		merged.BillingEstimateReason = right.BillingEstimateReason
 	}
+	merged.ServiceTier, merged.ServiceTierUnverified = mergeServiceTier(left, right)
 	cachedLeft, cachedRight := 0, 0
 	details := left.PromptTokensDetails
 	if details == nil {
@@ -448,7 +467,7 @@ func quoteMCPTierRoundQuota(c *gin.Context, meta *metalib.Meta, modelName string
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
 	configs := getChannelModelConfigs(c)
 	provider := resolvePricingAdaptor(meta)
-	write5m, write1h, err := tierAdmissionCacheWrites(json.RawMessage(payload))
+	write5m, write1h, err := tierAdmissionCacheWritesForDispatch(c, meta, modelName, json.RawMessage(payload), promptTokens, configs, provider)
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "inspect prepared MCP cache controls")
 	}
@@ -492,7 +511,7 @@ func quoteMCPTierRoundQuota(c *gin.Context, meta *metalib.Meta, modelName string
 			maxOutput = int(full.MaxTokens)
 		}
 		if maxOutput <= 0 {
-			full, _ = pricing.ResolveModelConfig(modelName, nil, provider, meta.StartTime)
+			full, _ = pricing.ResolveModelMetadata(modelName, provider, meta.StartTime)
 			maxOutput = int(full.MaxOutputTokens)
 		}
 	}

@@ -1,4 +1,5 @@
 import { reportUnexpectedRequestError } from '../../../legacy/browser-request-errors.mjs';
+import { markPrivateError } from '../../../legacy/browser-sentry-privacy.mjs';
 import axios from 'axios';
 import { useAuthStore } from '@/lib/stores/auth';
 
@@ -111,13 +112,42 @@ const handleAuthFailure = () => {
   window.location.replace(target);
 };
 
+/**
+ * serverMessage returns the `message` string of a one-api JSON response body.
+ * It takes the decoded response body and returns the message, or an empty string
+ * when the body has no non-blank string `message`.
+ */
+const serverMessage = (data: unknown): string => {
+  const message = (data as { message?: unknown } | null | undefined)?.message;
+  return typeof message === 'string' && message.trim() !== '' ? message : '';
+};
+
+/**
+ * surfaceServerRejectionMessage replaces the generic axios text ("Request failed
+ * with status code 400") of a rejected 4xx response with the server-provided
+ * `message`, so callers that display `error.message` show the real reason.
+ * It takes the rejected value and mutates it in place, keeping the same object,
+ * its `response`, `code` and stack; other errors (2xx, 5xx, network, cancellation)
+ * are left untouched. The server text is annotated as private so browser telemetry
+ * keeps reporting the original axios message instead of response content.
+ */
+const surfaceServerRejectionMessage = (error: unknown): void => {
+  if (!axios.isAxiosError(error)) return;
+  const status = error.response?.status;
+  if (typeof status !== 'number' || status < 400 || status > 499) return;
+  const message = serverMessage(error.response?.data);
+  if (!message || message === error.message) return;
+  markPrivateError(error, error.message, true);
+  error.message = message;
+};
+
 // Response interceptor
 api.interceptors.response.use(
   (response) => {
     // Handle legacy 200 OK with success: false for auth errors
     if (response.data && response.data.success === false) {
       const url = response.config?.url || '';
-      const message = (response.data.message || '').toLowerCase();
+      const message = serverMessage(response.data).toLowerCase();
       const isAuthError = message.includes('access token is invalid') || message.includes('not logged in');
 
       // Do not redirect for known public endpoints
@@ -133,11 +163,12 @@ api.interceptors.response.use(
   (error) => {
     // Handle proper HTTP status codes for authentication/authorization failures
     const status = error.response?.status;
-    const message = (error.response?.data?.message || '').toLowerCase();
+    const message = serverMessage(error.response?.data).toLowerCase();
     if (status === 401 || (status === 403 && message.includes('not logged in'))) {
       handleAuthFailure();
     }
     if (axios.isAxiosError(error) && !error.response && error.request) reportUnexpectedRequestError(error);
+    surfaceServerRejectionMessage(error);
     return Promise.reject(error);
   }
 );

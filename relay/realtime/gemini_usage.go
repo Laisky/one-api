@@ -74,7 +74,8 @@ func DecodeGeminiUsage(raw json.RawMessage) (Record, error) {
 		return Record{}, err
 	}
 	t := Tokens{Input: *u.Prompt, Output: *u.Response, Text: in[0], Audio: in[1], Image: in[2], Video: in[3],
-		Unallocated: inRemainder, OutputText: out[0], OutputAudio: out[1], OutputUnallocated: outRemainder}
+		Unallocated: inRemainder, OutputText: out[0], OutputAudio: out[1], OutputUnallocated: outRemainder,
+		OutputVideo: out[3]}
 	base := t.Input + t.Output
 	switch {
 	case *u.Total == base:
@@ -100,6 +101,9 @@ func DecodeGeminiUsage(raw json.RawMessage) (Record, error) {
 			reclassified := min(remaining, t.OutputUnallocated)
 			t.OutputText += reclassified
 			t.OutputUnallocated -= reclassified
+			// Billing is unchanged by this reclassification; the explicit
+			// video subset only has to stay within what remains unallocated.
+			t.OutputVideo = min(t.OutputVideo, t.OutputUnallocated)
 			if remaining -= reclassified; remaining > 0 {
 				t.Output += remaining
 				t.OutputText += remaining
@@ -140,7 +144,10 @@ func DecodeGeminiUsage(raw json.RawMessage) (Record, error) {
 // counts, the remainder of total that no known modality claimed, and an error
 // for a structurally impossible partition. A modality Google adds later, such as
 // DOCUMENT or MODALITY_UNSPECIFIED, stays in the remainder instead of ending a
-// paid session; only counts that contradict their parent are rejected.
+// paid session; only counts that contradict their parent are rejected. For a
+// response, IMAGE and VIDEO counts are reported but stay in the remainder:
+// only video output has a tariff field (video.output_token_ratio), and pricing
+// reads the explicit VIDEO count as a subset of that remainder.
 func geminiPartition(details []GeminiModalityCount, total int64, output bool) ([4]int64, int64, error) {
 	var result [4]int64
 	if len(details) > 8 {
@@ -161,9 +168,16 @@ func geminiPartition(details []GeminiModalityCount, total int64, output bool) ([
 			i = 3
 		}
 		if output && i > 1 {
-			// These models emit only text and audio. An unexpected response
-			// modality is unattributed rather than silently priced as audio.
-			i = -1
+			// An IMAGE or VIDEO response (for example a Live avatar) stays
+			// unattributed rather than silently priced as audio. Its explicit
+			// count is kept so pricing can apply an operator video output
+			// price, or flag the receipt instead of settling it as exact.
+			if d.Count < 0 || d.Count > total-reported {
+				return result, 0, errors.Wrap(ErrInvalidUsage, "invalid Gemini modality partition")
+			}
+			reported += d.Count
+			result[i] += d.Count
+			continue
 		}
 		if d.Count < 0 || d.Count > total-reported || (i >= 0 && seen[i]) {
 			return result, 0, errors.Wrap(ErrInvalidUsage, "invalid Gemini modality partition")

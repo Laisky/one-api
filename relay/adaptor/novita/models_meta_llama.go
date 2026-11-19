@@ -2,9 +2,10 @@ package novita
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// meta_llamaModels returns the meta_llama model defaults for novita.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func meta_llamaModels() map[string]adaptor.ModelConfig {
+// metaLlamaModels returns independently owned meta llama defaults for novita.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.novita.ai/v3/openai/models
+func metaLlamaModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"meta-llama/llama-3-70b-instruct": {
 			Ratio:                       nativeRate(0.51),
@@ -57,7 +58,7 @@ func meta_llamaModels() map[string]adaptor.ModelConfig {
 		},
 		"meta-llama/llama-3.2-3b-instruct": {
 			Ratio:                       nativeRate(0.03),
-			CompletionRatio:             1.6666666666666667,
+			CompletionRatio:             0.05 / 0.03,
 			ContextLength:               32768,
 			MaxOutputTokens:             32000,
 			InputModalities:             []string{"text"},
@@ -70,7 +71,7 @@ func meta_llamaModels() map[string]adaptor.ModelConfig {
 		},
 		"meta-llama/llama-3.3-70b-instruct": {
 			Ratio:                       nativeRate(0.135),
-			CompletionRatio:             2.962962962962963,
+			CompletionRatio:             0.4 / 0.135,
 			ContextLength:               12288,
 			MaxOutputTokens:             12288,
 			InputModalities:             []string{"text"},
@@ -83,7 +84,7 @@ func meta_llamaModels() map[string]adaptor.ModelConfig {
 		},
 		"meta-llama/llama-4-maverick-17b-128e-instruct-fp8": {
 			Ratio:                       nativeRate(0.27),
-			CompletionRatio:             3.148148148148148,
+			CompletionRatio:             0.85 / 0.27,
 			ContextLength:               1048576,
 			MaxOutputTokens:             8192,
 			InputModalities:             []string{"text", "image"},
@@ -96,7 +97,7 @@ func meta_llamaModels() map[string]adaptor.ModelConfig {
 		},
 		"meta-llama/llama-4-scout-17b-16e-instruct": {
 			Ratio:                       nativeRate(0.18),
-			CompletionRatio:             3.2777777777777777,
+			CompletionRatio:             0.59 / 0.18,
 			ContextLength:               131072,
 			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text", "image"},

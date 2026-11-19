@@ -80,8 +80,17 @@ func convertEmbedRequest(c *gin.Context, request *model.GeneralOpenAIRequest) (*
 		return nil, errors.New("encoding_format must be float or base64")
 	}
 	dimensions := request.Dimensions
-	if dimensions != 0 && (request.Model != "embed-v4.0" || !slices.Contains([]int{256, 512, 1024, 1536}, dimensions)) {
-		return nil, errors.New("dimensions is supported only for embed-v4.0: 256, 512, 1024, or 1536")
+	if dimensions != 0 {
+		var supported []int
+		switch request.Model {
+		case "embed-v4.0":
+			supported = []int{256, 512, 1024, 1536}
+		case "embed-v5.0-pro", "embed-v5.0-fast":
+			supported = []int{256, 512, 768, 1024, 1536, 2048}
+		}
+		if !slices.Contains(supported, dimensions) {
+			return nil, errors.New("dimensions is not supported by the selected Cohere embedding model")
+		}
 	}
 	out := &embedRequest{Model: request.Model, Texts: texts, InputType: "search_document", EmbeddingTypes: []string{"float"}, OutputDimension: dimensions}
 	raw := map[string]json.RawMessage{}

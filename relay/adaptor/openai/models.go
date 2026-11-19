@@ -1,0 +1,59 @@
+package openai
+
+import (
+	"github.com/Laisky/one-api/relay/adaptor"
+)
+
+// ModelRatios contains all supported OpenAI models and their pricing/configuration metadata.
+// The map is assembled from family-specific submaps (models_<family>.go) with
+// adaptor.JoinModelCatalogs, which panics on a model ID defined by two families, so the
+// per-family files stay focused and readable. Model list is derived from the keys of
+// this map, eliminating redundancy.
+//
+// Pricing sources verified 2026-09-03; GPT Image 2.5 additions verified 2026-09-09:
+//   - https://developers.openai.com/api/docs/pricing
+//   - https://developers.openai.com/api/docs/models
+var ModelRatios = completeOpenAIModelCatalog(adaptor.JoinModelCatalogs(
+	gpt35ModelRatios,
+	gpt4ModelRatios,
+	gpt4oModelRatios,
+	realtimeModelRatios,
+	gpt45ModelRatios,
+	gpt41ModelRatios,
+	gpt5ModelRatios,
+	gpt56ModelRatios,
+	gpt6ModelRatios,
+	oSeriesModelRatios,
+	specializedModelRatios,
+	embeddingModelRatios,
+	audioModelRatios,
+	imageModelRatios,
+	videoModelRatios,
+))
+
+// ModelList derived from ModelRatios for backward compatibility.
+var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
+
+// standardSamplingParameters returns a fresh slice of OpenAI-compatible sampling
+// parameters supported by standard (non-reasoning) chat-completions models.
+// A new slice is returned on every call to keep callers from mutating shared state.
+func standardSamplingParameters() []string {
+	return []string{
+		"temperature",
+		"top_p",
+		"frequency_penalty",
+		"presence_penalty",
+		"stop",
+		"seed",
+		"max_tokens",
+		"logprobs",
+		"logit_bias",
+	}
+}
+
+// reasoningSamplingParameters returns the constrained sampling-parameter set
+// supported by OpenAI's reasoning models (o-series and GPT-5/GPT-6 families). Reasoning
+// models reject temperature, top_p, frequency_penalty, and presence_penalty.
+func reasoningSamplingParameters() []string {
+	return []string{"seed", "max_tokens"}
+}

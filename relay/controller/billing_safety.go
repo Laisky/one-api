@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -15,6 +16,7 @@ import (
 	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/common/tracing"
 	"github.com/Laisky/one-api/model"
+	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/adaptor/cohere"
 	"github.com/Laisky/one-api/relay/adaptor/jina"
@@ -116,7 +118,7 @@ func (s conservativeRefundSnapshot) refund(ctx context.Context) bool {
 
 	lg := gmw.GetLogger(ctx)
 	if s.skipRefund {
-		lg.Warn("skip pre-consumed refund to prevent underbilling",
+		lg.Warn("retaining pre-consumed reservation: the request may have reached the provider; a cross-channel retry refunds it, a terminal failure publishes it",
 			append(refundAccountingFields("reservation_retained", "not_attempted", "not_attempted"),
 				zap.Int64("pre_consumed_quota", s.quota),
 				zap.String("reason", s.reason),
@@ -215,6 +217,9 @@ func returnPreConsumedQuotaConservative(
 	// Mark reconciled on the request goroutine in both the skip and refund cases so the
 	// deferred billingAuditSafetyNet observes it (preserves the previous behavior).
 	markBillingReconciled(c)
+	if snap.skipRefund {
+		markRetainedReservationPending(c, reason)
+	}
 	return snap.refund(ctx)
 }
 
@@ -311,6 +316,8 @@ func ResetPerAttemptBillingForRetry(ctx context.Context, c *gin.Context) {
 	c.Set(ctxkey.PreConsumedQuotaRefundClaimed, false)
 	c.Set(ctxkey.ProvisionalLogId, 0)
 	c.Set(ctxkey.BillingReconciled, false)
+	c.Set(retainedReservationPendingKey, "")
+	c.Set(upstreamClientRejectionKey, false)
 	// Built-in tool counters describe the abandoned attempt's upstream receipts;
 	// the retry must bill only the invocations its own provider reports.
 	c.Set(ctxkey.ToolInvocationCounts, map[string]int{})
@@ -366,6 +373,9 @@ func scheduleConservativeRefund(c *gin.Context, preConsumedQuota int64, tokenID 
 	// UpstreamRequestPossiblyForwarded marker (via skipRefund) — the most important
 	// no-underbilling decision must not be read off a recycled c inside the goroutine.
 	snap := newConservativeRefundSnapshot(c, preConsumedQuota, tokenID, reason)
+	if snap.skipRefund {
+		markRetainedReservationPending(c, reason)
+	}
 	// Snapshot the test gate on the request goroutine so the spawned goroutine
 	// never reads the package variable concurrently with a test mutating it.
 	gate := refundGoroutineReleaseForTest
@@ -526,11 +536,14 @@ func recordProvisionalLog(c *gin.Context, meta *metalib.Meta, modelName string, 
 		ChannelId:   meta.ChannelId,
 		ChannelUUID: model.StringPtrIfNotEmpty(meta.ChannelUUID),
 		ModelName:   modelName,
-		TokenName:   meta.TokenName,
-		TokenUUID:   model.StringPtrIfNotEmpty(meta.TokenUUID),
-		IsStream:    meta.IsStream,
-		RequestId:   requestId,
-		TraceId:     traceId,
+		// Reconciliation only updates billing columns, so the provisional row
+		// must already carry the client-requested model for dashboards.
+		OriginModelName: meta.OriginModelName,
+		TokenName:       meta.TokenName,
+		TokenUUID:       model.StringPtrIfNotEmpty(meta.TokenUUID),
+		IsStream:        meta.IsStream,
+		RequestId:       requestId,
+		TraceId:         traceId,
 	}
 
 	return model.RecordProvisionalConsumeLog(gmw.Ctx(c), logEntry, estimatedQuota)
@@ -548,6 +561,43 @@ func providerRejectedBeforeInference(c *gin.Context) bool {
 	case channeltype.Cohere:
 		return cohere.RejectedBeforeInference(c)
 	default:
-		return false
+		return c.GetBool(upstreamClientRejectionKey)
+	}
+}
+
+// upstreamClientRejectionKey marks an attempt the provider answered with an
+// explicit HTTP 4xx status and no usage receipt.
+const upstreamClientRejectionKey = "billing_upstream_client_rejection"
+
+// recordUpstreamClientRejection marks an explicit provider 4xx answer as a
+// rejection before inference, so its admission hold is refunded whether or not
+// the relay retries. A 4xx status means the provider refused the request
+// (invalid body, authentication, permission, unknown model, conflict, payload
+// size, unprocessable input, rate limit or request timeout) and did no billable
+// work; a paid error that carries a usage receipt never reaches this point.
+// 5xx answers stay uncertain and keep the conservative hold. Jina and Cohere
+// keep their own documented rejection statuses (providerRejectedBeforeInference).
+// Parameters: c is the attempt context and statusCode the provider HTTP status.
+// It returns nothing.
+func recordUpstreamClientRejection(c *gin.Context, statusCode int) {
+	if c == nil || statusCode < http.StatusBadRequest || statusCode >= http.StatusInternalServerError {
+		return
+	}
+	c.Set(upstreamClientRejectionKey, true)
+}
+
+// doRequestRefundReason labels the refund of an attempt whose DoRequest
+// failed, so the refunded provisional log row says why. Parameter err is the
+// DoRequest error. It returns "request_pricing_not_configured" for a local
+// tariff refusal, "request_control_refused" for an unbillable client control,
+// and "do_request_failed" otherwise.
+func doRequestRefundReason(err error) string {
+	switch {
+	case relayadaptor.IsRequestPricingNotConfigured(err):
+		return "request_pricing_not_configured"
+	case relayadaptor.IsUnbillableRequestControl(err):
+		return "request_control_refused"
+	default:
+		return "do_request_failed"
 	}
 }

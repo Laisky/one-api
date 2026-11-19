@@ -63,6 +63,8 @@ func nativeResponseRootAllowed(key string) bool {
 	case "thinking", "output_config", "input", "model", "extra_body",
 		"include", "instructions", "max_output_tokens",
 		"metadata", "parallel_tool_calls", "previous_response_id", "prompt",
+		promptCacheOptionsRootKey, // sanitized or removed by normalizeNativeOpenAIStandardTier
+		promptCacheKeyRootKey,     // replaced by the tenant-scoped typed value in syncResponsePromptCacheKey
 		"reasoning", "service_tier", "store", "stream", "temperature", "text",
 		"tool_choice", "tools", "top_p", "top_logprobs", "truncation", "user":
 		// top_logprobs is a documented Responses field, handled by the final

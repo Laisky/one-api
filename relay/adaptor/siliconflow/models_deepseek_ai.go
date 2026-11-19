@@ -7,8 +7,8 @@ import "github.com/Laisky/one-api/relay/adaptor"
 func deepseek_aiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"deepseek-ai/DeepSeek-V3.1": {
-			Ratio:                       nativeRate(1.8900000000000001),
-			CompletionRatio:             3.7037037037037037,
+			Ratio:                       nativeRate(1.89),
+			CompletionRatio:             7.0 / 1.89,
 			ContextLength:               163840,
 			MaxOutputTokens:             163840,
 			InputModalities:             []string{"text"},
@@ -48,8 +48,8 @@ func deepseek_aiModels() map[string]adaptor.ModelConfig {
 			Description:                 "deepseek-ai/DeepSeek-V3.2 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"deepseek-ai/DeepSeek-V3.2-Exp": {
-			Ratio:                       nativeRate(1.8900000000000001),
-			CompletionRatio:             1.5185185185185186,
+			Ratio:                       nativeRate(1.89),
+			CompletionRatio:             2.87 / 1.89,
 			ContextLength:               163840,
 			MaxOutputTokens:             163840,
 			InputModalities:             []string{"text"},

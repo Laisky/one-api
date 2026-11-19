@@ -36,7 +36,7 @@ Schema: [model/token.go:27](../../../../model/token.go#L27).
 
 ### List tokens for a specific user (admin)
 
-`user_id` is the **owning user's `uuid`** (the param name is historical). Resolved by `resolveOptionalUserRef` ([controller/token.go](../../../../controller/token.go) `AdminGetAllTokens`).
+`user_id` is the **owning user's `uuid`** (the param name is historical). Resolved by `resolveOptionalUserRef` ([controller/token_admin.go](../../../../controller/token_admin.go) `AdminGetAllTokens`).
 ```bash
 curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" \
   --data-urlencode "user_id=$USER_UUID" \

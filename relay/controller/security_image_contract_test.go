@@ -232,11 +232,13 @@ func TestSecurityImageObservedReceiptDebt(t *testing.T) {
 			securityImageClient(t, server)
 			c := securityImageContext(ch, name, server.URL, "image-receipt-debt", 1, 1)
 			require.Nil(t, RelayImageHelper(c, relaymode.ImagesGenerations))
-			token := int64(-102_500)
+			// The totals-only receipt prices its unclassified input at the image
+			// input rate (upper bound): 1000*$8 + 10000*$30 per 1M = 154,000 quota.
+			token := int64(-104_000)
 			if unlimited {
 				token = 50_000
 			}
-			securityImageLedger(t, "image-receipt-debt", -102_500, token, 152_500)
+			securityImageLedger(t, "image-receipt-debt", -104_000, token, 154_000)
 			require.True(t, c.GetBool(ctxkey.BillingReconciled))
 		})
 	}

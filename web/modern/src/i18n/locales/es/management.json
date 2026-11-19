@@ -405,8 +405,18 @@
         "confirm": "Guardar de todos modos",
         "description": "Las siguientes claves de Model Mapping no están en Modelos Soportados. Las solicitudes a estos alias serán rechazadas por el enrutador aunque el mapeo se guarde:",
         "hint": "Corrige cada entrada o guarda de todos modos para mantener el mapeo tal cual.",
+        "pricing_description": "Las solicitudes a los siguientes modelos serán rechazadas hasta que este canal les asigne precio en Configuraciones de modelos:",
+        "pricing_hint": "Añade ahora los precios que faltan, o guarda de todos modos y asigna precio a estos modelos antes de enviarles tráfico.",
+        "pricing_requirement": {
+          "image_price_per_image_usd": "Define un image.price_per_image_usd positivo (el precio de reserva y de respaldo por imagen).",
+          "live_tariff": "Define los precios de Live: ratio, completion_ratio, las ratios de prompt y completion de audio, y prompt_ratio de imagen.",
+          "tariff_supplement": "Define los precios de caché que exige este proveedor: cached_input_ratio y, cuando se requieran, cache_write_5m_ratio y cache_write_1h_ratio.",
+          "token_tariff": "Define ratio y completion_ratio positivos, incluidos todos los tramos."
+        },
         "target_description": "Los siguientes destinos de Model Mapping no se reconocen como modelos para este canal. El proveedor upstream puede rechazar estas solicitudes:",
-        "title": "Model Mapping tiene entradas sospechosas"
+        "title": "Model Mapping tiene entradas sospechosas",
+        "title_combined": "Revisa la configuración del canal antes de guardar",
+        "title_pricing": "Algunos modelos necesitan precios del canal"
       },
       "spark": {
         "api_key": {

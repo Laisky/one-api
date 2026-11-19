@@ -9,7 +9,7 @@ import (
 // slices, audio prices, tiers and schedules using t. It returns no values.
 func TestOctoberOpenRouterOwnership(t *testing.T) {
 	t.Parallel()
-	first, second := octoberChatModels(), octoberChatModels()
+	first, second := modelCatalog(), modelCatalog()
 	first["meta/muse-wonder"].InputModalities[0] = "changed"
 	first["meta/muse-wonder"].SupportedReasoningEfforts[0] = "changed"
 	first["anthropic/claude-haiku-5.5"].Tiers[0].Ratio = 99

@@ -405,8 +405,18 @@
         "confirm": "仍然保存",
         "description": "以下模型映射键不在“支持的模型”列表中。即使保存该映射，路由器仍会拒绝对这些别名的请求：",
         "hint": "请逐项修正，或选择“仍然保存”以保留当前映射不变。",
+        "pricing_description": "在本渠道的“模型配置”为以下模型定价之前，对它们的请求将被拒绝：",
+        "pricing_hint": "请现在补充缺失的价格，或选择“仍然保存”，并在向这些模型发送流量前完成定价。",
+        "pricing_requirement": {
+          "image_price_per_image_usd": "设置正数的 image.price_per_image_usd（单张图片的预留与兜底价格）。",
+          "live_tariff": "设置 Live 价格：ratio、completion_ratio、音频 prompt 与 completion 倍率，以及图像 prompt_ratio。",
+          "tariff_supplement": "设置该服务商要求的缓存价格：cached_input_ratio，并在需要时设置 cache_write_5m_ratio 和 cache_write_1h_ratio。",
+          "token_tariff": "设置正数的 ratio 与 completion_ratio（包括每个分档）。"
+        },
         "target_description": "以下模型映射目标不在该渠道已知的模型列表中，上游可能会拒绝这些请求：",
-        "title": "模型映射存在可疑条目"
+        "title": "模型映射存在可疑条目",
+        "title_combined": "保存前请检查渠道配置",
+        "title_pricing": "部分模型需要配置渠道价格"
       },
       "spark": {
         "api_key": {

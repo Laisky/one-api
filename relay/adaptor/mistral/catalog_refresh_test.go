@@ -20,7 +20,7 @@ func TestCurrentMistralCachePricing(t *testing.T) {
 		"mistral-medium-latest": {1.5, 0.15, 7.5},
 		"mistral-medium-2604":   {1.5, 0.15, 7.5},
 		"mistral-medium-3-5":    {1.5, 0.15, 7.5},
-		"mistral-large-latest":  {0.5, 0.05, 1.5},
+		"mistral-large-latest":  {0.70, 0.07, 2.10},
 		"mistral-large-2512":    {0.5, 0.05, 1.5},
 		"mistral-small-latest":  {0.15, 0.015, 0.6},
 		"mistral-small-2603":    {0.15, 0.015, 0.6},

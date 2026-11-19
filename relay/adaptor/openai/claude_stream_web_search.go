@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
+	"sync"
 
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
@@ -17,7 +18,12 @@ const maxWebSearchCounterLine = 8 << 20
 
 // webSearchStreamCounter observes a Responses SSE body while another reader
 // converts it, counting chargeable web search calls without altering bytes.
+// A late Read abandoned by the heartbeat reader can complete on another
+// goroutine after record, so mu serializes scanning with record and bytes
+// arriving after record are ignored.
 type webSearchStreamCounter struct {
+	mu       sync.Mutex
+	recorded bool
 	body     io.ReadCloser
 	pending  []byte
 	skipping bool
@@ -35,7 +41,11 @@ func newWebSearchStreamCounter(body io.ReadCloser) *webSearchStreamCounter {
 func (w *webSearchStreamCounter) Read(p []byte) (int, error) {
 	n, err := w.body.Read(p)
 	if n > 0 {
-		w.scan(p[:n])
+		w.mu.Lock()
+		if !w.recorded {
+			w.scan(p[:n])
+		}
+		w.mu.Unlock()
 	}
 	return n, err
 }
@@ -95,10 +105,14 @@ func (w *webSearchStreamCounter) observeLine(line []byte) {
 // record stores the observed count for the shared tooling billing when the
 // converted stream carried no earlier counter. Parameters: c is the request context.
 func (w *webSearchStreamCounter) record(c *gin.Context) {
-	if c == nil || w.count <= 0 {
+	w.mu.Lock()
+	w.recorded = true
+	count := w.count
+	w.mu.Unlock()
+	if c == nil || count <= 0 {
 		return
 	}
-	recordWebSearchInvocationCount(c, w.count)
+	recordWebSearchInvocationCount(c, count)
 	lg := gmw.GetLogger(c)
-	lg.Debug("observed converted Claude stream web search calls", zap.Int("web_search_calls", w.count))
+	lg.Debug("observed converted Claude stream web search calls", zap.Int("web_search_calls", count))
 }

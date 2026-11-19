@@ -51,6 +51,12 @@ type Usage struct {
 	CompletionTokensDetails *UsageCompletionTokensDetails `json:"completion_tokens_details,omitempty"`
 	ServiceTier             string                        `json:"service_tier,omitempty"`
 	SystemFingerprint       string                        `json:"system_fingerprint,omitempty"`
+	// ServiceTierUnverified is server-only settlement evidence: the provider
+	// returned a receipt whose actual service tier could not be read (for
+	// example an envelope too large or malformed for the raw-receipt observer),
+	// or merged receipts that disagree. A tariff restricted to particular tiers
+	// must then treat the receipt as unpriced instead of assuming Standard.
+	ServiceTierUnverified bool `json:"-"`
 
 	// -------------------------------------
 	// Custom fields
@@ -67,6 +73,13 @@ type Usage struct {
 	// CacheWrite12hTokens is an observed paid OpenAI retention class, not a
 	// legacy 5m/30m or Anthropic 1h write. Pricing must explicitly handle it.
 	CacheWrite12hTokens int `json:"cache_write_12h_tokens,omitempty"`
+
+	// UpstreamCostUSD is the charge the provider reported for this request in
+	// USD (for example OpenRouter's usage.cost). It is a settlement input only:
+	// it is never serialized (the operator's provider cost must not reach
+	// clients), and settlement honors it only for adaptors that implement
+	// adaptor.ReportedCostBillingPolicy.
+	UpstreamCostUSD float64 `json:"-"`
 }
 
 // NormalizeCachedTokens promotes top-level and DeepSeek provider-specific cache-hit

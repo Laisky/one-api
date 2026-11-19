@@ -12,6 +12,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/relaymode"
 )
 
 type Adaptor struct {
@@ -49,22 +50,34 @@ func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageReques
 	return request, nil
 }
 
+// ConvertClaudeRequest converts a Claude Messages request into the library
+// request the AIProxy library API expects, through the shared Chat conversion
+// and ConvertRequest, so the provider never receives an OpenAI chat body.
+// Parameters: c is the request context and request the Claude request.
+// Returns: the *LibraryRequest or a wrapped conversion error.
 func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequest) (any, error) {
-	// Use the shared OpenAI-compatible Claude Messages conversion
-	return openai_compatible.ConvertClaudeRequest(c, request)
+	return openai_compatible.ConvertClaudeRequestThroughChat(c, request, func(chatRequest *model.GeneralOpenAIRequest) (any, error) {
+		return a.ConvertRequest(c, relaymode.ChatCompletions, chatRequest)
+	})
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 
+// DoResponse renders the library answer for the client. Chat output is
+// rendered as Claude Messages when the client called the Messages API.
+// Parameters: c is the request context, resp the upstream response, and meta
+// the request meta. Returns: the billing usage and any error.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
-	if meta.IsStream {
-		err, usage = StreamHandler(c, resp)
-	} else {
-		err, usage = Handler(c, resp)
-	}
-	return
+	return openai_compatible.RenderChatHandlerAsClaude(c, meta, func() (*model.Usage, *model.ErrorWithStatusCode) {
+		if meta.IsStream {
+			respErr, streamUsage := StreamHandler(c, resp)
+			return streamUsage, respErr
+		}
+		respErr, textUsage := Handler(c, resp)
+		return textUsage, respErr
+	})
 }
 
 func (a *Adaptor) GetModelList() []string {
@@ -77,8 +90,9 @@ func (a *Adaptor) GetChannelName() string {
 
 // GetDefaultModelPricing returns the pricing table this channel advertises.
 //
-// constants.go sets ModelRatios = openai.ModelRatios because AIProxy resells the
-// OpenAI catalog. Without this override the embedded DefaultPricingMethods answered
+// The library adaptor retains historical OpenAI-derived defaults. Newly published
+// native OpenAI models require separate AIProxy evidence. Without this override
+// the embedded DefaultPricingMethods answered
 // a flat 2.5 USD/1M with completion ratio 1 for every model, so cheap models were
 // over-charged and expensive completions under-charged.
 //

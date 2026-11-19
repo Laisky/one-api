@@ -2,13 +2,14 @@ package togetherai
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// deepseek_aiModels returns the deepseek_ai model defaults for togetherai.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func deepseek_aiModels() map[string]adaptor.ModelConfig {
+// deepseekAiModels returns independently owned deepseek ai defaults for togetherai.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://docs.together.ai/docs/serverless/models
+func deepseekAiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"deepseek-ai/DeepSeek-R1": {
 			Ratio:                       nativeRate(3),
-			CompletionRatio:             2.3333333333333335,
+			CompletionRatio:             7.0 / 3.0,
 			ContextLength:               128000,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text"},
@@ -21,7 +22,7 @@ func deepseek_aiModels() map[string]adaptor.ModelConfig {
 		},
 		"deepseek-ai/DeepSeek-V3.1": {
 			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             2.8333333333333335,
+			CompletionRatio:             1.7 / 0.6,
 			ContextLength:               128000,
 			MaxOutputTokens:             8192,
 			InputModalities:             []string{"text"},
@@ -60,8 +61,9 @@ func deepseek_aiModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio:  nativeRate(0.13),
 			ContextLength:     1048576,
 			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs"},
-			Description:       "deepseek-ai/DeepSeek-V4-Pro-0813 on Together's public serverless API; verified 2026-10-12. Token tariffs are USD per million. Omitted source fields retain prior metadata rather than becoming invented limits or free prices. Host quantization: NVFP4; represented by the generic fp4 metadata label.",
+			Description:       "deepseek-ai/DeepSeek-V4-Pro-0813 on Together Standard serverless; published token prices and metadata checked 2026-11-16. Dedicated deployments and US-only endpoint surcharges are separate contracts. Unpublished output limits remain unspecified.",
 			Quantization:      "fp4",
+			OutputModalities:  []string{"text"},
 		},
 		"deepseek-ai/DeepSeek-V4.1-Flash": {
 			Ratio:             nativeRate(0.3),
@@ -69,8 +71,19 @@ func deepseek_aiModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio:  nativeRate(0.006),
 			ContextLength:     1000000,
 			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs"},
-			Description:       "deepseek-ai/DeepSeek-V4.1-Flash on Together's public serverless API; verified 2026-10-12. Token tariffs are USD per million. Omitted source fields retain prior metadata rather than becoming invented limits or free prices.",
+			Description:       "deepseek-ai/DeepSeek-V4.1-Flash on Together Standard serverless; published token prices and metadata checked 2026-11-16. Dedicated deployments and US-only endpoint surcharges are separate contracts. Unpublished output limits remain unspecified.",
 			Quantization:      "fp8",
+			OutputModalities:  []string{"text"},
+		},
+		"deepseek-ai/DeepSeek-V4.1-Flash-1017": {
+			Ratio:             nativeRate(0.3),
+			CompletionRatio:   4,
+			CachedInputRatio:  nativeRate(0.006),
+			ContextLength:     1000000,
+			SupportedFeatures: []string{"tools", "structured_outputs"},
+			Quantization:      "fp8",
+			OutputModalities:  []string{"text"},
+			Description:       "deepseek-ai/DeepSeek-V4.1-Flash-1017 on Together Standard serverless; published token prices and metadata checked 2026-11-16. Dedicated deployments and US-only endpoint surcharges are separate contracts. Unpublished output limits remain unspecified.",
 		},
 	}
 }

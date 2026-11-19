@@ -7,7 +7,7 @@ import "github.com/Laisky/one-api/relay/adaptor"
 func moonshotaiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"moonshotai/Kimi-K2-Instruct-0905": {
-			Ratio:                       nativeRate(2.8000000000000003),
+			Ratio:                       nativeRate(2.8),
 			CompletionRatio:             5,
 			ContextLength:               262144,
 			MaxOutputTokens:             16384,
@@ -20,8 +20,8 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "Moonshot Kimi K2 Instruct (0905 refresh) long-context MoE chat model with 256K context on SiliconFlow. (RETIRED 2026-05-15)",
 		},
 		"moonshotai/Kimi-K2-Thinking": {
-			Ratio:                       nativeRate(3.8500000000000005),
-			CompletionRatio:             4.545454545454546,
+			Ratio:                       nativeRate(3.85),
+			CompletionRatio:             17.5 / 3.85,
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,
 			InputModalities:             []string{"text"},
@@ -35,9 +35,9 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "Moonshot Kimi K2 Thinking reasoning MoE model with 262K context on SiliconFlow.",
 		},
 		"moonshotai/Kimi-K2.5": {
-			Ratio:                       nativeRate(3.1500000000000004),
+			Ratio:                       nativeRate(3.15),
 			CompletionRatio:             5,
-			CachedInputRatio:            nativeRate(0.49000000000000005),
+			CachedInputRatio:            nativeRate(0.49),
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,
 			InputModalities:             []string{"text", "image"},
@@ -51,9 +51,9 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "Moonshot Kimi K2.5 native multimodal MoE (1T/32B) agentic model with 256K context and switchable thinking modes on SiliconFlow.",
 		},
 		"moonshotai/Kimi-K2.6": {
-			Ratio:                       nativeRate(5.390000000000001),
-			CompletionRatio:             5.194805194805195,
-			CachedInputRatio:            nativeRate(1.4000000000000001),
+			Ratio:                       nativeRate(5.39),
+			CompletionRatio:             28.0 / 5.39,
+			CachedInputRatio:            nativeRate(1.4),
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,
 			InputModalities:             []string{"text", "image"},
@@ -68,7 +68,7 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 		},
 		"moonshotai/Kimi-K2.7-Code": {
 			Ratio:                       nativeRate(6.5),
-			CompletionRatio:             4.153846153846154,
+			CompletionRatio:             27.0 / 6.5,
 			CachedInputRatio:            nativeRate(1.3),
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,

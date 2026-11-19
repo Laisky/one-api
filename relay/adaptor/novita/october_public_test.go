@@ -58,7 +58,7 @@ func TestOctoberNovitaPublishedModels(t *testing.T) {
 	require.Equal(t, []string{"text", "image", "video", "audio"}, novita.ModelRatios["xiaomimimo/mimo-v2.6-pro"].InputModalities)
 	require.Equal(t, []string{"text", "image"}, novita.ModelRatios["deepseek/deepseek-v4.1-flash-p"].InputModalities)
 	require.NotContains(t, novita.ModelRatios["inclusionai/ling-3.0-flash-fin"].SupportedFeatures, "structured_outputs")
-	for _, id := range []string{"apodex/apodex-1.1-mini", "inclusionai/ling-3.1-flash", "bunny", "dev/glm46"} {
+	for _, id := range []string{"apodex/apodex-1.1-mini", "bunny", "dev/glm46"} {
 		require.NotContains(t, a.GetModelList(), id, "null pricing must not become free")
 	}
 }

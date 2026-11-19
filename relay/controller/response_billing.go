@@ -46,6 +46,9 @@ func preConsumeResponseAPIQuota(
 		if errors.Is(tierErr, errResponseContinuationStoreUnavailable) {
 			return 0, openai.ErrorWrapper(tierErr, codeStateStoreUnavailable, http.StatusServiceUnavailable)
 		}
+		if apiErr, ok := unbillableRequestControlError(tierErr); ok {
+			return 0, apiErr
+		}
 		return 0, openai.ErrorWrapper(tierErr, "invalid_response_tier_quote", http.StatusBadRequest)
 	}
 	if tiered {
@@ -209,7 +212,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 	traceId := billingID.traceID
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
 		toolSummary := billingID.toolSummary
-		metadata := billingEstimateMetadata(model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens), usage.BillingEstimateReason)
+		metadata := reportedCostFloorMetadata(billingEstimateMetadata(model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens), usage.BillingEstimateReason), usage, computeResult)
 		if settledAtEstimate {
 			if metadata == nil {
 				metadata = model.LogMetadata{}
@@ -246,7 +249,7 @@ func postConsumeResponseAPIQuota(ctx context.Context,
 			RequestId:          requestId,
 			TraceId:            traceId,
 			ProvisionalLogId:   provisionalLogId,
-			UserAPIFormat:      resolveUserAPIFormat(meta.Mode),
+			UserAPIFormat:      resolveMetaUserAPIFormat(meta),
 			UpstreamAPIFormat:  apitype.String(meta.APIType),
 			UpstreamEndpoint:   meta.UpstreamRequestURL,
 			ToolUsageSummary:   toolSummary,

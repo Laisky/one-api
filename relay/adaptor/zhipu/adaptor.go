@@ -14,6 +14,7 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
@@ -266,7 +267,15 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 
+// DoResponseV4 renders a GLM v4 answer, which arrives in the OpenAI Chat wire
+// format. A Claude Messages client gets the upstream response converted to
+// Claude Messages directly, the same way other OpenAI-compatible adaptors do.
+// Parameters: c is the request context, resp the upstream response, and meta
+// the request meta. Returns: the billing usage and any error.
 func (a *Adaptor) DoResponseV4(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	if openai_compatible.ClaudeChatBridgeActive(c, meta) {
+		return openai_compatible.HandleClaudeMessagesResponse(c, resp, meta, openai.Handler)
+	}
 	if meta.IsStream {
 		err, _, usage = openai.StreamHandler(c, resp, meta.Mode)
 	} else {
@@ -275,6 +284,11 @@ func (a *Adaptor) DoResponseV4(c *gin.Context, resp *http.Response, meta *meta.M
 	return
 }
 
+// DoResponse renders the provider answer for the client mode and returns the
+// billing usage. Chat answers reach Claude Messages clients as Claude Messages
+// on both the GLM v4 and the legacy v3 APIs. Parameters: c is the request
+// context, resp the upstream response, and meta the request meta. Returns: the
+// billing usage and any error.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	switch meta.Mode {
 	case relaymode.Embeddings:
@@ -294,16 +308,16 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 	if a.APIVersion == "v4" {
 		return a.DoResponseV4(c, resp, meta)
 	}
-	if meta.IsStream {
-		err, usage = StreamHandler(c, resp)
-	} else {
-		if meta.Mode == relaymode.Embeddings {
-			err, usage = EmbeddingsHandler(c, resp)
-		} else {
-			err, usage = Handler(c, resp)
+	// The legacy v3 API speaks a proprietary format rendered as chat output,
+	// which the shared bridge renders as Claude Messages for Claude clients.
+	return openai_compatible.RenderChatHandlerAsClaude(c, meta, func() (*model.Usage, *model.ErrorWithStatusCode) {
+		if meta.IsStream {
+			respErr, streamUsage := StreamHandler(c, resp)
+			return streamUsage, respErr
 		}
-	}
-	return
+		respErr, textUsage := Handler(c, resp)
+		return textUsage, respErr
+	})
 }
 
 func ConvertEmbeddingRequest(request model.GeneralOpenAIRequest) (*EmbeddingRequest, error) {

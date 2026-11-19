@@ -2,13 +2,14 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// xiaomiModels returns the xiaomi model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// xiaomiModels returns independently owned xiaomi defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func xiaomiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"xiaomi/mimo-v2-flash": {
 			Ratio:                       nativeRate(0.1),
-			CompletionRatio:             2.9999999999999996,
+			CompletionRatio:             3,
 			CachedInputRatio:            nativeRate(0.01),
 			ContextLength:               262144,
 			MaxOutputTokens:             65536,
@@ -44,56 +45,57 @@ func xiaomiModels() map[string]adaptor.ModelConfig {
 			Description:                 "MiMo-V2-Pro is Xiaomi's flagship foundation model, featuring over 1T total parameters and a 1M context length, deeply optimized for agentic scenarios. It is highly adaptable to general agent frameworks like... [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
 		},
 		"xiaomi/mimo-v2.5": {
-			Ratio:                       nativeRate(0.14),
-			CompletionRatio:             2,
-			CachedInputRatio:            nativeRate(0.0028),
-			ContextLength:               1050000,
-			MaxOutputTokens:             131072,
+			Ratio:                       nativeRate(0.4),
+			CompletionRatio:             5,
+			CachedInputRatio:            nativeRate(0.08),
+			ContextLength:               1000000,
+			MaxOutputTokens:             65536,
 			InputModalities:             []string{"text", "audio", "image", "video"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "presence_penalty", "reasoning", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
 			HuggingFaceID:               "XiaomiMiMo/MiMo-V2.5",
-			Description:                 "xiaomi/mimo-v2.5 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "xiaomi/mimo-v2.5 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"xiaomi/mimo-v2.5-pro": {
-			Ratio:                       nativeRate(0.435),
-			CompletionRatio:             2,
-			CachedInputRatio:            nativeRate(0.0036),
-			ContextLength:               1050000,
+			// The 2026-11-18 listing's sole endpoint is DigitalOcean.
+			Ratio:                       nativeRate(0.48),
+			CompletionRatio:             1.8 / 0.48,
+			CachedInputRatio:            nativeRate(0.096),
+			ContextLength:               1024000,
 			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "response_format", "structured_outputs", "temperature", "tool_choice", "tools", "top_logprobs", "top_p"},
 			HuggingFaceID:               "XiaomiMiMo/MiMo-V2.5-Pro",
-			Description:                 "xiaomi/mimo-v2.5-pro on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "xiaomi/mimo-v2.5-pro on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"xiaomi/mimo-v2.6-flash": {
 			Ratio:                       nativeRate(0.14),
 			CompletionRatio:             2,
 			CachedInputRatio:            nativeRate(0.0028),
-			ContextLength:               1048576,
+			ContextLength:               1050000,
 			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text", "image", "video", "audio"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "parallel_tool_calls", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "XiaomiMiMo/MiMo-V2.6-Flash-RL",
-			Description:                 "xiaomi/mimo-v2.6-flash on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "xiaomi/mimo-v2.6-flash on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"xiaomi/mimo-v2.6-pro": {
 			Ratio:                       nativeRate(0.435),
 			CompletionRatio:             2,
 			CachedInputRatio:            nativeRate(0.0036),
-			ContextLength:               1048576,
+			ContextLength:               1050000,
 			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text", "image", "video", "audio"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "XiaomiMiMo/MiMo-V2.6-Pro-RL",
-			Description:                 "xiaomi/mimo-v2.6-pro on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "xiaomi/mimo-v2.6-pro on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"xiaomi/mimo-v2.6-pro-ultraspeed": {
 			Ratio:                       nativeRate(4.35),

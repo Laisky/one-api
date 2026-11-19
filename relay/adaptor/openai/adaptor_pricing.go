@@ -1,6 +1,9 @@
 package openai
 
-import "github.com/Laisky/one-api/relay/adaptor"
+import (
+	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/channeltype"
+)
 
 // DefaultToolingConfig returns OpenAI's upstream tooling defaults so channel
 // policy resolution can merge in provider pricing and allowlists.
@@ -24,6 +27,13 @@ func (a *Adaptor) GetChannelName() string {
 //   - channelType: the channel type from relay/channeltype.
 func (a *Adaptor) SetChannelType(channelType int) {
 	a.ChannelType = channelType
+}
+
+// UsesNativeOpenAIPricing identifies the native OpenAI tariff boundary.
+// It takes no parameters and returns true for native or unset channel types;
+// compatible and hosted channels retain their own operator pricing contracts.
+func (a *Adaptor) UsesNativeOpenAIPricing() bool {
+	return a.ChannelType == 0 || a.ChannelType == channeltype.OpenAI
 }
 
 // pricingTable returns the pricing map for the channel this adaptor instance serves.

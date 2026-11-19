@@ -42,10 +42,12 @@ func TestGPTImage25ReviewRelayAccounting(t *testing.T) {
 		{"unconfigured_flare_snapshot", "gpt-image-2.5-flare-2026-09-08", `{}`, 0, 1_000_000, 1, 503, 0, 0, false},
 		{"insufficient_credit", "gpt-image-2.5-sunburst", cachedUsage, 0.1, 3, 1, 403, 0, 0, false},
 		{"reserve_then_refund_unused", "gpt-image-2.5-sunburst", cachedUsage, 0.1, 1_000_000, 2, 200, 100_000, 18_500, false},
-		{"charge_above_reserve", "gpt-image-2.5-flare", `{"input_tokens":1000,"output_tokens":10000}`, 0.1, 1_000_000, 1, 200, 50_000, 152_500, false},
+		// Totals-only input is priced at the image input rate (upper bound).
+		{"charge_above_reserve", "gpt-image-2.5-flare", `{"input_tokens":1000,"output_tokens":10000}`, 0.1, 1_000_000, 1, 200, 50_000, 154_000, false},
 		{"missing_usage", "gpt-image-2.5-flare", `null`, 0.1, 1_000_000, 1, 200, 50_000, 50_000, true},
 		{"empty_usage", "gpt-image-2.5-sunburst", `{}`, 0.1, 1_000_000, 1, 200, 50_000, 50_000, true},
-		{"ambiguous_cache_split", "gpt-image-2.5-flare", `{"input_tokens":2000,"output_tokens":1000,"input_tokens_details":{"text_tokens":1000,"image_tokens":1000,"cached_tokens":1000}}`, 0.1, 1_000_000, 1, 200, 50_000, 50_000, true},
+		// An unsplit cache read settles its flagged upper bound, not the fallback.
+		{"ambiguous_cache_split", "gpt-image-2.5-flare", `{"input_tokens":2000,"output_tokens":1000,"input_tokens_details":{"text_tokens":1000,"image_tokens":1000,"cached_tokens":1000}}`, 0.1, 1_000_000, 1, 200, 50_000, 19_625, false},
 		{"channel_pricing_override", "gpt-image-2.5-sunburst", cachedUsage, 0.1, 1_000_000, 1, 200, 50_000, 26_000, false},
 		{"legacy_per_image_control", "dall-e-3", `{}`, 0, 1_000_000, 1, 200, 20_000, 20_000, false},
 	} {

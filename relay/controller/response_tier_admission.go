@@ -74,11 +74,8 @@ func quoteResponseTierAdmission(c *gin.Context, meta *metalib.Meta, request *ope
 	if quoted.MaxOutputTokens != nil {
 		maxOutput = *quoted.MaxOutputTokens
 	}
-	write5m, write1h, err := tierAdmissionCacheWrites(payload)
-	if err != nil {
-		return 0, true, errors.Wrap(err, "inspect prepared Responses cache controls")
-	}
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
+	var err error
 	budgetPromptTokens := promptTokens
 	// An authoritative free group needs no inherited token allowance. Ordinary
 	// owner-binding authorization has already completed before this quote.
@@ -91,6 +88,10 @@ func quoteResponseTierAdmission(c *gin.Context, meta *metalib.Meta, request *ope
 		if err != nil {
 			return 0, true, errors.Wrap(err, "budget owned Responses continuation")
 		}
+	}
+	write5m, write1h, err := tierAdmissionCacheWritesForDispatch(c, meta, quoted.Model, payload, budgetPromptTokens, configs, provider)
+	if err != nil {
+		return 0, true, errors.Wrap(err, "inspect prepared Responses cache controls")
 	}
 	modelRatio := pricing.ResolveModelRatioAt(quoted.Model, configs, channelRatios, provider, meta.StartTime)
 	quote, applies, err := quotautil.EstimateTierAdmission(quotautil.ComputeInput{
@@ -122,7 +123,7 @@ func responseTierAdmissionPromptBudget(request *openai.ResponseAPIRequest, estim
 		return estimated, nil
 	}
 	effective, _ := pricing.ResolveModelConfig(request.Model, configs, provider, at)
-	upstream, _ := pricing.ResolveModelConfig(request.Model, nil, provider, at)
+	upstream, _ := pricing.ResolveModelMetadata(request.Model, provider, at)
 	// A channel-specific context override is an administrative estimate, not
 	// proof that the upstream will reject larger inputs. Prefer the higher
 	// upstream-published bound where it is available.

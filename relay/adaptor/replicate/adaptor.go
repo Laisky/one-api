@@ -20,6 +20,7 @@ import (
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
@@ -327,6 +328,11 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 
+// DoResponse renders the prediction for the client mode and returns the
+// billing usage. A Claude Messages request runs the chat prediction flow and
+// its chat output is rendered as Claude Messages through the shared bridge.
+// Parameters: c is the request context, resp the prediction creation response,
+// and meta the request meta. Returns: the billing usage and any error.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	switch meta.Mode {
 	case relaymode.ImagesGenerations,
@@ -334,6 +340,11 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 		err, usage = ImageHandler(c, resp)
 	case relaymode.ChatCompletions:
 		err, usage = ChatHandler(c, resp)
+	case relaymode.ClaudeMessages:
+		usage, err = openai_compatible.RenderChatHandlerAsClaude(c, meta, func() (*model.Usage, *model.ErrorWithStatusCode) {
+			chatErr, chatUsage := ChatHandler(c, resp)
+			return chatUsage, chatErr
+		})
 	default:
 		err = openai.ErrorWrapper(errors.New("not implemented"), "not_implemented", http.StatusInternalServerError)
 	}
@@ -351,7 +362,7 @@ func (a *Adaptor) GetChannelName() string {
 
 // Pricing methods - Replicate adapter manages its own model pricing
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
-	// Use the constants.go ModelRatios which already use ratio.MilliTokensUsd correctly
+	// Use the model-family tariffs assembled by models.go in the existing billing units.
 	return ModelRatios
 }
 

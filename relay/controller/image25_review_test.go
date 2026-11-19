@@ -25,8 +25,10 @@ func TestGPTImage25ReviewWireUsage(t *testing.T) {
 		{"only_images_cached", `{"input_tokens":2000,"output_tokens":1000,"input_tokens_details":{"text_tokens":1000,"image_tokens":1000,"cached_tokens":1000,"cached_tokens_details":{"text_tokens":0,"image_tokens":1000}}}`, 0.037},
 		{"only_text_cached", `{"input_tokens":2000,"output_tokens":1000,"input_tokens_details":{"text_tokens":1000,"image_tokens":1000,"cached_tokens":1000,"cached_tokens_details":{"text_tokens":1000,"image_tokens":0}}}`, 0.03925},
 		{"unequal_cache_buckets", `{"input_tokens":1200,"output_tokens":100,"input_tokens_details":{"text_tokens":200,"image_tokens":1000,"cached_tokens":400,"cached_tokens_details":{"text_tokens":200,"image_tokens":200}}}`, 0.01005},
-		{"totals_only", `{"input_tokens":1000,"output_tokens":1000}`, 0.035},
-		{"partial_modality_details", `{"input_tokens":1000,"output_tokens":1000,"input_tokens_details":{"text_tokens":100,"image_tokens":200}}`, 0.0356},
+		// Unclassified input is priced at the more expensive (image) input rate:
+		// the receipt cannot prove it was text, and under-billing is never safe.
+		{"totals_only", `{"input_tokens":1000,"output_tokens":1000}`, 0.038},
+		{"partial_modality_details", `{"input_tokens":1000,"output_tokens":1000,"input_tokens_details":{"text_tokens":100,"image_tokens":200}}`, 0.0377},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var upstream openai.ImageUsage
@@ -55,19 +57,30 @@ func TestGPTImage25ReviewReservationIsNotAnExtraFee(t *testing.T) {
 	require.Equal(t, int64(17_500), got.TotalQuota, "the reserve is replaced, never added to actual token cost")
 }
 
-// TestGPTImage25ReviewIncompleteUsageKeepsConfiguredFallback covers absent,
-// partial, and ambiguous provider usage. Parameters: t runs the cases. Returns: none.
+// TestGPTImage25ReviewIncompleteUsageKeepsConfiguredFallback covers absent and
+// partial provider usage, which settles the flagged operator fallback, and an
+// ambiguous cache split, which settles its flagged upper bound. Parameters: t
+// runs the cases. Returns: none.
 func TestGPTImage25ReviewIncompleteUsageKeepsConfiguredFallback(t *testing.T) {
 	t.Parallel()
 	for _, body := range []string{
 		`{}`, `null`,
 		`{"input_tokens":1000,"output_tokens":0,"input_tokens_details":{"text_tokens":1000}}`,
-		`{"input_tokens":2000,"output_tokens":1000,"input_tokens_details":{"text_tokens":1000,"image_tokens":1000,"cached_tokens":1000}}`,
 	} {
 		var upstream openai.ImageUsage
 		require.NoError(t, json.Unmarshal([]byte(body), &upstream))
 		got := finalizeImageQuota(50_000, true, "gpt-image-2.5-flare", "gpt-image-2.5-flare", upstream.Convert2GeneralUsage(), 1)
 		require.Equal(t, int64(50_000), got.TotalQuota, body)
 		require.Zero(t, got.TokenQuota, "an estimate must not masquerade as measured token billing")
+		require.Equal(t, strictImageConfiguredFallbackReason, got.EstimateReason, body)
 	}
+
+	// The receipt proves at least $0.03 of output alone, so a smaller fallback
+	// would under-bill. Crediting the cache read to the text bucket (smallest
+	// discount) gives the largest consistent charge: 1000*1.25+1000*8+1000*30.
+	var upstream openai.ImageUsage
+	require.NoError(t, json.Unmarshal([]byte(`{"input_tokens":2000,"output_tokens":1000,"input_tokens_details":{"text_tokens":1000,"image_tokens":1000,"cached_tokens":1000}}`), &upstream))
+	got := finalizeImageQuota(5_000, true, "gpt-image-2.5-flare", "gpt-image-2.5-flare", upstream.Convert2GeneralUsage(), 1)
+	require.Equal(t, int64(19_625), got.TotalQuota)
+	require.Equal(t, strictImageModalityUpperBoundReason, got.EstimateReason, "an upper bound is flagged, not presented as exact")
 }

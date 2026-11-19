@@ -9,8 +9,8 @@ import (
 // using t. It returns no values and does not mutate global catalogue state.
 func TestOctoberArkOwnership(t *testing.T) {
 	t.Parallel()
-	a := currentArkModels()
-	b := currentArkModels()
+	a := doubaoModels()
+	b := doubaoModels()
 	cfg := a["doubao-seed-evolving"]
 	cfg.InputModalities[0] = "changed"
 	cfg.SupportedFeatures[0] = "changed"

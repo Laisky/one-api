@@ -178,9 +178,11 @@ func StreamHandler(c *gin.Context, meta *meta.Meta, textRequest model.GeneralOpe
 	}
 	common.SetEventStreamHeaders(c)
 	var usage model.Usage
+	providerEnded := false
 	c.Stream(func(w io.Writer) bool {
 		select {
 		case xunfeiResponse := <-dataChan:
+			providerEnded = providerEnded || xunfeiResponse.Payload.Choices.Status == 2
 			usage.PromptTokens += xunfeiResponse.Payload.Usage.Text.PromptTokens
 			usage.CompletionTokens += xunfeiResponse.Payload.Usage.Text.CompletionTokens
 			usage.TotalTokens += xunfeiResponse.Payload.Usage.Text.TotalTokens
@@ -191,6 +193,12 @@ func StreamHandler(c *gin.Context, meta *meta.Meta, textRequest model.GeneralOpe
 			}
 			return true
 		case <-stopChan:
+			if !providerEnded {
+				// The websocket stopped (read or decode error) before the final
+				// status-2 frame; report it so a Claude client never sees the
+				// stream as complete.
+				openai_compatible.MarkStreamInterrupted(c)
+			}
 			openai_compatible.FinalizeStreamWithBridge(c, &usage)
 			return false
 		}

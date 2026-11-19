@@ -2,20 +2,22 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// x_aiModels returns the x_ai model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func x_aiModels() map[string]adaptor.ModelConfig {
+// xAiModels returns independently owned x ai defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
+func xAiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"x-ai/grok-4.20": {
 			Ratio:            nativeRate(1.25),
 			CompletionRatio:  2,
-			CachedInputRatio: nativeRate(0.19999999999999998),
-			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(2.5),
-				CompletionRatio:     2,
-				CachedInputRatio:    nativeRate(0.39999999999999997),
-				InputTokenThreshold: 200000,
-			},
+			CachedInputRatio: nativeRate(0.2),
+			Tiers: []adaptor.ModelRatioTier{
+				{
+					Ratio:               nativeRate(2.5),
+					CompletionRatio:     2,
+					CachedInputRatio:    nativeRate(0.4),
+					InputTokenThreshold: 200001,
+				},
 			},
 			ContextLength:               2000000,
 			MaxOutputTokens:             1800000,
@@ -23,18 +25,19 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
 			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "response_format", "seed", "structured_outputs", "temperature", "tool_choice", "tools", "top_logprobs", "top_p"},
-			Description:                 "x-ai/grok-4.20 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "x-ai/grok-4.20 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"x-ai/grok-4.20-multi-agent": {
 			Ratio:            nativeRate(1.25),
 			CompletionRatio:  2,
-			CachedInputRatio: nativeRate(0.19999999999999998),
-			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(2.5),
-				CompletionRatio:     2,
-				CachedInputRatio:    nativeRate(0.39999999999999997),
-				InputTokenThreshold: 200000,
-			},
+			CachedInputRatio: nativeRate(0.2),
+			Tiers: []adaptor.ModelRatioTier{
+				{
+					Ratio:               nativeRate(2.5),
+					CompletionRatio:     2,
+					CachedInputRatio:    nativeRate(0.4),
+					InputTokenThreshold: 200001,
+				},
 			},
 			ContextLength:               2000000,
 			MaxOutputTokens:             1800000,
@@ -44,18 +47,19 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "reasoning_effort", "response_format", "seed", "structured_outputs", "temperature", "top_logprobs", "top_p"},
 			SupportedReasoningEfforts:   []string{"xhigh", "high", "medium", "low"},
 			DefaultReasoningEffort:      "medium",
-			Description:                 "x-ai/grok-4.20-multi-agent on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "x-ai/grok-4.20-multi-agent on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"x-ai/grok-4.3": {
 			Ratio:            nativeRate(1.25),
 			CompletionRatio:  2,
-			CachedInputRatio: nativeRate(0.19999999999999998),
-			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(2.5),
-				CompletionRatio:     2,
-				CachedInputRatio:    nativeRate(0.39999999999999997),
-				InputTokenThreshold: 200000,
-			},
+			CachedInputRatio: nativeRate(0.2),
+			Tiers: []adaptor.ModelRatioTier{
+				{
+					Ratio:               nativeRate(2.5),
+					CompletionRatio:     2,
+					CachedInputRatio:    nativeRate(0.4),
+					InputTokenThreshold: 200001,
+				},
 			},
 			ContextLength:               1000000,
 			MaxOutputTokens:             900000,
@@ -65,7 +69,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "reasoning_effort", "response_format", "seed", "structured_outputs", "temperature", "tool_choice", "tools", "top_logprobs", "top_p"},
 			SupportedReasoningEfforts:   []string{"high", "medium", "low", "none"},
 			DefaultReasoningEffort:      "low",
-			Description:                 "x-ai/grok-4.3 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "x-ai/grok-4.3 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"x-ai/grok-4.5": {
 			Ratio:            nativeRate(2),
@@ -75,7 +79,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 				Ratio:               nativeRate(4),
 				CompletionRatio:     3,
 				CachedInputRatio:    nativeRate(0.6),
-				InputTokenThreshold: 200000,
+				InputTokenThreshold: 200001,
 			},
 			},
 			ContextLength:               500000,
@@ -96,7 +100,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 				Ratio:               nativeRate(4),
 				CompletionRatio:     3,
 				CachedInputRatio:    nativeRate(1),
-				InputTokenThreshold: 200000,
+				InputTokenThreshold: 200001,
 			},
 			},
 			ContextLength:               500000,
@@ -118,7 +122,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 					Ratio:               nativeRate(4),
 					CompletionRatio:     (12 * 1.0) / 4,
 					CachedInputRatio:    nativeRate(1),
-					InputTokenThreshold: 200000,
+					InputTokenThreshold: 200001,
 				},
 			},
 			ContextLength:               500000,
@@ -126,21 +130,22 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			InputModalities:             []string{"text", "image", "file"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
-			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "reasoning_effort", "response_format", "seed", "structured_outputs", "temperature", "tool_choice", "tools", "top_logprobs", "top_p"},
+			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "reasoning_effort", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			SupportedReasoningEfforts:   []string{"xhigh", "high", "medium", "low"},
 			DefaultReasoningEffort:      "high",
-			Description:                 "x-ai/grok-4.7 on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified. Reasoning is mandatory.",
+			Description:                 "x-ai/grok-4.7 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"x-ai/grok-build-0.1": {
 			Ratio:            nativeRate(1),
 			CompletionRatio:  2,
-			CachedInputRatio: nativeRate(0.19999999999999998),
-			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(2),
-				CompletionRatio:     2,
-				CachedInputRatio:    nativeRate(0.39999999999999997),
-				InputTokenThreshold: 200000,
-			},
+			CachedInputRatio: nativeRate(0.2),
+			Tiers: []adaptor.ModelRatioTier{
+				{
+					Ratio:               nativeRate(2),
+					CompletionRatio:     2,
+					CachedInputRatio:    nativeRate(0.4),
+					InputTokenThreshold: 200001,
+				},
 			},
 			ContextLength:               256000,
 			MaxOutputTokens:             230400,
@@ -148,7 +153,7 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
 			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "response_format", "seed", "structured_outputs", "temperature", "tool_choice", "tools", "top_logprobs", "top_p"},
-			Description:                 "x-ai/grok-build-0.1 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "x-ai/grok-build-0.1 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"~x-ai/grok-latest": {
 			Ratio:            nativeRate(2),
@@ -157,9 +162,9 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			Tiers: []adaptor.ModelRatioTier{
 				{
 					Ratio:               nativeRate(4),
-					CompletionRatio:     (12 * 1.0) / 4,
+					CompletionRatio:     3,
 					CachedInputRatio:    nativeRate(1),
-					InputTokenThreshold: 200000,
+					InputTokenThreshold: 200001,
 				},
 			},
 			ContextLength:               500000,
@@ -167,10 +172,10 @@ func x_aiModels() map[string]adaptor.ModelConfig {
 			InputModalities:             []string{"text", "image", "file"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
-			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "reasoning_effort", "response_format", "seed", "structured_outputs", "temperature", "tool_choice", "tools", "top_logprobs", "top_p"},
+			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "reasoning_effort", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			SupportedReasoningEfforts:   []string{"xhigh", "high", "medium", "low"},
 			DefaultReasoningEffort:      "high",
-			Description:                 "~x-ai/grok-latest on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified. OpenRouter alias; do not infer a native provider ID. Reasoning is mandatory.",
+			Description:                 "~x-ai/grok-latest on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges. The alias lists a zero cache-write price only for its Bedrock top provider; reported cache writes bill at the input rate, as on x-ai/grok-4.7.",
 		},
 	}
 }

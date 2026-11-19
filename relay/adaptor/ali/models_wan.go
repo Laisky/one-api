@@ -1,9 +1,12 @@
 package ali
 
-import "github.com/Laisky/one-api/relay/adaptor"
+import (
+	"github.com/Laisky/one-api/relay/adaptor"
+)
 
-// wanModels returns the wan model defaults for ali.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// wanModels returns independently owned wan defaults for ali.
+// It takes no arguments and returns the complete family catalog.
+// Source: https://help.aliyun.com/zh/model-studio/model-pricing
 func wanModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"wan2.2-t2i-flash": {
@@ -150,6 +153,90 @@ func wanModels() map[string]adaptor.ModelConfig {
 			InputModalities:  []string{"text", "image"},
 			OutputModalities: []string{"image"},
 			Description:      "DashScope wan2.7-image-pro: Wan 2.7 professional text/image-to-image tier with 4K support (¥0.50/image).",
+		},
+		"wanx-v1": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.02,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				PromptTokenLimit: 4000,
+				MinImages:        1,
+				MaxImages:        4,
+				SizeMultipliers: map[string]float64{
+					"1024x1024": 1,
+					"1280x720":  1,
+					"720x1280":  1,
+				},
+			},
+			InputModalities:  []string{"text"},
+			OutputModalities: []string{"image"},
+			Description:      "DashScope wanx-v1: Alibaba's first-generation Wanx text-to-image model.",
+		},
+		"wanx2.0-t2i-turbo": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.005,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				PromptTokenLimit: 4000,
+				MinImages:        1,
+				MaxImages:        4,
+				SizeMultipliers: map[string]float64{
+					"1024x1024": 1,
+					"1280x720":  1,
+					"720x1280":  1,
+				},
+			},
+			InputModalities:  []string{"text"},
+			OutputModalities: []string{"image"},
+			Description:      "DashScope wanx2.0-t2i-turbo: legacy Wan 2.0 cost-optimized text-to-image (¥0.04/image).",
+		},
+		"wanx2.1-t2i-plus": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.025,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				PromptTokenLimit: 4000,
+				MinImages:        1,
+				MaxImages:        4,
+				SizeMultipliers: map[string]float64{
+					"1024x1024": 1,
+					"1152x768":  1,
+					"1280x720":  1,
+					"720x1280":  1,
+					"768x1152":  1,
+				},
+			},
+			InputModalities:  []string{"text"},
+			OutputModalities: []string{"image"},
+			Description:      "DashScope wanx2.1-t2i-plus: higher-fidelity Wan 2.1 text-to-image tier (~¥0.20/image).",
+		},
+		"wanx2.1-t2i-turbo": {
+			Ratio:           0,
+			CompletionRatio: 1,
+			Image: &adaptor.ImagePricingConfig{
+				PricePerImageUsd: 0.01813,
+				DefaultSize:      "1024x1024",
+				DefaultQuality:   "standard",
+				PromptTokenLimit: 4000,
+				MinImages:        1,
+				MaxImages:        4,
+				SizeMultipliers: map[string]float64{
+					"1024x1024": 1,
+					"1152x768":  1,
+					"1280x720":  1,
+					"720x1280":  1,
+					"768x1152":  1,
+				},
+			},
+			InputModalities:  []string{"text"},
+			OutputModalities: []string{"image"},
+			Description:      "DashScope wanx2.1-t2i-turbo: cost-optimized Wan 2.1 text-to-image tier (¥0.145/image).",
 		},
 	}
 }

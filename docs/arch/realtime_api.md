@@ -131,7 +131,7 @@ This section maps required changes into this repository’s existing patterns to
 
 ### 4) Billing and pricing
 
-- Pricing source: `relay/adaptor/openai/constants.go` already includes realtime models, for example:
+- Pricing source: `relay/adaptor/openai/models.go` already includes realtime models, for example:
   - `gpt-4o-realtime-preview[-2025-06-03]`
   - `gpt-4o-mini-realtime-preview[-2024-12-17]`
     These use the standardized “per 1M tokens” ratios and integrate with the global pricing map.
@@ -210,7 +210,7 @@ ws.onclose = console.log;
 ## Acceptance Criteria
 
 - A user can establish a WebSocket session at `/v1/realtime` with a one-api token and model query parameter.
-- For supported OpenAI Realtime models in `relay/adaptor/openai/constants.go`, one-api proxies the connection to the correct upstream URL and pipes all frames unchanged.
+- For supported OpenAI Realtime models in `relay/adaptor/openai/models.go`, one-api proxies the connection to the correct upstream URL and pipes all frames unchanged.
 - one-api records a log entry (UTC timestamps) and bills using upstream-provided usage when available. If usage is absent, no tokens are charged in Phase 1.
 - No conversion logic is applied; function/tool events and audio frames retain full fidelity.
 
@@ -218,4 +218,4 @@ ws.onclose = console.log;
 
 - OpenAI Realtime docs (summary in `docs/refs/openai_realtime.md`).
 - Existing streaming proxy examples: `relay/adaptor/xunfei/main.go` (WebSocket dial + pump), OpenAI Response API streaming handlers in `relay/adaptor/openai/main.go`.
-- Pricing: OpenAI model ratios for realtime models in `relay/adaptor/openai/constants.go` (per 1M tokens standard).
+- Pricing: OpenAI model ratios for realtime models in `relay/adaptor/openai/models.go` (per 1M tokens standard).

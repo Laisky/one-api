@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/common/idresolve"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -85,4 +86,17 @@ func TestChannelStatusOnlyRejectsMissingStatus(t *testing.T) {
 	var stored model.Channel
 	require.NoError(t, model.DB.First(&stored, fixture.channel.Id).Error)
 	require.Equal(t, fixture.channel.Status, stored.Status)
+}
+
+// TestChannelStatusOnlyResolvedIDIsPositive pins the invariant that lets
+// UpdateChannel's status-only branch use channel.Id without a zero check: a
+// successful reference resolution never yields a non-positive id, because the
+// resolver reports such a lookup result as a not-found reference.
+func TestChannelStatusOnlyResolvedIDIsPositive(t *testing.T) {
+	for _, lookupID := range []int{0, -1} {
+		id, err := idresolve.Resolve(func(string) (int, error) { return lookupID, nil },
+			"018f0000-0000-7000-8000-000000000001")
+		require.ErrorIs(t, err, idresolve.ErrNotFound, "lookup id %d", lookupID)
+		require.Zero(t, id)
+	}
 }

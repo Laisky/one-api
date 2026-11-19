@@ -36,12 +36,12 @@ func TestCatalog(t *testing.T) {
 		config.InputModalities[0] = "image"
 		require.Equal(t, []string{"text"}, a.GetDefaultModelPricing()[name].InputModalities)
 	}
-	// TypeSafe deliberately keeps the stable alias on 1.13 while the preview
-	// alias moves to the newly released 1.14.0. Both versioned IDs remain usable.
+	// Both mutable aliases now target 1.14.0. The historical pinned 1.13.0
+	// ID remains usable without changing its independently configured pricing.
 	catalog := a.GetDefaultModelPricing()
 	require.Contains(t, catalog, "jev-1.13.0")
 	require.Contains(t, catalog, "jev-1.14.0")
-	require.Contains(t, catalog["jev-latest"].Description, "jev-1.13.0")
+	require.Contains(t, catalog["jev-latest"].Description, "jev-1.14.0")
 	require.Contains(t, catalog["jev-preview"].Description, "jev-1.14.0")
 }
 

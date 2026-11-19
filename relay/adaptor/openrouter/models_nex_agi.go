@@ -2,13 +2,14 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// nex_agiModels returns the nex_agi model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func nex_agiModels() map[string]adaptor.ModelConfig {
+// nexAgiModels returns independently owned nex agi defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
+func nexAgiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"nex-agi/deepseek-v3.1-nex-n1": {
 			Ratio:                       nativeRate(0.135),
-			CompletionRatio:             3.7037037037037033,
+			CompletionRatio:             0.5 / 0.135,
 			ContextLength:               131072,
 			MaxOutputTokens:             163840,
 			InputModalities:             []string{"text"},
@@ -42,7 +43,7 @@ func nex_agiModels() map[string]adaptor.ModelConfig {
 			Description:       "[Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
 		},
 		"nex-agi/nex-n2.5-mini": {
-			Ratio:                       nativeRate(0.024999999999999998),
+			Ratio:                       nativeRate(0.025),
 			CompletionRatio:             4,
 			CachedInputRatio:            nativeRate(0.0025),
 			ContextLength:               262144,
@@ -72,7 +73,7 @@ func nex_agiModels() map[string]adaptor.ModelConfig {
 		},
 		"nex-agi/nex-n2.5-pro": {
 			Ratio:                       nativeRate(0.075),
-			CompletionRatio:             3.3333333333333335,
+			CompletionRatio:             0.25 / 0.075,
 			CachedInputRatio:            nativeRate(0.015),
 			ContextLength:               262144,
 			MaxOutputTokens:             235929,
@@ -98,6 +99,21 @@ func nex_agiModels() map[string]adaptor.ModelConfig {
 			DefaultReasoningEffort:      "high",
 			HuggingFaceID:               "nex-agi/Nex-N2.5-Pro",
 			Description:                 "nex-agi/nex-n2.5-pro:free on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"nex-agi/nex-n2.6": {
+			Ratio:                       nativeRate(0.12),
+			CompletionRatio:             3.33333333333333,
+			CachedInputRatio:            nativeRate(0.024),
+			ContextLength:               262144,
+			MaxOutputTokens:             235929,
+			InputModalities:             []string{"text", "image"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "reasoning_effort", "response_format", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			SupportedReasoningEfforts:   []string{"high", "medium"},
+			DefaultReasoningEffort:      "high",
+			HuggingFaceID:               "nex-agi/Nex-N2.6",
+			Description:                 "nex-agi/nex-n2.6 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 	}
 }

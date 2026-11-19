@@ -38,6 +38,28 @@ func stopReasonCohere2OpenAI(reason *string) string {
 	}
 }
 
+// legacyNorthModelIDs maps historical gateway spellings of Cohere North models,
+// which administrators may still reference in channel model mappings, to the
+// model IDs Cohere publishes. Both spellings share one catalog configuration,
+// so billing (keyed by the mapped name) is unchanged by the rewrite.
+var legacyNorthModelIDs = map[string]string{
+	"north-mini-code-1-0":       "north-mini-code-1.0",
+	"north-small-translate-1-0": "north-small-translate-1.0",
+}
+
+// upstreamModelID returns the model ID Cohere expects on the wire for modelID.
+// Parameter modelID is the mapped gateway model name. It returns the published
+// dotted ID for a retained legacy North spelling and modelID unchanged otherwise.
+func upstreamModelID(modelID string) string {
+	if canonical, ok := legacyNorthModelIDs[modelID]; ok {
+		return canonical
+	}
+	return modelID
+}
+
+// ConvertRequest converts a Chat request into Cohere's native v1 chat payload.
+// Parameter textRequest is the mapped request (its Model is the gateway name).
+// It returns the payload whose model is the provider's published model ID.
 func ConvertRequest(textRequest model.GeneralOpenAIRequest) *Request {
 	cohereRequest := Request{
 		Model:            textRequest.Model,
@@ -61,6 +83,7 @@ func ConvertRequest(textRequest model.GeneralOpenAIRequest) *Request {
 		cohereRequest.Model = strings.TrimSuffix(cohereRequest.Model, "-internet")
 		cohereRequest.Connectors = append(cohereRequest.Connectors, WebSearchConnector)
 	}
+	cohereRequest.Model = upstreamModelID(cohereRequest.Model)
 	for _, message := range textRequest.Messages {
 		if message.Role == "user" {
 			cohereRequest.Message = message.StringContent()
@@ -149,6 +172,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	var usage model.Usage
 
 	var streamErr error
+	providerEnded := false
 	for {
 		line, err := lineReader.Next()
 		if err != nil {
@@ -167,6 +191,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 				continue
 			}
 
+			providerEnded = providerEnded || cohereResponse.EventType == "stream-end"
 			response, meta := StreamResponseCohere2OpenAI(&cohereResponse)
 			if meta != nil {
 				usage.PromptTokens += meta.Meta.Tokens.InputTokens
@@ -197,6 +222,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			continue
 		}
 
+		providerEnded = providerEnded || cohereResponse.EventType == "stream-end"
 		response, meta := StreamResponseCohere2OpenAI(&cohereResponse)
 		if meta != nil {
 			usage.PromptTokens += meta.Meta.Tokens.InputTokens
@@ -219,6 +245,11 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	if streamErr != nil {
 		lg.Error("error reading stream", zap.Error(streamErr))
+	}
+	// A read error or EOF before the provider's end event is an interruption;
+	// report it so a Claude client never sees the stream as complete.
+	if streamErr != nil || !providerEnded {
+		openai_compatible.MarkStreamInterrupted(c)
 	}
 
 	openai_compatible.FinalizeStreamWithBridge(c, &usage)

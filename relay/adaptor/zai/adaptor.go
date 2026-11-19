@@ -16,7 +16,7 @@
 //     an unexplained upstream 401.
 //  2. Pricing. Z.AI publishes flat USD prices with no input-length or
 //     output-length tiers; BigModel publishes tiered CNY prices for the very same
-//     model ids. See constants.go.
+//     model ids. See models.go.
 //  3. Catalog. Z.AI serves no embeddings, no rerank, no text-to-speech and no
 //     realtime surface.
 //

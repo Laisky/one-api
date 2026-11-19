@@ -10,44 +10,36 @@ import (
 	"github.com/Laisky/one-api/relay/channeltype"
 )
 
-// catalogBeforeOctober builds the pre-refresh configuration from family tables.
+// catalogFromFamilies assembles complete family tables before aliases and lifecycle.
 // It takes no parameters and returns a fresh map without changing global maps.
-func catalogBeforeOctober() map[string]adaptor.ModelConfig {
-	return applyOpenAIModelCatalog202609(mergeModelRatios(
+func catalogFromFamilies() map[string]adaptor.ModelConfig {
+	return adaptor.JoinModelCatalogs(
 		gpt35ModelRatios, gpt4ModelRatios, gpt4oModelRatios, realtimeModelRatios,
-		gpt45ModelRatios, gpt41ModelRatios, gpt5ModelRatios, gpt6ModelRatios,
+		gpt45ModelRatios, gpt41ModelRatios, gpt5ModelRatios, gpt56ModelRatios, gpt6ModelRatios,
 		oSeriesModelRatios, specializedModelRatios, embeddingModelRatios,
-		audioModelRatios, imageModelRatios, image25ModelRatios, videoModelRatios,
-	))
+		audioModelRatios, imageModelRatios, videoModelRatios,
+	)
 }
 
 // TestOpenAIOctoberPreservesCatalogPricing verifies every pre-existing entry is
 // retained with identical tariffs and limits. Parameter t owns assertions; no
 // values return. The metadata changes are independently pinned by behavior tests.
 func TestOpenAIOctoberPreservesCatalogPricing(t *testing.T) {
-	before := catalogBeforeOctober()
-	after := applyOpenAIModelCatalog202610(before)
+	before := catalogFromFamilies()
+	after := completeOpenAIModelCatalog(before)
 	require.Len(t, after, len(before)+4)
 	for name, old := range before {
 		t.Run(name, func(t *testing.T) {
 			updated, ok := after[name]
 			require.True(t, ok, "historical model removed")
 			updated.Description = old.Description
-			switch name {
-			case "gpt-5.4-pro", "gpt-5.5-pro":
-				updated.SupportedReasoningEfforts = old.SupportedReasoningEfforts
-				updated.DefaultReasoningEffort = old.DefaultReasoningEffort
-				updated.SupportedFeatures = old.SupportedFeatures
-			case "chat-latest":
-				updated.SupportedFeatures = old.SupportedFeatures
-			}
-			require.Equal(t, old, updated, "only reviewed metadata may change")
+			require.Equal(t, old, updated, "only lifecycle descriptions may change")
 		})
 	}
-	require.Equal(t, after, applyOpenAIModelCatalog202610(after), "refresh must be idempotent")
+	require.Equal(t, after, completeOpenAIModelCatalog(after), "refresh must be idempotent")
 	for _, provider := range []int{channeltype.Groq, channeltype.Mistral, channeltype.XAI} {
 		a := &Adaptor{ChannelType: provider}
-		for snapshot := range openAIOctoberSnapshots {
+		for snapshot := range openAIPublishedSnapshots {
 			require.NotContains(t, a.GetModelList(), snapshot)
 			require.NotContains(t, a.GetDefaultModelPricing(), snapshot)
 		}
@@ -60,9 +52,9 @@ func TestOpenAIOctoberPreservesCatalogPricing(t *testing.T) {
 // TestOpenAIOctoberSnapshotOwnership verifies snapshot mutations cannot leak into
 // their base or another snapshot. Parameter t owns assertions; no values return.
 func TestOpenAIOctoberSnapshotOwnership(t *testing.T) {
-	before := catalogBeforeOctober()
+	before := catalogFromFamilies()
 	originalPro := before["gpt-5.5-pro"].Clone()
-	after := applyOpenAIModelCatalog202610(before)
+	after := completeOpenAIModelCatalog(before)
 	pro := after["gpt-5.5-pro-2026-04-23"]
 	pro.SupportedReasoningEfforts[0] = "corrupted"
 	pro.SupportedFeatures[0] = "corrupted"
@@ -87,7 +79,7 @@ func TestOpenAIOctoberSnapshotOwnership(t *testing.T) {
 // values return, and absence of a note does not imply upstream availability.
 func TestOpenAIOctoberLifecycleIntegrity(t *testing.T) {
 	seen := make(map[string]bool)
-	for _, notice := range openAIOctoberLifecycle {
+	for _, notice := range openAILifecycleNotices {
 		for _, name := range strings.Fields(notice.models) {
 			require.False(t, seen[name], "duplicate lifecycle note for %s", name)
 			seen[name] = true
@@ -98,7 +90,7 @@ func TestOpenAIOctoberLifecycleIntegrity(t *testing.T) {
 			require.Equal(t, 1, strings.Count(cfg.Description, "[OpenAI lifecycle:"))
 		}
 	}
-	require.Empty(t, applyOpenAIModelCatalog202610(nil))
+	require.Empty(t, completeOpenAIModelCatalog(nil))
 	unknown := map[string]adaptor.ModelConfig{"tenant-alias": {Ratio: 42, Description: "customer-owned"}}
-	require.Equal(t, unknown, applyOpenAIModelCatalog202610(unknown))
+	require.Equal(t, unknown, completeOpenAIModelCatalog(unknown))
 }

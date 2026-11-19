@@ -28,7 +28,7 @@ func TestProductionCatalogSources(t *testing.T) {
 			if strings.HasPrefix(f.Name(), "catalog_") && strings.HasSuffix(f.Name(), ".json") {
 				t.Fatalf("unexpected runtime catalog: %s/%s", provider, f.Name())
 			}
-			if strings.HasPrefix(f.Name(), "models_") && strings.HasSuffix(f.Name(), ".go") && !strings.HasSuffix(f.Name(), "_test.go") {
+			if (f.Name() == "models.go" || strings.HasPrefix(f.Name(), "models_")) && strings.HasSuffix(f.Name(), ".go") && !strings.HasSuffix(f.Name(), "_test.go") {
 				raw, err := os.ReadFile(filepath.Join(dir, f.Name()))
 				require.NoError(t, err)
 				require.NotContains(t, string(raw), "//go:generate")

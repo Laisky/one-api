@@ -2,27 +2,19 @@ package togetherai
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// qwenModels returns the qwen model defaults for togetherai.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// qwenModels returns independently owned qwen defaults for togetherai.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://docs.together.ai/docs/serverless/models
 func qwenModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"Qwen/Qwen-Image": {
 			Ratio:           0,
 			CompletionRatio: 1,
 			Image: &adaptor.ImagePricingConfig{
-				PricePerImageUsd: 0.006081740799999999,
+				PricePerImageUsd: 0.0060817408,
 				DefaultSize:      "1024x1024",
 				MinImages:        1,
-				SizeMultipliers: map[string]float64{
-					"1024x1024": 1,
-					"1024x1536": 1.5,
-					"1536x1024": 1.5,
-					"1920x1080": 1.9775390625,
-					"2048x2048": 4,
-					"3840x2160": 7.91015625,
-					"4096x4096": 16,
-					"512x512":   0.25,
-				},
+				Megapixel:        perImageAreaTariff(0.0058),
 			},
 		},
 		"Qwen/Qwen-Image-2.0": {
@@ -173,8 +165,9 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			Ratio:             nativeRate(0.15),
 			CompletionRatio:   (0.47 * 1.0) / 0.15,
 			ContextLength:     1000000,
-			Description:       "Qwen/Qwen3.8-Flash on Together's public serverless API; verified 2026-10-12. Token tariffs are USD per million. Omitted source fields retain prior metadata rather than becoming invented limits or free prices.",
+			Description:       "Qwen/Qwen3.8-Flash on Together Standard serverless; published token prices and metadata checked 2026-11-16. Dedicated deployments and US-only endpoint surcharges are separate contracts. Unpublished output limits remain unspecified.",
 			SupportedFeatures: []string{"tools", "structured_outputs"},
+			OutputModalities:  []string{"text"},
 		},
 	}
 }

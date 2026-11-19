@@ -139,11 +139,3 @@ func (a *Adaptor) CheckRedirect(_ *http.Request, _ []*http.Request) error {
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{}
 }
-
-var discoveryModels = []string{
-	"veo3-fast",
-	"kling-v2.6-pro",
-	"seedance-2.5-text-to-video",
-	"wan2.6-t2v",
-	"runway-gen-4",
-}

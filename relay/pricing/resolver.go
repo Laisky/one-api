@@ -19,7 +19,8 @@ const (
 
 // ResolveModelConfig returns the effective model configuration by applying
 // channel overrides first, then adaptor defaults, then global fallbacks.
-// The returned configuration is a clone that callers can mutate safely.
+// A model the provider declares operator-tariff-only resolves from channel
+// overrides alone. The returned configuration is a clone callers can mutate.
 func ResolveModelConfig(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (adaptor.ModelConfig, bool) {
 	if channelConfigs != nil {
 		if local, ok := channelConfigs[modelName]; ok {
@@ -27,7 +28,27 @@ func ResolveModelConfig(modelName string, channelConfigs map[string]model.ModelC
 			return ApplyTimeWindow(cfg, at), true
 		}
 	}
+	if !providerTariffEligible(provider, modelName) {
+		return adaptor.ModelConfig{}, false
+	}
+	return resolveProviderModelConfig(modelName, provider, at)
+}
 
+// ResolveModelMetadata returns the provider-default, then global, configuration
+// for non-tariff metadata such as context length and output-token bounds. It
+// deliberately ignores adaptor.OperatorTariffPolicy: a model's published limits
+// remain valid conservative admission bounds even where its price must come
+// from the operator. Parameters: modelName is the mapped model, provider the
+// pricing adaptor (nil allowed) and at the request time. Returns: a clone and
+// whether any layer knows the model. Callers must never price from the result.
+func ResolveModelMetadata(modelName string, provider adaptor.Adaptor, at time.Time) (adaptor.ModelConfig, bool) {
+	return resolveProviderModelConfig(modelName, provider, at)
+}
+
+// resolveProviderModelConfig applies the provider-default and global layers.
+// Parameters: modelName, provider and at select the configuration. Returns: a
+// time-window-applied clone and whether either layer knows the model.
+func resolveProviderModelConfig(modelName string, provider adaptor.Adaptor, at time.Time) (adaptor.ModelConfig, bool) {
 	if provider != nil {
 		if defaults := provider.GetDefaultModelPricing(); defaults != nil {
 			if cfg, ok := defaults[modelName]; ok {
@@ -43,6 +64,15 @@ func ResolveModelConfig(modelName string, channelConfigs map[string]model.ModelC
 	return adaptor.ModelConfig{}, false
 }
 
+// providerTariffEligible reports whether layers below the channel override may
+// price modelName. Parameters: provider is the pricing adaptor (nil allowed) and
+// modelName is the billed model. Returns: false when the provider declares, via
+// adaptor.OperatorTariffPolicy, that only an operator tariff can price the model;
+// its own defaults and the global catalog (another provider's tariff) are then skipped.
+func providerTariffEligible(provider adaptor.Adaptor, modelName string) bool {
+	return !adaptor.RequiresOperatorTariff(provider, modelName)
+}
+
 // ResolveAudioPricing resolves audio pricing metadata with three-layer precedence:
 // channel overrides (when they include audio pricing), provider defaults, then global pricing.
 // It returns nil when no audio metadata is defined in any layer.
@@ -54,6 +84,9 @@ func ResolveAudioPricing(modelName string, channelConfigs map[string]model.Model
 				return cfg.Audio.Clone(), true
 			}
 		}
+	}
+	if !providerTariffEligible(provider, modelName) {
+		return nil, false
 	}
 
 	if provider != nil {
@@ -136,9 +169,10 @@ func convertLocalVideo(local *model.VideoPricingLocal) *adaptor.VideoPricingConf
 		return nil
 	}
 	cfg := &adaptor.VideoPricingConfig{
-		PerSecondUsd:   local.PerSecondUsd,
-		InputImageUsd:  local.InputImageUsd,
-		BaseResolution: local.BaseResolution,
+		PerSecondUsd:     local.PerSecondUsd,
+		InputImageUsd:    local.InputImageUsd,
+		BaseResolution:   local.BaseResolution,
+		OutputTokenRatio: local.OutputTokenRatio,
 	}
 	if len(local.ResolutionMultipliers) > 0 {
 		cfg.ResolutionMultipliers = make(map[string]float64, len(local.ResolutionMultipliers))
@@ -254,13 +288,17 @@ func convertLocalTimeWindows(local []model.TimeWindowLocal) []adaptor.TimeWindow
 
 // ResolveModelConfigRatioOnly returns a shallow configuration by applying
 // channel overrides first, then adaptor defaults, then global fallbacks.
-// It omits media metadata to optimize for token-only billing paths.
+// It omits media metadata to optimize for token-only billing paths, and, like
+// ResolveModelConfig, resolves operator-tariff-only models from overrides alone.
 func ResolveModelConfigRatioOnly(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (adaptor.ModelConfig, bool) {
 	if channelConfigs != nil {
 		if local, ok := channelConfigs[modelName]; ok {
 			cfg := convertLocalModelConfigRatioOnly(local)
 			return ApplyTimeWindowRatioOnly(cfg, at), true
 		}
+	}
+	if !providerTariffEligible(provider, modelName) {
+		return adaptor.ModelConfig{}, false
 	}
 
 	if provider != nil {

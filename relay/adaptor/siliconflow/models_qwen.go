@@ -7,7 +7,7 @@ import "github.com/Laisky/one-api/relay/adaptor"
 func qwenModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"Qwen/Qwen2-0.5B-Instruct": {
-			Ratio:                       nativeRate(0.9800000000000001),
+			Ratio:                       nativeRate(0.98),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -19,7 +19,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			Description:                 "Alibaba Qwen2 0.5B Instruct ultra-compact chat model with 32K context.",
 		},
 		"Qwen/Qwen2-1.5B-Instruct": {
-			Ratio:                       nativeRate(0.9800000000000001),
+			Ratio:                       nativeRate(0.98),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -31,7 +31,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			Description:                 "Alibaba Qwen2 1.5B Instruct compact chat model with 32K context.",
 		},
 		"Qwen/Qwen2-72B-Instruct": {
-			Ratio:                       nativeRate(3.9200000000000004),
+			Ratio:                       nativeRate(3.92),
 			CompletionRatio:             1,
 			ContextLength:               131072,
 			MaxOutputTokens:             8192,
@@ -44,7 +44,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			Description:                 "Alibaba Qwen2 72B Instruct dense chat model with 128K context and tool/JSON support.",
 		},
 		"Qwen/Qwen2-7B-Instruct": {
-			Ratio:                       nativeRate(0.49000000000000005),
+			Ratio:                       nativeRate(0.49),
 			CompletionRatio:             1,
 			ContextLength:               131072,
 			MaxOutputTokens:             8192,
@@ -58,7 +58,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		},
 		"Qwen/Qwen3-235B-A22B-Instruct-2507": {
 			Ratio:                       0.175,
-			CompletionRatio:             4.057142857142857,
+			CompletionRatio:             0.71 / 0.175,
 			ContextLength:               262144,
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text"},
@@ -71,7 +71,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		},
 		"Qwen/Qwen3-235B-A22B-Thinking-2507": {
 			Ratio:                       0.175,
-			CompletionRatio:             4.057142857142857,
+			CompletionRatio:             0.71 / 0.175,
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text"},
@@ -101,7 +101,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "max_tokens", "stop", "presence_penalty", "frequency_penalty", "seed", "response_format", "tools", "tool_choice"},
 			Quantization:                "fp8",
 			HuggingFaceID:               "Qwen/Qwen3.5-122B-A10B",
-			Description:                 "Qwen/Qwen3.5-122B-A10B on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "Qwen/Qwen3.5-122B-A10B on siliconflow; official catalog snapshot 2026-09-24. SiliconFlow announced retirement on 2026-11-16; the historical ID and tariff remain for administrator configurations. Source: https://docs.siliconflow.cn/docs/release-notes/overview",
 		},
 		"Qwen/Qwen3.5-27B": {
 			Ratio:           nativeRate(0.6),
@@ -133,9 +133,21 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			},
 			Description: "Qwen/Qwen3.5-35B-A3B on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
+		// SiliconFlow prices Qwen3.5-9B like its Qwen3.5 siblings: 输入 [0, 128k)
+		// at 0.50/4.00 and 输入 [128k, +∞) at 1.50/12.00 CNY per 1M input/output
+		// (https://www.siliconflow.cn/pricing, SKU objects 0-128k-input and
+		// over-128k-input; unchanged since the 2026-09-23 archive). The long tier
+		// applies FROM 128k; k is read as 1000, the smaller and never
+		// under-billing reading.
 		"Qwen/Qwen3.5-9B": {
-			Ratio:                       nativeRate(0.7000000000000001),
-			CompletionRatio:             1.5,
+			Ratio:           nativeRate(0.5),
+			CompletionRatio: 8,
+			Tiers: []adaptor.ModelRatioTier{{
+				Ratio:               nativeRate(1.5),
+				CompletionRatio:     8,
+				InputTokenThreshold: 128000,
+			},
+			},
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,
 			InputModalities:             []string{"text", "image"},

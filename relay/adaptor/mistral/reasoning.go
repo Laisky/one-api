@@ -11,6 +11,7 @@ import (
 	"github.com/Laisky/errors/v2"
 
 	commonsse "github.com/Laisky/one-api/common/sse"
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -28,12 +29,9 @@ func reasoningRequest(request *model.GeneralOpenAIRequest) (any, error) {
 		out.ReasoningEffort = out.Reasoning.Effort
 	}
 	out.Reasoning = nil
-	// Keep the previous omission behavior for models without advertised effort
-	// support. Use catalog metadata rather than a fixed list of hybrid aliases;
-	// supported models retain caller values for upstream validation.
-	if cfg, ok := ModelRatios[out.Model]; !ok || len(cfg.SupportedReasoningEfforts) == 0 {
-		out.ReasoningEffort = nil
-	}
+	// Shared catalog policy: keep only a listed (normalized) effort; otherwise
+	// omit it so Mistral applies its documented default.
+	out.ReasoningEffort = adaptor.SupportedReasoningEffort(ModelRatios, out.Model, out.ReasoningEffort)
 	if out.MaxTokens == 0 && out.MaxCompletionTokens != nil {
 		out.MaxTokens = *out.MaxCompletionTokens
 	}
@@ -314,18 +312,4 @@ func (b *thinkingBody) nextEvent() ([]byte, error) {
 	}
 	out.WriteByte('\n')
 	return out.Bytes(), nil
-}
-
-// init advertises the documented effort toggles for the hybrid models rather
-// than copying an unrelated provider's effort vocabulary. No request allowlist
-// is introduced: explicit values remain subject to upstream validation.
-func init() {
-	for _, id := range []string{"mistral-small-latest", "mistral-small-2603", "mistral-medium-latest", "mistral-medium-2604", "mistral-medium-3-5"} {
-		cfg := ModelRatios[id].Clone()
-		cfg.SupportedReasoningEfforts = []string{"none", "high"}
-		if !slices.Contains(cfg.SupportedSamplingParameters, "reasoning_effort") {
-			cfg.SupportedSamplingParameters = append(cfg.SupportedSamplingParameters, "reasoning_effort")
-		}
-		ModelRatios[id] = cfg
-	}
 }

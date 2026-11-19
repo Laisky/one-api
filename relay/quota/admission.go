@@ -4,6 +4,7 @@ import (
 	"math"
 
 	"github.com/Laisky/errors/v2"
+
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
 )
@@ -34,7 +35,7 @@ func EstimateTierAdmission(input ComputeInput, maxOutputTokens int, bufferTokens
 	}
 	if maxOutputTokens == 0 {
 		full, _ := pricing.ResolveModelConfig(input.ModelName, input.ChannelModelConfigs, input.PricingAdaptor, input.RequestTime)
-		provider, _ := pricing.ResolveModelConfig(input.ModelName, nil, input.PricingAdaptor, input.RequestTime)
+		provider, _ := pricing.ResolveModelMetadata(input.ModelName, input.PricingAdaptor, input.RequestTime)
 		// Channel MaxTokens may be a pricing/default estimate, not an enforced
 		// upstream limit. A request without max_output_tokens is forwarded
 		// unchanged, so its hold must at least cover the published provider

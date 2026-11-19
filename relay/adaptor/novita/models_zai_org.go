@@ -2,13 +2,14 @@ package novita
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// zai_orgModels returns the zai_org model defaults for novita.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func zai_orgModels() map[string]adaptor.ModelConfig {
+// zaiOrgModels returns independently owned zai org defaults for novita.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.novita.ai/v3/openai/models
+func zaiOrgModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"zai-org/autoglm-phone-9b-multilingual": {
 			Ratio:                       nativeRate(0.035),
-			CompletionRatio:             3.9428571428571426,
+			CompletionRatio:             0.138 / 0.035,
 			ContextLength:               65536,
 			MaxOutputTokens:             65536,
 			InputModalities:             []string{"text", "image"},
@@ -35,7 +36,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/glm-4.5-air": {
 			Ratio:                       nativeRate(0.13),
-			CompletionRatio:             6.538461538461538,
+			CompletionRatio:             0.85 / 0.13,
 			CachedInputRatio:            nativeRate(0.025),
 			ContextLength:               131072,
 			MaxOutputTokens:             98304,
@@ -91,7 +92,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/glm-4.7": {
 			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             3.666666666666667,
+			CompletionRatio:             2.2 / 0.6,
 			CachedInputRatio:            nativeRate(0.11),
 			ContextLength:               204800,
 			MaxOutputTokens:             131072,
@@ -105,7 +106,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/glm-4.7-flash": {
 			Ratio:                       nativeRate(0.07),
-			CompletionRatio:             5.714285714285714,
+			CompletionRatio:             0.4 / 0.07,
 			CachedInputRatio:            nativeRate(0.01),
 			ContextLength:               200000,
 			MaxOutputTokens:             128000,
@@ -119,7 +120,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/glm-4.7-h": {
 			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             3.666666666666667,
+			CompletionRatio:             2.2 / 0.6,
 			CachedInputRatio:            nativeRate(0.11),
 			ContextLength:               204800,
 			MaxOutputTokens:             131072,
@@ -147,7 +148,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/glm-5-turbo": {
 			Ratio:                       nativeRate(1.2),
-			CompletionRatio:             3.3333333333333335,
+			CompletionRatio:             4.0 / 1.2,
 			CachedInputRatio:            nativeRate(0.24),
 			ContextLength:               202800,
 			MaxOutputTokens:             131072,
@@ -161,7 +162,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/glm-5.1": {
 			Ratio:                       nativeRate(1.38),
-			CompletionRatio:             3.1884057971014497,
+			CompletionRatio:             4.4 / 1.38,
 			CachedInputRatio:            nativeRate(0.26),
 			ContextLength:               204800,
 			MaxOutputTokens:             131072,
@@ -175,7 +176,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/glm-5.2": {
 			Ratio:                       nativeRate(1.4),
-			CompletionRatio:             3.1428571428571432,
+			CompletionRatio:             4.4 / 1.4,
 			CachedInputRatio:            nativeRate(0.26),
 			ContextLength:               1048576,
 			MaxOutputTokens:             131072,
@@ -189,7 +190,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/glm-5.3": {
 			Ratio:             nativeRate(1.4),
-			CompletionRatio:   3.1428571428571432,
+			CompletionRatio:   4.4 / 1.4,
 			CachedInputRatio:  nativeRate(0.26),
 			ContextLength:     1048576,
 			MaxOutputTokens:   131072,
@@ -200,7 +201,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/glm-5.3-flash": {
 			Ratio:             nativeRate(0.15),
-			CompletionRatio:   3.3333333333333335,
+			CompletionRatio:   0.5 / 0.15,
 			CachedInputRatio:  nativeRate(0.03),
 			ContextLength:     1048576,
 			MaxOutputTokens:   131072,
@@ -209,9 +210,20 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
 			Description:       "zai-org/glm-5.3-flash on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
+		"zai-org/glm-5.3-flashX": {
+			Ratio:             nativeRate(0.37),
+			CompletionRatio:   1.25 / 0.37,
+			CachedInputRatio:  nativeRate(0.075),
+			ContextLength:     1048576,
+			MaxOutputTokens:   131072,
+			InputModalities:   []string{"text", "image", "video"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs", "reasoning"},
+			Description:       "zai-org/glm-5.3-flashX on Novita; exact USD decimal tariff and metadata checked 2026-11-16. No creator tariff, priority surcharge, or unpublished reasoning-effort ladder is inferred.",
+		},
 		"zai-org/glm-5.3-p": {
 			Ratio:             nativeRate(1.4),
-			CompletionRatio:   3.1428571428571432,
+			CompletionRatio:   4.4 / 1.4,
 			CachedInputRatio:  nativeRate(0.26),
 			ContextLength:     1048576,
 			MaxOutputTokens:   131072,
@@ -222,7 +234,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/glm-5v-turbo": {
 			Ratio:                       nativeRate(1.2),
-			CompletionRatio:             3.3333333333333335,
+			CompletionRatio:             4.0 / 1.2,
 			CachedInputRatio:            nativeRate(0.24),
 			ContextLength:               204800,
 			MaxOutputTokens:             131072,

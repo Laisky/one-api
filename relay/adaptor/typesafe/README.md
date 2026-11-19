@@ -1,6 +1,6 @@
 # TypeSafe System One adaptor
 
-API behavior was researched on **2026-09-18** against the official [API reference](https://docs.typesafe.ai/api), [model catalog](https://docs.typesafe.ai/models), and [advanced structures guide](https://docs.typesafe.ai/primitives/advanced), and **verified that day against the live service** with a real provider key. The **model catalog was refreshed on 2026-10-20** against the official model reference. Jev 1.14 and the new alias targets are documentation-verified, not reverified with an authenticated provider key. Where the older reference and the live service disagreed, this adaptor followed the observed service behavior, as described below.
+API behavior was researched on **2026-09-18** against the official [API reference](https://docs.typesafe.ai/api), [model catalog](https://docs.typesafe.ai/models), and [advanced structures guide](https://docs.typesafe.ai/primitives/advanced), and **verified that day against the live service** with a real provider key. The **model catalog was refreshed on 2026-11-16** against the official model reference. Jev 1.14 and the new alias targets are documentation-verified, not reverified with an authenticated provider key. Where the older reference and the live service disagreed, this adaptor followed the observed service behavior, as described below.
 
 ## Configure and call
 
@@ -58,10 +58,10 @@ Likewise, the service requires a noul question to carry *some* content — neith
 | --- | --- | ---: | ---: |
 | `jev-1.13.0` | Pinned stable release | 0.042 | Free |
 | `jev-1.14.0` | Pinned newest release (2026-10-14) | 0.042 | Free |
-| `jev-latest` | Mutable stable alias → `jev-1.13.0` | 0.042 | Free |
+| `jev-latest` | Mutable stable alias → `jev-1.14.0` | 0.042 | Free |
 | `jev-preview` | Mutable preview alias → `jev-1.14.0` | 0.042 | Free |
 
-Per the [official model reference](https://docs.typesafe.ai/models) checked on 2026-10-20, **`jev-latest` still targets `jev-1.13.0`**, while **`jev-preview` targets the October 14 release `jev-1.14.0`**. Both aliases can change independently of a gateway deployment. TypeSafe's `GET /v1/models` currently lists only aliases; the versioned IDs are also documented as accepted even when absent from that response. Jev 1.13 was previously verified with the live provider; Jev 1.14 has not been probed with a provider key in this refresh. Responses can report the pinned version that actually answered.
+Per the [official model reference](https://docs.typesafe.ai/models) checked on 2026-11-16, **both `jev-latest` and `jev-preview` target the October 14 release `jev-1.14.0`**. Both aliases can change independently of a gateway deployment. TypeSafe's `GET /v1/models` currently lists only aliases; the versioned IDs are also documented as accepted even when absent from that response. Jev 1.13 was previously verified with the live provider; Jev 1.14 has not been probed with a provider key in this refresh. Responses can report the pinned version that actually answered.
 
 The documented price is **$42 per billion input tokens**, not $42 per million. The internal input ratio is `0.042 * ratio.MilliTokensUsd`; output usage is observable but never included in the native charge, even when a generic completion-ratio override is present. Group and input-price overrides still apply. Note that a channel model ratio of `0` means "not configured" to `pricing.ResolveModelRatioAt` and falls back to this catalog; a **group ratio** of `0` is the supported way to make a channel free. Unknown future models require an explicit verified flat input-price configuration.
 

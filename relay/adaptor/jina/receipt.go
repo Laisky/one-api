@@ -292,12 +292,22 @@ func handleOCRResponse(c *gin.Context, resp *http.Response, m *meta.Meta) (*mode
 	}
 	observer := &receiptBody{ReadCloser: resp.Body, stream: m.IsStream || strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream")}
 	resp.Body = observer
-	_, apiErr := openai_compatible.HandleClaudeMessagesResponse(c, resp, m, func(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
-		if m.IsStream {
-			return openai_compatible.StreamHandler(c, resp, promptTokens, modelName)
-		}
-		return openai_compatible.Handler(c, resp, promptTokens, modelName)
-	})
+	var apiErr *model.ErrorWithStatusCode
+	if openai_compatible.ClaudeChatBridgeActive(c, m) && !m.IsStream {
+		// The verified receipt below is returned as usage, so the controller
+		// never forwards a ConvertedResponse; render the Claude message here.
+		_, apiErr = openai_compatible.RenderChatHandlerAsClaude(c, m, func() (*model.Usage, *model.ErrorWithStatusCode) {
+			respErr, usage := openai_compatible.Handler(c, resp, m.PromptTokens, m.ActualModelName)
+			return usage, respErr
+		})
+	} else {
+		_, apiErr = openai_compatible.HandleClaudeMessagesResponse(c, resp, m, func(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
+			if m.IsStream {
+				return openai_compatible.StreamHandler(c, resp, promptTokens, modelName)
+			}
+			return openai_compatible.Handler(c, resp, promptTokens, modelName)
+		})
+	}
 	// Shared handlers can return early on transport or parsing errors without
 	// closing the body. Stop the upstream work before selecting a final receipt.
 	// Close is idempotent because successful shared handlers may close it first.

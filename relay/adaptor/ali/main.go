@@ -195,6 +195,18 @@ func responseAli2OpenAI(response *ChatResponse) *openai.TextResponse {
 	return &fullTextResponse
 }
 
+// aliStreamEnded reports whether a DashScope stream event is the final one:
+// its choice carries a finish_reason other than DashScope's "null"
+// placeholder. Parameters: aliResponse is the parsed event. Returns: true for
+// the final event.
+func aliStreamEnded(aliResponse *ChatResponse) bool {
+	if len(aliResponse.Output.Choices) == 0 {
+		return false
+	}
+	reason := aliResponse.Output.Choices[0].FinishReason
+	return reason != "" && reason != "null"
+}
+
 func streamResponseAli2OpenAI(aliResponse *ChatResponse) *openai.ChatCompletionsStreamResponse {
 	if len(aliResponse.Output.Choices) == 0 {
 		return nil
@@ -224,6 +236,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	common.SetEventStreamHeaders(c)
 
 	var streamErr error
+	providerEnded := false
 	for {
 		line, err := lineReader.Next()
 		if err != nil {
@@ -241,6 +254,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 				lg.Error("error unmarshalling oversized stream response", zap.Error(err))
 				continue
 			}
+			providerEnded = providerEnded || aliStreamEnded(&aliResponse)
 			if aliResponse.Usage.OutputTokens != 0 {
 				applyAliStreamUsage(&usage, aliResponse.Usage)
 			}
@@ -266,6 +280,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 			lg.Error("error unmarshalling stream response: ", zap.Error(err))
 			continue
 		}
+		providerEnded = providerEnded || aliStreamEnded(&aliResponse)
 		if aliResponse.Usage.OutputTokens != 0 {
 			applyAliStreamUsage(&usage, aliResponse.Usage)
 		}
@@ -281,6 +296,11 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	if streamErr != nil {
 		lg.Error("error reading stream: ", zap.Error(streamErr))
+	}
+	// A read error or EOF before the provider's end event is an interruption;
+	// report it so a Claude client never sees the stream as complete.
+	if streamErr != nil || !providerEnded {
+		openai_compatible.MarkStreamInterrupted(c)
 	}
 
 	openai_compatible.FinalizeStreamWithBridge(c, &usage)

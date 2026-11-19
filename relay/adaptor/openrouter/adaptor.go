@@ -176,12 +176,22 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 //   - *model.Usage: Extracted usage information including token counts
 //   - *model.ErrorWithStatusCode: Any error encountered during response processing, wrapped with HTTP status code
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
-	return openai_compatible.HandleClaudeMessagesResponse(c, resp, meta, func(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
+	// Observe usage.cost before the handlers render the response: it is the
+	// real charge of whichever provider OpenRouter routed to, and settlement
+	// floors at it (BillsAtLeastReportedCost).
+	observer := ObserveReportedCost(resp)
+	usage, err = openai_compatible.HandleClaudeMessagesResponse(c, resp, meta, func(c *gin.Context, resp *http.Response, promptTokens int, modelName string) (*model.ErrorWithStatusCode, *model.Usage) {
 		if meta.IsStream {
 			return openai_compatible.StreamHandler(c, resp, promptTokens, modelName)
 		}
 		return openai_compatible.Handler(c, resp, promptTokens, modelName)
 	})
+	if observer != nil {
+		if costUSD, found := observer.Finish(); found {
+			AttachReportedCost(c, usage, costUSD)
+		}
+	}
+	return usage, err
 }
 
 // GetModelList returns the list of all models supported by this OpenRouter adapter.
@@ -221,7 +231,7 @@ func (a *Adaptor) GetChannelName() string {
 //
 // Reference: https://openrouter.ai/models
 func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
-	// Use the constants.go ModelRatios which contains the complete OpenRouter pricing database
+	// Use the models.go ModelRatios which contains the complete OpenRouter pricing database
 	// This data is maintained separately to keep pricing information organized and updatable
 	return ModelRatios
 }
@@ -236,7 +246,7 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 //   - float64: The pricing ratio for input tokens (cost per milli-token)
 //
 // Lookup order:
-//  1. Check OpenRouter-specific pricing from constants.go
+//  1. Check OpenRouter-specific pricing from models.go
 //  2. Fall back to DefaultPricingMethods if model not found
 func (a *Adaptor) GetModelRatio(modelName string) float64 {
 	// Get the complete pricing database for this adapter

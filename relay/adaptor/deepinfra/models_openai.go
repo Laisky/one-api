@@ -2,19 +2,23 @@ package deepinfra
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// openaiModels returns the openai model defaults for deepinfra.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// openaiModels returns independently owned openai defaults for deepinfra.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.deepinfra.com/models/list
 func openaiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"openai/gpt-oss-120b": {
 			Ratio:                       nativeRate(0.037),
-			CompletionRatio:             4.594594594594595,
+			CompletionRatio:             0.17 / 0.037,
 			ContextLength:               131072,
+			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "openai/gpt-oss-120b on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "openai/gpt-oss-120b on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Published output limit checked 2026-11-18; reasoning controls remain unspecified.",
+			CachedInputRatio:            nativeRate(0.0185),
+			Quantization:                "bf16",
 		},
 		"openai/gpt-oss-120b-Turbo": {
 			Ratio:                       nativeRate(0.15),
@@ -30,28 +34,33 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			Ratio:                       nativeRate(0.2),
 			CompletionRatio:             4.75,
 			ContextLength:               131072,
+			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "openai/gpt-oss-120b-Ultra on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "openai/gpt-oss-120b-Ultra on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Published output limit checked 2026-11-18; reasoning controls remain unspecified.",
+			Quantization:                "fp8",
 		},
 		"openai/gpt-oss-20b": {
-			Ratio:                       nativeRate(0.030000000000000002),
-			CompletionRatio:             4.666666666666666,
+			Ratio:                       nativeRate(0.03),
+			CompletionRatio:             0.14 / 0.03,
 			ContextLength:               131072,
+			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "openai/gpt-oss-20b on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "openai/gpt-oss-20b on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Published output limit checked 2026-11-18; reasoning controls remain unspecified.",
+			CachedInputRatio:            nativeRate(0.015),
+			Quantization:                "bf16",
 		},
 		"openai/whisper-large-v3": {
 			Ratio:           nativeRate(0.75),
 			CompletionRatio: 1,
 			Audio: &adaptor.AudioPricingConfig{
 				PromptTokensPerSecond: 10,
-				UsdPerSecond:          7.5e-06,
+				UsdPerSecond:          0.0000075,
 			},
 			InputModalities:  []string{"audio"},
 			OutputModalities: []string{"text"},

@@ -82,11 +82,9 @@ func GetUserDashboard(c *gin.Context) {
 			var err error
 			targetUserId, err = resolveUserRef(userIdParam)
 			if err != nil {
-				c.JSON(http.StatusOK, gin.H{
-					"success": false,
-					"message": "Invalid user_id parameter",
-					"data":    nil,
-				})
+				// Malformed answers 400 and unknown answers 200, both at WARN;
+				// a lookup failure answers 200 at ERROR with its cause logged.
+				respondResourceRefErrorAs(c, err, "Invalid user_id parameter")
 				return
 			}
 		}

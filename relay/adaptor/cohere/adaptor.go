@@ -8,10 +8,13 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -56,7 +59,24 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	if relayMode == relaymode.Embeddings {
 		return convertEmbedRequest(c, request)
 	}
-	return ConvertRequest(*request), nil
+	converted := ConvertRequest(*request)
+	logLegacyModelRewrite(c, request.Model, converted.Model)
+	return converted, nil
+}
+
+// logLegacyModelRewrite records at DEBUG level that a retained legacy model
+// spelling was rewritten to the provider's published ID. Parameters: c supplies
+// the request-scoped logger (nil skips logging), requested is the mapped
+// gateway model and upstream is the model sent to Cohere. It returns nothing.
+func logLegacyModelRewrite(c *gin.Context, requested, upstream string) {
+	if c == nil || strings.TrimSuffix(requested, "-internet") == upstream {
+		return
+	}
+	lg := gmw.GetLogger(c)
+	lg.Debug("rewrote legacy Cohere model ID to published upstream ID",
+		zap.String("model", requested),
+		zap.String("upstream_model", upstream),
+	)
 }
 
 func (a *Adaptor) ConvertRerankRequest(c *gin.Context, request *model.RerankRequest) (any, error) {
@@ -205,7 +225,9 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	c.Set(ctxkey.OriginalClaudeRequest, request)
 
 	// Now convert using Cohere's existing logic
-	return ConvertRequest(*openaiRequest), nil
+	converted := ConvertRequest(*openaiRequest)
+	logLegacyModelRewrite(c, openaiRequest.Model, converted.Model)
+	return converted, nil
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Reader) (*http.Response, error) {
@@ -217,7 +239,23 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 	return response, err
 }
 
-func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+// DoResponse renders the provider answer for the client and returns the
+// billing usage. When the client called the Claude Messages API, the chat
+// output of doChatResponse is rendered as Claude Messages through the shared
+// bridge, keeping the usage unchanged. Parameters: c is the request context,
+// resp the upstream response, and meta the request meta. Returns: the billing
+// usage and any error.
+func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (*model.Usage, *model.ErrorWithStatusCode) {
+	return openai_compatible.RenderChatHandlerAsClaude(c, meta, func() (*model.Usage, *model.ErrorWithStatusCode) {
+		return a.doChatResponse(c, resp, meta)
+	})
+}
+
+// doChatResponse renders the provider answer as OpenAI chat output (or the
+// mode-specific output) on c.Writer. Parameters: c is the request context,
+// resp the upstream response, and meta the request meta. Returns: the billing
+// usage and any error.
+func (a *Adaptor) doChatResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	if meta.Mode == relaymode.Embeddings {
 		return embedResponse(c, resp, meta)
 	}

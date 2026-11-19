@@ -53,7 +53,7 @@ func TestGPT61SolCatalog(t *testing.T) {
 // calls own their mutable metadata; an alias edit must not alter other defaults.
 func TestGPT61SolCatalogOwnership(t *testing.T) {
 	t.Parallel()
-	catalog := gpt61SolModels()
+	catalog := openaiGpt6Models()
 	base := catalog["openai/gpt-6.1-sol"]
 	base.Tiers[0].Ratio = 999
 	base.InputModalities[0] = "changed"
@@ -61,7 +61,7 @@ func TestGPT61SolCatalogOwnership(t *testing.T) {
 	base.SupportedFeatures[0] = "changed"
 	base.SupportedSamplingParameters[0] = "changed"
 	base.SupportedReasoningEfforts[0] = "changed"
-	fresh := gpt61SolModels()
+	fresh := openaiGpt6Models()
 	require.Equal(t, fresh["openai/gpt-6.1-sol-pro"], catalog["openai/gpt-6.1-sol-pro"])
 	require.Equal(t, fresh["openai/gpt-6.1-sol"], ModelRatios["openai/gpt-6.1-sol"])
 	require.NotEqual(t, fresh["openai/gpt-6.1-sol"], base)

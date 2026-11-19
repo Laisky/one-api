@@ -2,9 +2,10 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// aion_labsModels returns the aion_labs model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
-func aion_labsModels() map[string]adaptor.ModelConfig {
+// aionLabsModels returns independently owned aion labs defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
+func aionLabsModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"aion-labs/aion-1.0": {
 			Ratio:                       nativeRate(4),
@@ -30,9 +31,9 @@ func aion_labsModels() map[string]adaptor.ModelConfig {
 			Description:                 "Aion-1.0-Mini 32B parameter model is a distilled version of the DeepSeek-R1 model, designed for strong performance in reasoning domains such as mathematics, coding, and logic. It is a modified variant... [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
 		},
 		"aion-labs/aion-2.0": {
-			Ratio:                       nativeRate(0.7999999999999999),
+			Ratio:                       nativeRate(0.8),
 			CompletionRatio:             2,
-			CachedInputRatio:            nativeRate(0.19999999999999998),
+			CachedInputRatio:            nativeRate(0.2),
 			ContextLength:               131072,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text"},
@@ -94,7 +95,7 @@ func aion_labsModels() map[string]adaptor.ModelConfig {
 			Description:                 "aion-labs/aion-3.5-mini on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"aion-labs/aion-rp-llama-3.1-8b": {
-			Ratio:                       nativeRate(0.7999999999999999),
+			Ratio:                       nativeRate(0.8),
 			CompletionRatio:             2,
 			ContextLength:               32768,
 			MaxOutputTokens:             29491,
@@ -102,7 +103,8 @@ func aion_labsModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{},
 			SupportedSamplingParameters: []string{"max_tokens", "temperature", "top_p"},
-			Description:                 "aion-labs/aion-rp-llama-3.1-8b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "aion-labs/aion-rp-llama-3.1-8b on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			HuggingFaceID:               "aion-labs/Aion-RP-Llama-3.1-8B",
 		},
 	}
 }

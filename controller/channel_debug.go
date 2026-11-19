@@ -5,17 +5,25 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/common/idresolve"
 	"github.com/Laisky/one-api/model"
 )
 
-// DebugChannelModelConfigs provides debugging information for a specific channel
+// DebugChannelModelConfigs logs model-config diagnostics for one channel.
+// Parameters:
+//   - c: Gin context carrying the channel UUID in the :id path parameter.
+//
+// Return values: none.
+//
+// A malformed reference answers HTTP 400; an unknown channel or a lookup
+// failure follows the shared respondResourceRefError contract.
 func DebugChannelModelConfigs(c *gin.Context) {
-	channelIdStr := c.Param("id")
-	channelId, err := resolveChannelRef(channelIdStr)
+	channelId, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("Invalid channel ID"))
+		respondResourceRefError(c, err)
 		return
 	}
 
@@ -45,12 +53,18 @@ func DebugAllChannelModelConfigs(c *gin.Context) {
 	})
 }
 
-// FixChannelModelConfigs attempts to fix a specific channel's model configuration
+// FixChannelModelConfigs attempts to repair one channel's model configuration.
+// Parameters:
+//   - c: Gin context carrying the channel UUID in the :id path parameter.
+//
+// Return values: none.
+//
+// A malformed reference answers HTTP 400; an unknown channel or a lookup
+// failure follows the shared respondResourceRefError contract.
 func FixChannelModelConfigs(c *gin.Context) {
-	channelIdStr := c.Param("id")
-	channelId, err := resolveChannelRef(channelIdStr)
+	channelId, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("Invalid channel ID"))
+		respondResourceRefError(c, err)
 		return
 	}
 
@@ -99,18 +113,26 @@ func RemigratAllChannels(c *gin.Context) {
 //   - c: Gin context containing the channel UUID path parameter and response writer.
 //
 // Return values: none.
+//
+// A malformed reference answers HTTP 400. An unknown channel, including one
+// deleted between resolution and the row load, is a not-found reference, and
+// any other lookup failure is a server error; both follow the shared
+// respondResourceRefError contract.
 func GetChannelMigrationStatus(c *gin.Context) {
-	channelIdStr := c.Param("id")
-	channelId, err := resolveChannelRef(channelIdStr)
+	channelId, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		helper.RespondErrorWithStatus(c, http.StatusBadRequest, errors.New("Invalid channel ID"))
+		respondResourceRefError(c, err)
 		return
 	}
 
 	var channel model.Channel
 	err = model.DB.Where("id = ?", channelId).First(&channel).Error
 	if err != nil {
-		helper.RespondErrorWithStatus(c, http.StatusNotFound, errors.New("Channel not found"))
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			respondResourceRefError(c, errors.WithStack(idresolve.ErrNotFound))
+			return
+		}
+		respondResourceRefError(c, errors.Wrap(err, "load channel for migration status"))
 		return
 	}
 

@@ -108,7 +108,7 @@ One-API meters usage in unified quota units. Channel-level pricing can override 
 1. **Model Configs JSON** (recommended): Set `ratio`, `completion_ratio`, and optional `max_tokens` per model. Ratios are expressed as USD per 1M tokens; they are converted automatically to quota units.
 2. **Legacy fields** (`model_ratio`, `completion_ratio`): still respected during migration but replaced by `model_configs` in the UI.
 
-When pricing data is missing, One-API falls back to adapter defaults (see `relay/adaptor/*/constants.go`). For accurate billing, provide explicit values that match your provider contract.
+When pricing data is missing, One-API falls back to adapter defaults (see `relay/adaptor/*/models.go`). For accurate billing, provide explicit values that match your provider contract.
 
 ### Time-of-Day Pricing Windows
 

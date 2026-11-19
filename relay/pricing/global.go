@@ -69,13 +69,17 @@ func InitializeGlobalPricingManager(getAdaptor func(apiType int) adaptor.Adaptor
 	logger.Logger.Info("Global pricing manager initialized")
 }
 
-// SetContributingAdapters allows configuration of which adapters contribute to global pricing
+// SetContributingAdapters configures which adapters contribute to global
+// pricing. Parameter apiTypes is copied; a nil slice restores the unset state,
+// in which the next InitializeGlobalPricingManager loads
+// DefaultGlobalPricingAdapters, while an empty non-nil slice means no adapter
+// contributes. Together with GetContributingAdapters this lets callers
+// snapshot and restore the configuration exactly. It returns nothing.
 func SetContributingAdapters(apiTypes []int) {
 	globalPricingManager.mu.Lock()
 	defer globalPricingManager.mu.Unlock()
 
-	globalPricingManager.contributingAdapters = make([]int, len(apiTypes))
-	copy(globalPricingManager.contributingAdapters, apiTypes)
+	globalPricingManager.contributingAdapters = cloneAdapterList(apiTypes)
 	globalPricingManager.initialized = false // Force re-initialization
 
 	logger.Logger.Info("Global pricing adapters updated, will reload on next access")
@@ -93,13 +97,25 @@ func ReloadDefaultConfiguration() {
 	logger.Logger.Info("Reloaded global pricing configuration", zap.Int("adapter_count", len(globalPricingManager.contributingAdapters)))
 }
 
-// GetContributingAdapters returns the current list of contributing adapters
+// GetContributingAdapters returns a copy of the contributing adapter list. It
+// takes no parameters and returns nil while the list is unset (defaults not yet
+// loaded), so SetContributingAdapters(GetContributingAdapters()) restores the
+// exact prior state instead of turning "unset" into "no adapters".
 func GetContributingAdapters() []int {
 	globalPricingManager.mu.RLock()
 	defer globalPricingManager.mu.RUnlock()
 
-	result := make([]int, len(globalPricingManager.contributingAdapters))
-	copy(result, globalPricingManager.contributingAdapters)
+	return cloneAdapterList(globalPricingManager.contributingAdapters)
+}
+
+// cloneAdapterList copies apiTypes while preserving nil. Parameter apiTypes
+// may be nil. It returns nil for nil input and an independent copy otherwise.
+func cloneAdapterList(apiTypes []int) []int {
+	if apiTypes == nil {
+		return nil
+	}
+	result := make([]int, len(apiTypes))
+	copy(result, apiTypes)
 	return result
 }
 
@@ -361,18 +377,22 @@ func GetModelRatioWithThreeLayers(modelName string, channelOverrides map[string]
 		}
 	}
 
-	// Layer 2: Channel default ratio (adapter's default pricing)
-	if adaptor != nil {
-		// Use GetDefaultModelPricing directly to avoid redundant lookups and function calls
-		if price, exists := adaptor.GetDefaultModelPricing()[modelName]; exists {
-			return price.Ratio
+	// Layers 2 and 3 apply only when the provider has a qualified tariff;
+	// an operator-tariff-only model must not borrow another provider's price.
+	if providerTariffEligible(adaptor, modelName) {
+		// Layer 2: Channel default ratio (adapter's default pricing)
+		if adaptor != nil {
+			// Use GetDefaultModelPricing directly to avoid redundant lookups and function calls
+			if price, exists := adaptor.GetDefaultModelPricing()[modelName]; exists {
+				return price.Ratio
+			}
 		}
-	}
 
-	// Layer 3: Global model pricing (merged from selected adapters)
-	// Respect explicit zero pricing by checking existence, not value.
-	if ratio, exists := GetGlobalModelRatio(modelName); exists {
-		return ratio
+		// Layer 3: Global model pricing (merged from selected adapters)
+		// Respect explicit zero pricing by checking existence, not value.
+		if ratio, exists := GetGlobalModelRatio(modelName); exists {
+			return ratio
+		}
 	}
 
 	// Layer 4: Final fallback - reasonable default
@@ -389,18 +409,21 @@ func GetCompletionRatioWithThreeLayers(modelName string, channelOverrides map[st
 		}
 	}
 
-	// Layer 2: Channel default ratio (adapter's default pricing)
-	if adaptor != nil {
-		// Use GetDefaultModelPricing directly to avoid redundant lookups and function calls
-		if price, exists := adaptor.GetDefaultModelPricing()[modelName]; exists {
-			return price.CompletionRatio
+	// Layers 2 and 3 apply only when the provider has a qualified tariff.
+	if providerTariffEligible(adaptor, modelName) {
+		// Layer 2: Channel default ratio (adapter's default pricing)
+		if adaptor != nil {
+			// Use GetDefaultModelPricing directly to avoid redundant lookups and function calls
+			if price, exists := adaptor.GetDefaultModelPricing()[modelName]; exists {
+				return price.CompletionRatio
+			}
 		}
-	}
 
-	// Layer 3: Global model pricing (merged from selected adapters)
-	// Respect explicit zero pricing by checking existence, not value.
-	if ratio, exists := GetGlobalCompletionRatio(modelName); exists {
-		return ratio
+		// Layer 3: Global model pricing (merged from selected adapters)
+		// Respect explicit zero pricing by checking existence, not value.
+		if ratio, exists := GetGlobalCompletionRatio(modelName); exists {
+			return ratio
+		}
 	}
 
 	// Layer 4: Final fallback - reasonable default
@@ -462,6 +485,9 @@ func isConfigDerivedTimeWindowCompletionRatio(modelName string, channelConfigs m
 func GetVideoPricingWithThreeLayers(modelName string, channelOverride *adaptor.VideoPricingConfig, provider adaptor.Adaptor) *adaptor.VideoPricingConfig {
 	if channelOverride != nil && channelOverride.HasData() {
 		return channelOverride.Clone()
+	}
+	if !providerTariffEligible(provider, modelName) {
+		return nil
 	}
 
 	if provider != nil {
@@ -530,9 +556,10 @@ func ResolveEffectivePricingForUsage(modelName string, inputTokens, outputTokens
 		}
 	}
 
-	modelPricing := adaptor.GetDefaultModelPricing()
-	if base, ok := modelPricing[modelName]; ok {
-		return ResolveEffectivePricingForUsageFromConfig(inputTokens, outputTokens, base)
+	if providerTariffEligible(adaptor, modelName) {
+		if base, ok := adaptor.GetDefaultModelPricing()[modelName]; ok {
+			return ResolveEffectivePricingForUsageFromConfig(inputTokens, outputTokens, base)
+		}
 	}
 
 	baseRatio := adaptor.GetModelRatio(modelName)

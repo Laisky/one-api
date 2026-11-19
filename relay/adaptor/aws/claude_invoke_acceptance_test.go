@@ -283,10 +283,16 @@ func TestClaudeInvokeActualQuotaCalculation(t *testing.T) {
 					`{"type":"message_delta","delta":{},"usage":{"output_tokens":50,"cache_creation_input_tokens":300}}`, claudeInvokeStop)
 			}
 			h := newClaudeInvokeHarness(t, stream, body, "test-region-1")
+			// The receipt carries all five buckets, so price it under a model
+			// for which Bedrock sells all five (Claude 3 Haiku has no cache SKU).
+			h.meta.ActualModelName = "claude-haiku-4-5-20251001"
 			h.prepareChat(t)
 			usage, responseErr := h.adaptor.DoResponse(h.context, nil, h.meta)
 			require.Nil(t, responseErr)
 			cfg := h.adaptor.GetDefaultModelPricing()[h.meta.ActualModelName]
+			for _, price := range []float64{cfg.Ratio, cfg.CachedInputRatio, cfg.CacheWrite5mRatio, cfg.CacheWrite1hRatio} {
+				require.Positive(t, price, "the oracle needs an explicit price for every bucket")
+			}
 			for _, group := range []float64{1, 1.5, 2} {
 				result := quota.Compute(quota.ComputeInput{Usage: usage, ModelName: h.meta.ActualModelName,
 					ModelRatio: cfg.Ratio, GroupRatio: group, PricingAdaptor: h.adaptor})

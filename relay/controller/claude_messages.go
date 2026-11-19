@@ -226,9 +226,11 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	c.Set(ctxkey.ConvertedRequest, convertedRequest)
 	preConsumedQuota, bizErr := preConsumeClaudeMessagesQuota(c, claudeRequest, promptTokens, ratio, completionRatio, meta)
 	if bizErr != nil {
-		lg.Warn("preConsumeClaudeMessagesQuota failed",
+		// The returned error is logged once by the relay outcome at its
+		// status-derived level; this DEBUG line only adds admission context.
+		lg.Debug("preConsumeClaudeMessagesQuota failed",
 			zap.Int("status_code", bizErr.StatusCode),
-			zap.Error(bizErr.RawError))
+			zap.String("err_msg", bizErr.Message))
 		return bizErr
 	}
 	markPreConsumed(c, preConsumedQuota)
@@ -443,7 +445,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	// Check for HTTP errors when an HTTP response is returned by the adaptor
-	if resp != nil && resp.StatusCode != http.StatusOK {
+	if claudeUpstreamFailed(meta, resp) {
 		if passthrough, ok := c.Get(ctxkey.ClaudeDirectPassthrough); ok && passthrough.(bool) && len(passthroughBody) > 0 {
 			responseBody, bodyErr := readAndRestoreResponseBody(resp)
 			if bodyErr != nil {
@@ -503,6 +505,17 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			goto handleResponse
 		}
 
+		// A provider error carrying a usage receipt is paid work: settle it
+		// like an errored response with usage instead of refunding or replaying.
+		if paid := paidUpstreamErrorUsage(c, meta, adaptorInstance, resp); paid != nil {
+			var nativeError *anthropic.NativeErrorResponse
+			if c.GetBool(ctxkey.ClaudeDirectPassthrough) {
+				nativeError = anthropic.PrepareNativeErrorResponse(resp)
+			}
+			usage, respErr = paid, RelayErrorHandlerWithContext(c, resp)
+			anthropic.RetainNativeErrorResponse(c, nativeError, respErr)
+			goto postConsume
+		}
 		if retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "upstream_http_error") {
 			var nativeError *anthropic.NativeErrorResponse
 			if c.GetBool(ctxkey.ClaudeDirectPassthrough) {
@@ -512,6 +525,7 @@ func RelayClaudeMessagesHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			anthropic.RetainNativeErrorResponse(c, nativeError, apiErr)
 			return apiErr
 		}
+		recordUpstreamClientRejection(c, resp.StatusCode)
 		scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "upstream_http_error")
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)
@@ -684,8 +698,9 @@ postConsume:
 		includeElapsedField: true,
 	}, func(ctx context.Context) {
 		quota := postConsumeClaudeMessagesQuotaWithTraceID(ctx, requestId, traceId, usage, meta, claudeRequest, ratio, preConsumedQuota, mcpIncrementalCharged, modelRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio)
-		// Reconcile request cost with final quota (override provisional value)
-		if quota != 0 {
+		// Reconcile request cost with final quota (override provisional value).
+		// A zero settlement is still final, matching the Chat and Responses paths.
+		if requestId != "" {
 			if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, quota); err != nil {
 				lg.Error("update user request cost failed", zap.Error(err))
 			}

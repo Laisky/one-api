@@ -2,41 +2,57 @@ package deepinfra
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// nvidiaModels returns the nvidia model defaults for deepinfra.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// nvidiaModels returns independently owned nvidia defaults for deepinfra.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://api.deepinfra.com/models/list
 func nvidiaModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"nvidia/NVIDIA-Nemotron-3-Super-120B-A12B": {
-			Ratio:                       nativeRate(0.085),
-			CompletionRatio:             4.705882352941177,
+			Ratio:                       nativeRate(0.075),
+			CompletionRatio:             0.4 / 0.075,
 			ContextLength:               262144,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "bf16",
 		},
 		"nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": {
 			Ratio:                       nativeRate(0.5),
 			CompletionRatio:             4.4,
 			CachedInputRatio:            nativeRate(0.1),
 			ContextLength:               262144,
+			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Published output limit checked 2026-11-18; reasoning controls remain unspecified. Explicit cache writes are published at 1.25x/2x input for 5m/1h; TTL-specific request and receipt billing requires separate qualification.",
+			Quantization:                "fp4",
 		},
 		"nvidia/NVIDIA-Nemotron-3.5-Lightning": {
 			Ratio:                       nativeRate(0.06),
 			CompletionRatio:             (0.16 * 1.0) / 0.06,
 			CachedInputRatio:            nativeRate(0.03),
 			ContextLength:               262144,
+			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
 			Description:                 "nvidia/NVIDIA-Nemotron-3.5-Lightning on DeepInfra; host token prices verified 2026-10-12. Existing capability metadata is retained. A direct-creator redirect or another provider's tariff is not a DeepInfra price change.",
+		},
+		"nvidia/NVIDIA-Nemotron-3.5-Super-VL": {
+			Ratio:             nativeRate(0.15),
+			CompletionRatio:   0.5 / 0.15,
+			CachedInputRatio:  nativeRate(0.02),
+			ContextLength:     262144,
+			InputModalities:   []string{"text", "image", "video"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			Quantization:      "fp4",
+			Description:       "nvidia/NVIDIA-Nemotron-3.5-Super-VL on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
 		},
 		"nvidia/Nemotron-3-Embed-1B-BF16": {
 			Ratio:           nativeRate(0.015),
@@ -76,6 +92,7 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 			CompletionRatio:             4,
 			CachedInputRatio:            nativeRate(0.025),
 			ContextLength:               262144,
+			MaxOutputTokens:             228000,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "reasoning"},
@@ -101,7 +118,8 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "nvidia/Nemotron-Content-Safety-3.5 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "nvidia/Nemotron-Content-Safety-3.5 on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Quantization:                "bf16",
 		},
 		"nvidia/llama-nemotron-embed-vl-1b-v2": {
 			Ratio:           nativeRate(0.01),

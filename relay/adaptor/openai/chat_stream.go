@@ -19,6 +19,8 @@ import (
 	commonsse "github.com/Laisky/one-api/common/sse"
 	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/adaptor/openrouter"
+	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
@@ -35,6 +37,9 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 	receiptComplete := false
 	lg := gmw.GetLogger(c)
 	metaInfo := metalib.GetByContext(c)
+	// OpenRouter usage chunks carry the operator's provider cost; settlement
+	// reads it from the raw body, the client must not see it.
+	scrubReportedCost := metaInfo != nil && metaInfo.ChannelType == channeltype.OpenRouter
 	tracker := streaming.FromContext(c)
 	if tracker != nil {
 		streaming.ClaimProtocolObservation(c)
@@ -223,6 +228,9 @@ streamLoop:
 		}
 
 		data := openai_compatible.NormalizeDataLine(line.Text())
+		if scrubReportedCost {
+			data = openrouter.ScrubReportedCostLine(data)
+		}
 
 		lg.Debug("stream response", zap.String("event", data))
 

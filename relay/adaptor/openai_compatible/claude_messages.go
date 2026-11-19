@@ -173,29 +173,7 @@ func convertClaudeRequest(c *gin.Context, request *model.ClaudeRequest, nativeMe
 
 	// Convert tools if present
 	if !promoteStructured && len(request.Tools) > 0 {
-		var tools []model.Tool
-		for _, claudeTool := range request.Tools {
-			if strings.TrimSpace(claudeTool.Type) != "" && claudeTool.InputSchema == nil {
-				tools = append(tools, model.Tool{Type: normalizeClaudeBuiltinToolType(claudeTool.Type)})
-				continue
-			}
-			parameters, ok := claudeTool.InputSchema.(map[string]any)
-			if !ok {
-				parameters = map[string]any{}
-			}
-			// Downstream normalization owns its map; retain caller tool schemas.
-			parameters = deepCopyMapAny(parameters)
-			tool := model.Tool{
-				Type: "function",
-				Function: &model.Function{
-					Name:        claudeTool.Name,
-					Description: claudeTool.Description,
-					Parameters:  parameters,
-				},
-			}
-			tools = append(tools, tool)
-		}
-		openaiRequest.Tools = tools
+		openaiRequest.Tools = ConvertClaudeToolsToChat(request.Tools)
 	}
 
 	// Convert tool choice if present

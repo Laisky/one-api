@@ -717,3 +717,38 @@ func TestGetModelListFromPricingIncludesGPT54(t *testing.T) {
 		assert.True(t, modelSet[modelName], "GetModelListFromPricing must include %q", modelName)
 	}
 }
+
+// TestAzureClaudeMessagesUseChatCompletionsDeploymentURL proves a Claude
+// Messages request for an Azure OpenAI deployment is sent to the converted
+// Chat Completions route, never the nonexistent deployment-scoped /messages.
+func TestAzureClaudeMessagesUseChatCompletionsDeploymentURL(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"gpt-4o-mini", "gpt-4.1", "gpt-6-cyber", "o3"} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			m := &meta.Meta{
+				Mode:            relaymode.ClaudeMessages,
+				ChannelType:     channeltype.Azure,
+				BaseURL:         "https://myresource.openai.azure.com",
+				ActualModelName: name,
+				RequestURLPath:  "/v1/messages?beta=true",
+				Config:          model.ChannelConfig{APIVersion: "2024-10-21"},
+			}
+			a := &Adaptor{}
+			a.Init(m)
+			url, err := a.GetRequestURL(m)
+			require.NoError(t, err)
+			assert.Contains(t, url, "/openai/deployments/"+name+"/chat/completions?api-version=")
+			assert.NotContains(t, url, "/messages")
+		})
+	}
+	// Control: GPT-5 deployments keep the Responses surface for Claude Messages.
+	m := &meta.Meta{Mode: relaymode.ClaudeMessages, ChannelType: channeltype.Azure,
+		BaseURL: "https://myresource.openai.azure.com", ActualModelName: "gpt-5-mini",
+		RequestURLPath: "/v1/messages", Config: model.ChannelConfig{APIVersion: "2024-10-21"}}
+	a := &Adaptor{}
+	a.Init(m)
+	url, err := a.GetRequestURL(m)
+	require.NoError(t, err)
+	assert.Contains(t, url, "/openai/v1/responses")
+}

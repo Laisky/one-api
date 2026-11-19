@@ -215,7 +215,7 @@ func uuidWriterFKCases() map[string]uuidWriterFKCase {
 		},
 		"token_transactions.token_uuid": {
 			// FINDING: model.CreateTokenTransaction persists exactly what the caller built.
-			responsible:            "controller/token.go builds TokenTransaction.TokenUUID before model.CreateTokenTransaction",
+			responsible:            "controller/token_consume.go builds TokenTransaction.TokenUUID before model.CreateTokenTransaction",
 			populatedByModelWriter: false,
 			write: func(t *testing.T, db *gorm.DB, fixture *uuidWriterFixture) *string {
 				return writeUUIDFKTokenTransaction(t, db, fixture, "fk-txn-token-uuid",
@@ -223,7 +223,7 @@ func uuidWriterFKCases() map[string]uuidWriterFKCase {
 			},
 		},
 		"token_transactions.user_uuid": {
-			responsible:            "controller/token.go builds TokenTransaction.UserUUID before model.CreateTokenTransaction",
+			responsible:            "controller/token_consume.go builds TokenTransaction.UserUUID before model.CreateTokenTransaction",
 			populatedByModelWriter: false,
 			write: func(t *testing.T, db *gorm.DB, fixture *uuidWriterFixture) *string {
 				return writeUUIDFKTokenTransaction(t, db, fixture, "fk-txn-user-uuid",
@@ -232,9 +232,9 @@ func uuidWriterFKCases() map[string]uuidWriterFKCase {
 		},
 		"token_transactions.log_uuid": {
 			// FINDING: log_uuid has the narrowest writer of all 15 columns. Only the two
-			// consume paths in controller/token.go ever assign it, from the log row they just
+			// consume paths in controller/token_consume.go ever assign it, from the log row they just
 			// wrote; nothing in package model does.
-			responsible:            "controller/token.go assigns transaction.LogUUID from the consume log it just recorded",
+			responsible:            "controller/token_consume.go assigns transaction.LogUUID from the consume log it just recorded",
 			populatedByModelWriter: false,
 			write: func(t *testing.T, db *gorm.DB, fixture *uuidWriterFixture) *string {
 				return writeUUIDFKTokenTransaction(t, db, fixture, "fk-txn-log-uuid",

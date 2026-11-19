@@ -2,8 +2,9 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// cohereModels returns the cohere model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// cohereModels returns independently owned cohere defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func cohereModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"cohere/command-a": {
@@ -13,10 +14,10 @@ func cohereModels() map[string]adaptor.ModelConfig {
 			MaxOutputTokens:             8192,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"json_mode", "structured_outputs"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "max_tokens", "presence_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "top_k", "top_p"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "max_tokens", "presence_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
 			HuggingFaceID:               "CohereForAI/c4ai-command-a-03-2025",
-			Description:                 "cohere/command-a on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "cohere/command-a on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"cohere/command-a-plus": {
 			Ratio:                       nativeRate(0.3),
@@ -27,8 +28,9 @@ func cohereModels() map[string]adaptor.ModelConfig {
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "presence_penalty", "reasoning", "response_format", "seed", "stop", "structured_outputs", "temperature", "tools", "top_k", "top_p"},
-			Description:                 "cohere/command-a-plus on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "presence_penalty", "reasoning", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			Description:                 "cohere/command-a-plus on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			HuggingFaceID:               "CohereLabs/command-a-plus-05-2026-bf16",
 		},
 		"cohere/command-r-08-2024": {
 			Ratio:                       nativeRate(0.15),
@@ -39,7 +41,8 @@ func cohereModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "max_tokens", "presence_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
-			Description:                 "cohere/command-r-08-2024 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "cohere/command-r-08-2024 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			HuggingFaceID:               "CohereLabs/c4ai-command-r-08-2024",
 		},
 		"cohere/command-r-plus-08-2024": {
 			Ratio:                       nativeRate(2.5),
@@ -50,7 +53,8 @@ func cohereModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "max_tokens", "presence_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
-			Description:                 "cohere/command-r-plus-08-2024 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "cohere/command-r-plus-08-2024 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			HuggingFaceID:               "CohereLabs/c4ai-command-r-plus-08-2024",
 		},
 		"cohere/command-r7b-12-2024": {
 			Ratio:                       nativeRate(0.0375),
@@ -59,9 +63,10 @@ func cohereModels() map[string]adaptor.ModelConfig {
 			MaxOutputTokens:             4000,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"json_mode", "structured_outputs"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "max_tokens", "presence_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "top_k", "top_p"},
-			Description:                 "cohere/command-r7b-12-2024 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "max_tokens", "presence_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			Description:                 "cohere/command-r7b-12-2024 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			HuggingFaceID:               "CohereLabs/c4ai-command-r7b-12-2024",
 		},
 		"cohere/north-mini-code:free": {
 			Ratio:                       0,

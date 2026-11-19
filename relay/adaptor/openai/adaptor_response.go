@@ -20,6 +20,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/common/toolnamesafe"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
+	"github.com/Laisky/one-api/relay/adaptor/openrouter"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
@@ -36,6 +37,10 @@ func (a *Adaptor) DoRequest(c *gin.Context,
 	// initiates a WebSocket upgrade. For regular HTTP POST requests we always
 	// use the standard HTTP transport — it is more stable and avoids the extra
 	// complexity of a WS→SSE bridge.
+	requestBody, err := applyPromptCacheExplicitPin(c, meta, requestBody)
+	if err != nil {
+		return nil, errors.Wrap(err, "apply admitted prompt-cache billing policy")
+	}
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 
@@ -45,6 +50,25 @@ func (a *Adaptor) DoResponse(c *gin.Context,
 	resp *http.Response,
 	meta *meta.Meta) (usage *model.Usage,
 	err *model.ErrorWithStatusCode) {
+	if meta != nil && meta.ChannelType == channeltype.OpenRouter {
+		// OpenRouter reports the real charge of the provider it routed to in
+		// usage.cost; settlement floors at it (BillsAtLeastReportedCost).
+		if observer := openrouter.ObserveReportedCost(resp); observer != nil {
+			defer func() {
+				if costUSD, found := observer.Finish(); found {
+					openrouter.AttachReportedCost(c, usage, costUSD)
+				}
+			}()
+		}
+	}
+	if receipt := observeRawUsageReceipt(resp, meta); receipt != nil {
+		defer func() {
+			// Non-stream Claude conversion deliberately returns nil usage so the
+			// controller still writes ConvertedResponse before settling its receipt.
+			convertedBody := err == nil && !meta.IsStream && c.GetBool(ctxkey.ClaudeMessagesConversion)
+			usage = receipt.finish(c, usage, convertedBody)
+		}()
+	}
 	if meta.IsStream {
 		var responseText string
 		handledClaudeStream := false
@@ -443,4 +467,13 @@ func (a *Adaptor) convertStreamingToClaudeResponse(c *gin.Context, resp *http.Re
 	maps.Copy(newResp.Header, resp.Header)
 
 	return newResp, nil
+}
+
+// BillsAtLeastReportedCost implements adaptor.ReportedCostBillingPolicy for the
+// channel this adaptor serves. OpenRouter channels report the real charge of
+// the provider each request was routed to (usage.cost), which can exceed the
+// listed top-provider tariff, so settlement floors at it. It takes no
+// parameters and returns true only for OpenRouter channels.
+func (a *Adaptor) BillsAtLeastReportedCost() bool {
+	return a.ChannelType == channeltype.OpenRouter
 }

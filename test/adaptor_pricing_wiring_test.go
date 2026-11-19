@@ -132,6 +132,13 @@ func TestEveryAdvertisedModelIsPricedByItsChannel(t *testing.T) {
 				require.Zero(t, result.TotalQuota, "missing explicit pricing must not use a fabricated tariff")
 				continue
 			}
+			if adaptor.RequiresOperatorTariff(provider, modelName) {
+				// Not an exemption either: the provider declares no qualified
+				// tariff, so prove dispatch refuses it without an operator price
+				// and no pricing layer substitutes another provider's tariff.
+				requireOperatorTariffEnforced(t, channelType, provider, modelName, now)
+				continue
+			}
 			if dynamic, ok := provider.(adaptor.DynamicVideoPricingAdaptor); ok && dynamic.SupportsDynamicVideoPricing(modelName) {
 				// Dynamic video providers are priced by their request-specific
 				// estimator. The relay path fails closed if that quote is absent.

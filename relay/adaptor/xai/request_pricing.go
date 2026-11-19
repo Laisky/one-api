@@ -9,7 +9,22 @@ import (
 	"github.com/Laisky/one-api/relay/pricing"
 )
 
-var _ adaptor.RequestPricingValidator = (*Adaptor)(nil)
+var (
+	_ adaptor.RequestPricingValidator = (*Adaptor)(nil)
+	_ adaptor.OperatorTariffPolicy    = (*Adaptor)(nil)
+)
+
+// RequiresOperatorTariff reports whether modelName is an unverified historical
+// slug that only an explicit channel contract may price. Parameters: modelName
+// is the mapped model. Returns: true for slugs without a verified current tariff.
+func (a *Adaptor) RequiresOperatorTariff(modelName string) bool {
+	switch modelName {
+	case "grok-3-fast", "grok-3-mini-fast", "grok-2-1212", "grok-beta", "grok-2", "grok-2-latest", "grok-vision-beta":
+		return true
+	default:
+		return false
+	}
+}
 
 // ValidateRequestPricing prevents unverified historical slugs from silently
 // using generic fallback prices. Current documented redirects retain their
@@ -19,14 +34,5 @@ func (a *Adaptor) ValidateRequestPricing(c *gin.Context, m *meta.Meta) error {
 	if m == nil {
 		return errors.New("xAI request pricing requires model metadata")
 	}
-	name := m.ActualModelName
-	if name == "" {
-		name = m.OriginModelName
-	}
-	switch name {
-	case "grok-3-fast", "grok-3-mini-fast", "grok-2-1212", "grok-beta", "grok-2", "grok-2-latest", "grok-vision-beta":
-		return pricing.RequireExplicitTokenPricing(c, m)
-	default:
-		return nil
-	}
+	return pricing.ValidateOperatorTariff(c, m, a)
 }

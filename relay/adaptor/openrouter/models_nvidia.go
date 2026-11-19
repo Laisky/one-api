@@ -2,8 +2,9 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// nvidiaModels returns the nvidia model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// nvidiaModels returns independently owned nvidia defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func nvidiaModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"nvidia/llama-3.3-nemotron-super-49b-v1.5": {
@@ -25,10 +26,11 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 			MaxOutputTokens:             235929,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "max_tokens", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
 			HuggingFaceID:               "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
-			Description:                 "nvidia/nemotron-3-nano-30b-a3b on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified.",
+			Description:                 "nvidia/nemotron-3-nano-30b-a3b on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			CachedInputRatio:            nativeRate(0.012),
 		},
 		"nvidia/nemotron-3-nano-30b-a3b:free": {
 			Ratio:                       0,
@@ -54,18 +56,18 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 			Description:                 "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"nvidia/nemotron-3-super-120b-a12b": {
-			Ratio:                       nativeRate(0.08),
-			CompletionRatio:             5.624999999999999,
+			Ratio:                       nativeRate(0.075),
+			CompletionRatio:             0.4 / 0.075,
 			ContextLength:               262144,
-			MaxOutputTokens:             235929,
+			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
-			SupportedReasoningEfforts:   []string{"medium", "low"},
+			SupportedReasoningEfforts:   []string{"medium", "low", "none"},
 			DefaultReasoningEffort:      "medium",
 			HuggingFaceID:               "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-FP8",
-			Description:                 "nvidia/nemotron-3-super-120b-a12b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "nvidia/nemotron-3-super-120b-a12b on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"nvidia/nemotron-3-super-120b-a12b:free": {
 			Ratio:                       0,
@@ -82,19 +84,19 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 			Description:                 "nvidia/nemotron-3-super-120b-a12b:free on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"nvidia/nemotron-3-ultra-550b-a55b": {
-			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             4,
-			CachedInputRatio:            nativeRate(0.12),
+			Ratio:                       nativeRate(0.5),
+			CompletionRatio:             2.2 / 0.5,
+			CachedInputRatio:            nativeRate(0.1),
 			ContextLength:               262144,
 			MaxOutputTokens:             182520,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "max_tokens", "min_p", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
-			SupportedReasoningEfforts:   []string{"high", "medium"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			SupportedReasoningEfforts:   []string{"high", "medium", "none"},
 			DefaultReasoningEffort:      "high",
 			HuggingFaceID:               "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16",
-			Description:                 "nvidia/nemotron-3-ultra-550b-a55b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "nvidia/nemotron-3-ultra-550b-a55b on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"nvidia/nemotron-3-ultra-550b-a55b:free": {
 			Ratio:                       0,
@@ -105,13 +107,13 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "reasoning"},
 			SupportedSamplingParameters: []string{"include_reasoning", "max_tokens", "reasoning", "reasoning_effort", "seed", "temperature", "tool_choice", "tools", "top_p"},
-			SupportedReasoningEfforts:   []string{"high", "medium"},
+			SupportedReasoningEfforts:   []string{"high", "medium", "none"},
 			DefaultReasoningEffort:      "high",
 			HuggingFaceID:               "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16",
-			Description:                 "nvidia/nemotron-3-ultra-550b-a55b:free on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "nvidia/nemotron-3-ultra-550b-a55b:free on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges. The published token tariff is explicitly free; account limits still apply.",
 		},
 		"nvidia/nemotron-3.5-content-safety": {
-			Ratio:                       nativeRate(0.19999999999999998),
+			Ratio:                       nativeRate(0.2),
 			CompletionRatio:             1,
 			ContextLength:               131072,
 			MaxOutputTokens:             117964,
@@ -158,6 +160,31 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"include_reasoning", "max_tokens", "reasoning", "seed", "temperature", "tool_choice", "tools", "top_p"},
 			HuggingFaceID:               "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
 			Description:                 "nvidia/nemotron-3.5-lightning:free on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+		},
+		"nvidia/nemotron-3.5-super-vl": {
+			Ratio:                       nativeRate(0.15),
+			CompletionRatio:             3.33333333333333,
+			CachedInputRatio:            nativeRate(0.02),
+			ContextLength:               1048576,
+			MaxOutputTokens:             235929,
+			InputModalities:             []string{"text", "image", "video"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			HuggingFaceID:               "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16",
+			Description:                 "nvidia/nemotron-3.5-super-vl on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
+		"nvidia/nemotron-3.5-super-vl:free": {
+			Ratio:                       nativeRate(0),
+			CompletionRatio:             1,
+			ContextLength:               1000000,
+			MaxOutputTokens:             131072,
+			InputModalities:             []string{"text", "image", "video"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"include_reasoning", "max_tokens", "reasoning", "response_format", "seed", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
+			HuggingFaceID:               "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16",
+			Description:                 "nvidia/nemotron-3.5-super-vl:free on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges. The published token tariff is explicitly free; account limits still apply.",
 		},
 		"nvidia/nemotron-nano-12b-v2-vl:free": {
 			Ratio:                       0,

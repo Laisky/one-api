@@ -1,6 +1,6 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
-const { React, createTransport, defaultExport, loadModule, mount, settle, theme } = require('./legacy-react-harness.cjs');
+const { React, act, createTransport, defaultExport, loadModule, mount, settle, theme } = require('./legacy-react-harness.cjs');
 
 // This suite mounts the real Air and Berry log pages with their real UI
 // libraries and records the requests they send. Transport, toast, authentication,
@@ -14,6 +14,26 @@ function logRows(prefix) {
     id: index + 1, uuid: `${prefix}-${index}`, type: 2, created_at: 1700000000 + index, model_name: prefix,
     token_name: 'token', prompt_tokens: index, completion_tokens: index, quota: index, elapsed_time: index, content: 'detail',
   }));
+}
+
+/**
+ * finishCloseAnimations delivers the animation-end event a browser sends when a
+ * Semi popup finishes its close animation; jsdom runs no CSS animations, so it
+ * never arrives on its own. A controlled Semi Select, such as the Pagination
+ * page-size switcher, reports its change only after that event, and Semi turns
+ * the animation on only after a 50 ms positioning fallback fires. Without this
+ * step a page-size change was silently dropped whenever the option click came
+ * later than that, so the result depended on how fast the process was. React
+ * listens for webkitAnimationEnd under jsdom (no AnimationEvent) and for
+ * animationend in browsers, so both are sent and React handles exactly one.
+ */
+async function finishCloseAnimations() {
+  for (const element of document.querySelectorAll('[class*="-animation-hide"]')) {
+    for (const name of ['animationend', 'webkitAnimationEnd']) {
+      await act(async () => element.dispatchEvent(new window.Event(name, { bubbles: true })));
+    }
+  }
+  await settle();
 }
 
 /** mountPage renders the real theme log page and returns helpers for user interactions and request inspection. */
@@ -56,12 +76,13 @@ async function mountPage({ admin, respond, strict = false }) {
       await type(container.querySelector(theme === 'air' ? 'input[name="search_keyword"]' : 'input[name="keyword"]'), keyword);
       await click(textElement('搜索').closest('button'));
     },
-    /** choose opens the real Semi Select matching the supplied selector and clicks the option with the supplied text. */
+    /** choose opens the real Semi Select matching the supplied selector, clicks the option with the supplied text and lets the dropdown finish closing. */
     choose: async (selector, text) => {
       await click(container.querySelector(selector));
       const option = [...document.querySelectorAll('.semi-select-option')].find(item => item.textContent.trim() === text);
       assert.ok(option, `Find select option ${text}`);
       await click(option);
+      await finishCloseAnimations();
     },
     /** goToPage clicks the real Semi pagination item for the supplied page number. */
     goToPage: async number => {

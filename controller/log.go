@@ -30,7 +30,7 @@ func GetAllLogs(c *gin.Context) {
 	modelName := c.Query("model_name")
 	channel, err := resolveOptionalChannelRef(c.Query("channel"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	sortBy := c.DefaultQuery("sort_by", "")
@@ -265,7 +265,7 @@ func GetLogsStat(c *gin.Context) {
 	modelName := c.Query("model_name")
 	channel, err := resolveOptionalChannelRef(c.Query("channel"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	quotaNum := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)
@@ -290,7 +290,7 @@ func GetLogsSelfStat(c *gin.Context) {
 	modelName := c.Query("model_name")
 	channel, err := resolveOptionalChannelRef(c.Query("channel"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	quotaNum := model.SumUsedQuota(logType, startTimestamp, endTimestamp, modelName, username, tokenName, channel)

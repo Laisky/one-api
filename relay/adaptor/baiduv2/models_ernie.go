@@ -1,9 +1,15 @@
 package baiduv2
 
-import "github.com/Laisky/one-api/relay/adaptor"
+import (
+	"github.com/Laisky/one-api/relay/adaptor"
+)
 
-// ernieModels returns the ernie model defaults for baiduv2.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// ernieModels returns independently owned ernie defaults for baiduv2.
+// It takes no arguments and returns the complete family catalog.
+// Sources checked 2026-10-12 and 2026-11-16:
+// https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j
+// https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya
+// https://cloud.baidu.com/product/qianfan_home/model_3.html
 func ernieModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"ERNIE-4.5-Turbo-128K-Preview": {
@@ -40,7 +46,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Ratio:           nativeRate(6),
 			CompletionRatio: 4,
 			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(1e+01),
+				Ratio:               nativeRate(10),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
 			},
@@ -51,7 +57,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Ratio:           nativeRate(6),
 			CompletionRatio: 4,
 			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(1e+01),
+				Ratio:               nativeRate(10),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
 			},
@@ -62,7 +68,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Ratio:           nativeRate(6),
 			CompletionRatio: 4,
 			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(1e+01),
+				Ratio:               nativeRate(10),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
 			},
@@ -73,7 +79,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Ratio:           nativeRate(6),
 			CompletionRatio: 4,
 			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(1e+01),
+				Ratio:               nativeRate(10),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
 			},
@@ -85,7 +91,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			CompletionRatio: 4.5,
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(6),
-				CompletionRatio:     3.6666666666666665,
+				CompletionRatio:     22.0 / 6.0,
 				InputTokenThreshold: 32001,
 			},
 			},
@@ -128,7 +134,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Description:                 "Baidu ERNIE 3.5 8K (preview): closed-weight general-purpose chat model.",
 		},
 		"ernie-4.0-8k": {
-			Ratio:                       nativeRate(3e+01),
+			Ratio:                       nativeRate(30),
 			CompletionRatio:             3,
 			CachedInputRatio:            nativeRate(12),
 			ContextLength:               8192,
@@ -140,7 +146,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Description:                 "Baidu ERNIE 4.0 8K: closed-weight flagship chat model on Qianfan v2. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K.",
 		},
 		"ernie-4.0-8k-latest": {
-			Ratio:                       nativeRate(3e+01),
+			Ratio:                       nativeRate(30),
 			CompletionRatio:             3,
 			CachedInputRatio:            nativeRate(12),
 			ContextLength:               8192,
@@ -152,7 +158,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Description:                 "Baidu ERNIE 4.0 8K (latest alias): closed-weight flagship chat model on Qianfan v2.",
 		},
 		"ernie-4.0-8k-preview": {
-			Ratio:                       nativeRate(3e+01),
+			Ratio:                       nativeRate(30),
 			CompletionRatio:             3,
 			CachedInputRatio:            nativeRate(12),
 			ContextLength:               8192,
@@ -164,7 +170,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Description:                 "Baidu ERNIE 4.0 8K (preview): closed-weight flagship chat model on Qianfan v2.",
 		},
 		"ernie-4.0-turbo-128k": {
-			Ratio:                       1.4285714285714286,
+			Ratio:                       nativeRate(20),
 			CompletionRatio:             3,
 			CachedInputRatio:            nativeRate(8),
 			ContextLength:               131072,
@@ -176,7 +182,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Description:                 "Baidu ERNIE 4.0 Turbo 128K: long-context closed-weight balanced-cost chat model. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K.",
 		},
 		"ernie-4.0-turbo-8k": {
-			Ratio:                       1.4285714285714286,
+			Ratio:                       nativeRate(20),
 			CompletionRatio:             3,
 			CachedInputRatio:            nativeRate(8),
 			ContextLength:               8192,
@@ -188,7 +194,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Description:                 "Baidu ERNIE 4.0 Turbo 8K: closed-weight balanced-cost chat model. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K.",
 		},
 		"ernie-4.0-turbo-8k-latest": {
-			Ratio:                       1.4285714285714286,
+			Ratio:                       nativeRate(20),
 			CompletionRatio:             3,
 			CachedInputRatio:            nativeRate(8),
 			ContextLength:               8192,
@@ -200,7 +206,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Description:                 "Baidu ERNIE 4.0 Turbo 8K (latest alias): closed-weight balanced-cost chat model.",
 		},
 		"ernie-4.0-turbo-8k-preview": {
-			Ratio:                       1.4285714285714286,
+			Ratio:                       nativeRate(20),
 			CompletionRatio:             3,
 			CachedInputRatio:            nativeRate(8),
 			ContextLength:               8192,
@@ -262,10 +268,14 @@ func ernieModels() map[string]adaptor.ModelConfig {
 		"ernie-5.0": {
 			Ratio:           nativeRate(6),
 			CompletionRatio: 4,
+			// Qianfan published 输入（输入<=32k） at 6/24 and （32k<输入<=128k） at
+			// 10/40 CNY per 1M (https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya,
+			// archived 2026-06-11 through 2026-09-15), the same boundary as the
+			// uppercase ERNIE-5.0 rows. k is normalized to 1000, the smaller reading.
 			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               0.7142857142857143,
+				Ratio:               nativeRate(10),
 				CompletionRatio:     4,
-				InputTokenThreshold: 32768,
+				InputTokenThreshold: 32001,
 			},
 			},
 			ContextLength:               131072,
@@ -281,21 +291,24 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			CompletionRatio: 4.5,
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(6),
-				CompletionRatio:     3.6666666666666665,
-				InputTokenThreshold: 32768,
+				CompletionRatio:     22.0 / 6.0,
+				InputTokenThreshold: 32001,
 			},
 			},
-			ContextLength:               131072,
+			ContextLength:               128000,
 			MaxOutputTokens:             65536,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens"},
 			MaxReasoningTokens:          61440,
-			Description:                 "Baidu ERNIE 5.1 next-generation text chat model (released 2026-05-09) on Qianfan v2 API; 128K context.",
+			// Sources checked 2026-11-16:
+			// https://cloud.baidu.com/doc/qianfan/s/rmh4stp0j
+			// https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya
+			Description: "Baidu ERNIE 5.1 on Qianfan v2. Published 128K context with K normalized to 1000; CNY/M input/output 4/18 through 32K input, then 6/22. No cache price is inferred. Historical uppercase metadata remains separately available.",
 		},
 		"ernie-char-8k": {
-			Ratio:                       2.857142857142857,
+			Ratio:                       nativeRate(40),
 			CompletionRatio:             1,
 			CachedInputRatio:            nativeRate(16),
 			ContextLength:               8192,
@@ -307,7 +320,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Description:                 "Baidu ERNIE Character 8K: closed-weight role-play / persona chat model. Deprecated: already retired (已退役) effective 2026-06-09 (registered 2026-05-28); no replacement listed.",
 		},
 		"ernie-char-fiction-8k": {
-			Ratio:                       2.857142857142857,
+			Ratio:                       nativeRate(40),
 			CompletionRatio:             1,
 			CachedInputRatio:            nativeRate(16),
 			ContextLength:               8192,
@@ -342,7 +355,7 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Description:                 "Baidu ERNIE Lite Pro 128K: long-context cost-efficient closed-weight chat tier. Deprecated: retired 2026-06-30 (registered 2026-05-28), replacement ERNIE-4.5-Turbo-128K.",
 		},
 		"ernie-novel-8k": {
-			Ratio:                       2.857142857142857,
+			Ratio:                       nativeRate(40),
 			CompletionRatio:             1,
 			CachedInputRatio:            nativeRate(16),
 			ContextLength:               8192,
@@ -376,9 +389,9 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			Description:                 "Baidu ERNIE Speed 8K: throughput-optimized closed-weight chat tier on Qianfan v2. Deprecated: already retired (已退役) effective 2026-06-09 (registered 2026-05-28).",
 		},
 		"ernie-speed-pro-128k": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             2,
-			CachedInputRatio:            nativeRate(0.12000000000000001),
+			CachedInputRatio:            nativeRate(0.12),
 			ContextLength:               131072,
 			MaxOutputTokens:             4096,
 			InputModalities:             []string{"text"},
@@ -432,6 +445,37 @@ func ernieModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens"},
 			Description:                 "Baidu ERNIE X1.1 improved deep-reasoning model on Qianfan v2 API; 64K context.",
+		},
+		"ernie-5.5-flash-preview": {
+			Ratio: nativeRate(1), CompletionRatio: 4, CachedInputRatio: nativeRate(.1),
+			ContextLength: 1_000_000, MaxOutputTokens: 1_000_000,
+			InputModalities: []string{"text"}, OutputModalities: []string{"text"},
+			SupportedFeatures: []string{"reasoning"}, SupportedSamplingParameters: []string{"max_tokens", "max_completion_tokens"},
+			TimeWindows: []adaptor.TimeWindow{
+				{
+					Name: "ernie55-preview-promotion-peak", TimeZone: "Asia/Shanghai", DateTo: "2026-12-01",
+					Ranges:  []adaptor.ClockRange{{Start: "08:00", End: "22:00"}},
+					Overlay: adaptor.ModelConfig{Ratio: nativeRate(1), CompletionRatio: 4, CachedInputRatio: nativeRate(.1)},
+				},
+				{
+					Name: "ernie55-preview-promotion-offpeak", TimeZone: "Asia/Shanghai", DateTo: "2026-12-01",
+					Ranges:  []adaptor.ClockRange{{Start: "22:00", End: "08:00"}},
+					Overlay: adaptor.ModelConfig{Ratio: nativeRate(.5), CompletionRatio: 4, CachedInputRatio: nativeRate(.05)},
+				},
+				{
+					Name: "qianfan-peak", TimeZone: "Asia/Shanghai",
+					Ranges:  []adaptor.ClockRange{{Start: "08:00", End: "22:00"}},
+					Overlay: adaptor.ModelConfig{Ratio: nativeRate(2), CompletionRatio: 4, CachedInputRatio: nativeRate(.2)},
+				},
+			},
+			Description: "ERNIE 5.5 Flash Preview on Qianfan v2; 1M context and published total output ceiling, with 64K upstream default output. CNY/M input/cache/output 2/0.2/8 at 08:00-22:00 Asia/Shanghai and 1/0.1/4 otherwise. The 50% promotion ends at 2026-11-30 23:59:59 Asia/Shanghai; dated windows restore list prices at December 1 midnight. Effort is not adjustable.",
+		},
+		"ernie-light-dt-1.0": {
+			Ratio: nativeRate(8), CompletionRatio: 3.5, CachedInputRatio: nativeRate(.8),
+			ContextLength: 1_000_000, MaxOutputTokens: 128_000,
+			InputModalities: []string{"text"}, OutputModalities: []string{"text"},
+			SupportedFeatures: []string{"reasoning"}, SupportedSamplingParameters: []string{"max_tokens", "max_completion_tokens"},
+			Description: "ERNIE Light DT 1.0 on Qianfan v2, CNY 8 input, 0.8 cached input and 28 output per million tokens at all hours. Published 1M context and 128K total output, with K normalized to 1000. The compatible converter does not forward this model's upstream reasoning_effort controls.",
 		},
 	}
 }

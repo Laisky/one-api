@@ -308,7 +308,7 @@ func AdminGetUserTotpStatus(c *gin.Context) {
 
 	userId, err := resolveUserRef(targetUserRef)
 	if err != nil {
-		helper.RespondError(c, errkind.Mark(errors.New("Invalid user ID"), errkind.Of(err)))
+		respondResourceRefErrorAs(c, err, "Invalid user ID")
 		return
 	}
 
@@ -344,10 +344,10 @@ func AdminDisableUserTotp(c *gin.Context) {
 
 	userId, err := resolveUserRef(targetUserId)
 	if err != nil {
-		// Inherit the resolver's attribution: only the malformed-reference and
-		// not-found sentinels are client-caused. A lookup failure (database or
-		// cache outage) stays Unknown so it keeps reaching the ERROR branch.
-		helper.RespondError(c, errkind.Mark(errors.New("Invalid user ID"), errkind.Of(err)))
+		// Only the malformed-reference and not-found sentinels are
+		// client-caused. A lookup failure (database or cache outage) keeps its
+		// cause, so it reaches the ERROR branch with that cause logged.
+		respondResourceRefErrorAs(c, err, "Invalid user ID")
 		return
 	}
 

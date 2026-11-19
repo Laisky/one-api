@@ -2,13 +2,14 @@ package openrouter
 
 import "github.com/Laisky/one-api/relay/adaptor"
 
-// inclusionaiModels returns the inclusionai model defaults for openrouter.
-// It takes no arguments and returns independently owned, directly editable Go configurations.
+// inclusionaiModels returns independently owned inclusionai defaults for openrouter.
+// It takes no arguments and keeps each model definition directly editable in its family.
+// Source: https://openrouter.ai/api/v1/models
 func inclusionaiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"inclusionai/ling-2.6-1t": {
 			Ratio:                       nativeRate(0.075),
-			CompletionRatio:             8.333333333333334,
+			CompletionRatio:             0.625 / 0.075,
 			CachedInputRatio:            nativeRate(0.015),
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,
@@ -31,9 +32,9 @@ func inclusionaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "Ling-2.6-flash is an instant (instruct) model from inclusionAI with 104B total parameters and 7.4B active parameters, designed for real-world agents that require fast responses, strong execution, and high token efficiency....",
 		},
 		"inclusionai/ling-3.0-flash": {
-			Ratio:                       nativeRate(0.020999999999999998),
-			CompletionRatio:             3.0000000000000004,
-			CachedInputRatio:            nativeRate(0.004200000000000001),
+			Ratio:                       nativeRate(0.021),
+			CompletionRatio:             3,
+			CachedInputRatio:            nativeRate(0.0042),
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text"},
@@ -66,6 +67,18 @@ func inclusionaiModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logprobs", "max_tokens", "presence_penalty", "reasoning", "repetition_penalty", "seed", "stop", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			Description:                 "inclusionai/ling-3.0-flash-fin:free on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
+		"inclusionai/ling-3.0-flash-sante": {
+			Ratio:                       nativeRate(0.042),
+			CompletionRatio:             (0.1232 * 1.0) / 0.042,
+			CachedInputRatio:            nativeRate(0.0084),
+			ContextLength:               262144,
+			MaxOutputTokens:             32768,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logprobs", "max_tokens", "presence_penalty", "reasoning", "repetition_penalty", "seed", "stop", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			Description:                 "inclusionai/ling-3.0-flash-sante on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified.",
+		},
 		"inclusionai/ling-3.0-flash-sante:free": {
 			Ratio:                       0,
 			CompletionRatio:             1,
@@ -78,21 +91,59 @@ func inclusionaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "inclusionai/ling-3.0-flash-sante:free on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"inclusionai/ling-3.0-flash-vl": {
-			Ratio:                       nativeRate(0.021),
-			CompletionRatio:             (0.0616 * 1.0) / 0.021,
-			CachedInputRatio:            nativeRate(0.0042),
-			ContextLength:               262144,
+			Ratio:                       nativeRate(0.06),
+			CompletionRatio:             3,
+			CachedInputRatio:            nativeRate(0.012),
+			ContextLength:               131072,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text", "image", "video"},
 			OutputModalities:            []string{"text"},
-			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
-			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
 			HuggingFaceID:               "inclusionAI/Ling-3.0-flash-VL",
-			Description:                 "inclusionai/ling-3.0-flash-vl on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified.",
+			Description:                 "inclusionai/ling-3.0-flash-vl on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
+		"inclusionai/ling-3.0-tiny": {
+			Ratio:                       nativeRate(0.015),
+			CompletionRatio:             3,
+			CachedInputRatio:            nativeRate(0.003),
+			ContextLength:               262144,
+			MaxOutputTokens:             250000,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logprobs", "max_tokens", "presence_penalty", "reasoning", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_logprobs", "top_p"},
+			HuggingFaceID:               "inclusionAI/Ling-3.0-tiny",
+			Description:                 "inclusionai/ling-3.0-tiny on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+		},
+		"inclusionai/ling-3.1-flash": {
+			Ratio:                       nativeRate(0.045),
+			CompletionRatio:             3,
+			ContextLength:               1000000,
+			MaxOutputTokens:             262144,
+			InputModalities:             []string{"text"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logprobs", "max_tokens", "presence_penalty", "reasoning", "repetition_penalty", "seed", "stop", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			Description:                 "inclusionai/ling-3.1-flash on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			CachedInputRatio:            nativeRate(0.009),
+			HuggingFaceID:               "inclusionAI/Ling-3.1-flash",
+		},
+		"inclusionai/ling-3.2-flash:free": {
+			Ratio:                       nativeRate(0),
+			CompletionRatio:             1,
+			ContextLength:               1048576,
+			MaxOutputTokens:             262144,
+			InputModalities:             []string{"text", "image"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "presence_penalty", "reasoning", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
+			HuggingFaceID:               "inclusionAI/Ling-3.2-flash",
+			Description:                 "inclusionai/ling-3.2-flash:free on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges. The published token tariff is explicitly free; account limits still apply.",
 		},
 		"inclusionai/ring-2.6-1t": {
 			Ratio:                       nativeRate(0.075),
-			CompletionRatio:             8.333333333333334,
+			CompletionRatio:             0.625 / 0.075,
 			CachedInputRatio:            nativeRate(0.015),
 			ContextLength:               262144,
 			MaxOutputTokens:             65536,

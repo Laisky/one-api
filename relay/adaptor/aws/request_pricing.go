@@ -6,6 +6,8 @@ import (
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/gin-gonic/gin"
+
 	"github.com/Laisky/one-api/common/ctxkey"
 	channelmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
@@ -13,7 +15,6 @@ import (
 	awsClaude "github.com/Laisky/one-api/relay/adaptor/aws/claude"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/pricing"
-	"github.com/gin-gonic/gin"
 )
 
 var _ adaptor.RequestPricingValidator = (*Adaptor)(nil)
@@ -51,12 +52,12 @@ func (a *Adaptor) ValidateRequestPricing(c *gin.Context, m *meta.Meta) error {
 	cfg, found := pricing.ResolveModelConfigRatioOnly(name, channel.GetModelPriceConfigsWithContext(gmw.Ctx(c)), nil, m.StartTime)
 	valid := func(v float64) bool { return v > 0 && !math.IsNaN(v) && !math.IsInf(v, 0) }
 	if !found || !valid(cfg.CachedInputRatio) || !valid(cfg.CacheWrite5mRatio) || !valid(cfg.CacheWrite1hRatio) {
-		return errors.New("AWS Claude 5.2 profile override requires explicit positive cache read, 5m write, and 1h write pricing")
+		return adaptor.RequestPricingNotConfigured(errors.New("AWS Claude 5.2 profile override requires explicit positive cache read, 5m write, and 1h write pricing"))
 	}
 	for _, tier := range cfg.Tiers {
 		for _, v := range []float64{tier.CachedInputRatio, tier.CacheWrite5mRatio, tier.CacheWrite1hRatio} {
 			if v != 0 && !valid(v) {
-				return errors.New("AWS Claude 5.2 profile override has invalid explicit tier cache pricing")
+				return adaptor.RequestPricingNotConfigured(errors.New("AWS Claude 5.2 profile override has invalid explicit tier cache pricing"))
 			}
 		}
 	}

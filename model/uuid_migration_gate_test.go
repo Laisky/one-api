@@ -81,7 +81,7 @@ func TestUUIDAwareWriterOutputPassesFinalizerCompatibilityGate(t *testing.T) {
 	RecordConsumeLog(ctx, consumeLog)
 	require.Positive(t, consumeLog.Id, "the consume log must be persisted")
 
-	// controller/token.go builds the transaction from the token and the log it just recorded.
+	// controller/token_consume.go builds the transaction from the token and the log it just recorded.
 	require.NoError(t, CreateTokenTransaction(ctx, &TokenTransaction{
 		TransactionID: "gate-txn",
 		TokenId:       fixture.token.Id, TokenUUID: &fixture.token.UUID,
