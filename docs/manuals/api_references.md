@@ -582,6 +582,7 @@ _Total: 154 active routes across 15 sections (plus 38 reserved OpenAI endpoints 
 | `POST` | [`/api/channel/update_balance/:id`](#channel-administration--diagnostics) | Admin | Query upstream billing for one channel; flat balance field (USD), supported types only. |
 | `GET` | [`/api/channel/pricing/:id`](#channel-administration--diagnostics) | Admin | Effective pricing: derived ratios, unified model_configs, tooling. |
 | `GET` | [`/api/channel/default-pricing`](#channel-administration--diagnostics) | Admin | Adapter default pricing for a type; fields are JSON-encoded strings. |
+| `POST` | [`/api/channel/pricing-readiness`](#channel-administration--diagnostics) | Admin | Read-only pre-save check: supported models that admission would refuse until channel pricing is configured. |
 | `POST` | [`/api/channel/`](#channel-administration--diagnostics) | Admin | Create one or more channels (newline-split key = bulk create). |
 | `POST` | [`/api/channel/:id/duplicate`](#channel-administration--diagnostics) | Admin | Clone a channel; resets identity/usage, appends ' Copy'. |
 | `PUT` | [`/api/channel/`](#channel-administration--diagnostics) | Admin | Update channel; full update or status_only mode. |
@@ -6730,6 +6731,61 @@ curl -sS "$BASE_URL/api/channel/default-pricing?type=1" \
 |--------|---------|
 | 200 `{"success": false, "message": "Invalid channel type: ..."}` | `type` is missing or not an integer. |
 | 200 `{"success": false, "message": "Unsupported channel type"}` | No adapter exists for a non-OpenAI-compatible type. |
+
+### POST /api/channel/pricing-readiness
+
+Reports which Supported Models of a channel draft request admission would refuse until the channel's `model_configs` prices them, so the channel editor can warn before saving. The draft uses the channel save payload's encoding and is parsed with the same parsers the relay uses for saved channels; each model is evaluated after Model Mapping with the admission validators themselves (GPT Image 2.5/2.6 reservation fallback, operator-only token tariffs, provider-required cache prices, and Live-only realtime prices). It reads no channel rows and changes nothing.
+
+**Auth:** Management access token — `Authorization: $ACCESS_TOKEN` (AdminAuth).
+
+**Request body** (JSON, at most 4 MiB; unknown fields are rejected)
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | integer | Yes | Channel type code. |
+| `models` | string | Yes | Comma-separated Supported Models (trimmed and de-duplicated like a saved channel; at most 10,000 entries). |
+| `model_mapping` | string (JSON) or null | No | Model Mapping JSON text. |
+| `model_configs` | string (JSON) or null | No | Model Configs JSON text. |
+
+**Response**: HTTP 200. `data.gaps` is `[]` when every model is ready; a model can have several gaps.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `data.gaps[].model` | string | Supported model as listed. |
+| `data.gaps[].upstream_model` | string | Model after Model Mapping; the name admission prices and the `model_configs` key to set. |
+| `data.gaps[].requirement` | string | `image_price_per_image_usd`, `token_tariff`, `tariff_supplement`, or `live_tariff`. |
+| `data.gaps[].message` | string | The refusal text admission returns. |
+
+```json
+{
+  "success": true,
+  "message": "",
+  "data": {
+    "gaps": [
+      {
+        "model": "cyber",
+        "upstream_model": "gpt-6-cyber",
+        "requirement": "token_tariff",
+        "message": "model \"gpt-6-cyber\" requires explicit positive input and output pricing in channel model_configs"
+      }
+    ]
+  }
+}
+```
+
+**Example**
+
+```bash
+curl -sS -X POST "$BASE_URL/api/channel/pricing-readiness" \
+  -H "Authorization: $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{"type":3,"models":"gpt-4o,cyber","model_mapping":"{\"cyber\":\"gpt-6-cyber\"}","model_configs":null}'
+```
+
+**Errors**
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Malformed or oversized body, unknown field, unsupported channel type, too many models, or Model Mapping / Model Configs that are not valid JSON objects. |
 
 ### POST /api/debug/channel/:id/debug
 

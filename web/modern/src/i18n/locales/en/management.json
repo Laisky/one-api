@@ -405,8 +405,18 @@
         "confirm": "Save Anyway",
         "description": "The following Model Mapping keys are not listed in Supported Models. Requests to these aliases will be rejected by the router even though the mapping is saved:",
         "hint": "Correct each entry, or save anyway to keep the mapping as-is.",
+        "pricing_description": "Requests to the following models will be refused until this channel prices them in Model Configs:",
+        "pricing_hint": "Add the missing prices now, or save anyway and price these models before sending traffic to them.",
+        "pricing_requirement": {
+          "image_price_per_image_usd": "Set a positive image.price_per_image_usd (the per-image reservation and fallback price).",
+          "live_tariff": "Set the Live prices: ratio, completion_ratio, audio prompt and completion ratios, and image prompt_ratio.",
+          "tariff_supplement": "Set the cache prices this provider requires: cached_input_ratio, plus cache_write_5m_ratio and cache_write_1h_ratio where required.",
+          "token_tariff": "Set a positive ratio and completion_ratio, including every tier."
+        },
         "target_description": "The following Model Mapping targets are not recognized as models for this channel. The upstream provider may reject these requests:",
-        "title": "Model Mapping has suspicious entries"
+        "title": "Model Mapping has suspicious entries",
+        "title_combined": "Review the channel configuration before saving",
+        "title_pricing": "Some models need channel pricing"
       },
       "spark": {
         "api_key": {

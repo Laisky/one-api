@@ -26,11 +26,47 @@ vi.mock('react-i18next', () => ({
 }));
 
 const mockApiGet = vi.mocked(api.get);
+const mockApiPost = vi.mocked(api.post);
 const mockApiPut = vi.mocked(api.put);
+
+/** mockLoadedChannel serves the edit page's GET requests for one stored channel of the given type and models. */
+const mockLoadedChannel = (type: number, models: string) => {
+  mockApiGet.mockImplementation((url) => {
+    if (url.startsWith('/api/channel/1')) {
+      return Promise.resolve({
+        data: {
+          success: true,
+          data: {
+            id: 1,
+            type,
+            name: 'Priced Channel',
+            models,
+            base_url: 'https://example.openai.azure.com',
+            group: 'default',
+            config: '{}',
+            tooling: '{}',
+          },
+        },
+      });
+    }
+    if (url.startsWith('/api/models')) {
+      return Promise.resolve({ data: { success: true, data: { [type]: models.split(',') } } });
+    }
+    if (url.startsWith('/api/channel/default-pricing')) {
+      return Promise.resolve({ data: { success: true, data: { model_configs: '{}', tooling: '{}' } } });
+    }
+    if (url.startsWith('/api/channel/metadata')) {
+      return Promise.resolve({ data: { success: true, data: { default_base_url: 'https://example.openai.azure.com' } } });
+    }
+    return Promise.resolve({ data: { success: false } });
+  });
+};
 
 describe('useChannelForm', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // The pre-save pricing readiness check reports no gaps unless a test says otherwise.
+    mockApiPost.mockResolvedValue({ data: { success: true, message: '', data: { gaps: [] } } });
   });
 
   it('should not cause infinite loop when loading channel', async () => {
@@ -324,5 +360,73 @@ describe('useChannelForm', () => {
     expect(mockApiPut).not.toHaveBeenCalled();
     expect(result.current.pendingSaveConfirmation?.unreachableMappingKeys).toEqual(['public-alias']);
     expect(result.current.pendingSaveConfirmation?.unknownMappingTargets).toEqual([{ source: 'public-alias', target: 'gpt-4o' }]);
+  });
+
+  it('warns before saving supported models that request admission would refuse for missing pricing', async () => {
+    mockLoadedChannel(3, 'gpt-4o,gpt-6-cyber');
+    const gap = {
+      model: 'gpt-6-cyber',
+      upstream_model: 'gpt-6-cyber',
+      requirement: 'token_tariff',
+      message: 'model "gpt-6-cyber" requires explicit positive input and output pricing in channel model_configs',
+    };
+    mockApiPost.mockResolvedValue({ data: { success: true, message: '', data: { gaps: [gap] } } });
+    mockApiPut.mockResolvedValue({ data: { success: true, message: '' } });
+
+    const { result } = renderHook(() => useChannelForm());
+    await waitFor(() => {
+      expect(result.current.loading).toBe(false);
+    });
+
+    await act(async () => {
+      await result.current.form.handleSubmit(result.current.onSubmit)();
+    });
+
+    expect(mockApiPost).toHaveBeenCalledWith(
+      '/api/channel/pricing-readiness',
+      { type: 3, models: 'gpt-4o,gpt-6-cyber', model_mapping: null, model_configs: null },
+      expect.objectContaining({ timeout: expect.any(Number) })
+    );
+    expect(mockApiPut).not.toHaveBeenCalled();
+    expect(result.current.isSubmitting).toBe(false);
+    expect(result.current.pendingSaveConfirmation?.pricingGaps).toEqual([gap]);
+    expect(result.current.pendingSaveConfirmation?.unreachableMappingKeys).toEqual([]);
+    expect(result.current.pendingSaveConfirmation?.unknownMappingTargets).toEqual([]);
+
+    // Save Anyway keeps the channel savable exactly as before.
+    await act(async () => {
+      await result.current.confirmSave();
+    });
+    expect(mockApiPut).toHaveBeenCalledTimes(1);
+    expect(mockApiPut).toHaveBeenCalledWith('/api/channel/', expect.objectContaining({ uuid: '1', models: 'gpt-4o,gpt-6-cyber' }));
+    expect(result.current.pendingSaveConfirmation).toBeNull();
+  });
+
+  it('saves without a pricing warning when the readiness check fails', async () => {
+    mockLoadedChannel(3, 'gpt-6-cyber');
+    mockApiPost.mockRejectedValue(new Error('Network Error'));
+    mockApiPut.mockResolvedValue({ data: { success: true, message: '' } });
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const { result } = renderHook(() => useChannelForm());
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
+
+      await act(async () => {
+        await result.current.form.handleSubmit(result.current.onSubmit)();
+      });
+
+      expect(mockApiPost).toHaveBeenCalledTimes(1);
+      expect(mockApiPut).toHaveBeenCalledTimes(1);
+      expect(result.current.pendingSaveConfirmation).toBeNull();
+      const readinessWarnings = warn.mock.calls.filter((call) => String(call[0]).includes('channel-pricing-readiness'));
+      expect(readinessWarnings).toHaveLength(1);
+      expect(readinessWarnings[0]).toHaveLength(1);
+      expect(typeof readinessWarnings[0][0]).toBe('string');
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

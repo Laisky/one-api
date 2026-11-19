@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Form } from '@/components/ui/form';
 import { ResponsivePageContainer } from '@/components/ui/responsive-container';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -130,6 +130,7 @@ export function EditChannelPage() {
           }}
           unreachableMappingKeys={pendingSaveConfirmation?.unreachableMappingKeys ?? []}
           unknownMappingTargets={pendingSaveConfirmation?.unknownMappingTargets ?? []}
+          pricingGaps={pendingSaveConfirmation?.pricingGaps ?? []}
           onConfirm={confirmSave}
           onCancel={cancelSave}
           tr={tr}

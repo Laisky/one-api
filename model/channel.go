@@ -340,11 +340,7 @@ func (channel *Channel) GetModelMapping() map[string]string {
 // mapping is read during an HTTP request. Returns: the mapping or nil when it
 // is empty or malformed.
 func (channel *Channel) GetModelMappingWithContext(ctx context.Context) map[string]string {
-	if channel.ModelMapping == nil || *channel.ModelMapping == "" || *channel.ModelMapping == "{}" {
-		return nil
-	}
-	modelMapping := make(map[string]string)
-	err := json.Unmarshal([]byte(*channel.ModelMapping), &modelMapping)
+	modelMapping, err := ParseModelMapping(channel.ModelMapping)
 	if err != nil {
 		logger.FromContext(ctx).Error("failed to unmarshal model mapping for channel",
 			append(channel.Ref().Zap(), zap.Error(err))...)

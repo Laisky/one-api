@@ -21,12 +21,7 @@ func (channel *Channel) GetModelPriceConfigs() map[string]ModelConfigLocal {
 // during an HTTP request. Returns: parsed model pricing or nil when absent or
 // malformed.
 func (channel *Channel) GetModelPriceConfigsWithContext(ctx context.Context) map[string]ModelConfigLocal {
-	if channel.ModelConfigs == nil || *channel.ModelConfigs == "" || *channel.ModelConfigs == "{}" {
-		return nil
-	}
-
-	modelPriceConfigs := make(map[string]ModelConfigLocal)
-	err := json.Unmarshal([]byte(*channel.ModelConfigs), &modelPriceConfigs)
+	modelPriceConfigs, err := ParseModelPriceConfigs(channel.ModelConfigs)
 	if err != nil {
 		logger.FromContext(ctx).Error("failed to unmarshal model price configs for channel",
 			append(channel.Ref().Zap(), zap.Error(err))...)

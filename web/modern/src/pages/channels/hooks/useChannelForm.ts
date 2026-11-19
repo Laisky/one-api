@@ -20,6 +20,7 @@ import {
   validateModelConfigs,
 } from '../helpers';
 import { createChannelSchema, type ChannelConfigForm, type ChannelForm, type ChannelFormInput, type EndpointInfo } from '../schemas';
+import { fetchChannelPricingGaps, getChannelMappingWarnings, type ChannelPricingGap } from './channelSaveWarnings';
 /** useChannelForm manages channel loading, validation, submission, and related UI state, returning the complete page model. */
 export const useChannelForm = () => {
   const params = useParams();
@@ -48,11 +49,12 @@ export const useChannelForm = () => {
     fromType: number;
     toType: number;
   } | null>(null);
-  // State for save warning confirmation dialog when Model Mapping keys/targets look suspicious.
+  // State for the save warning dialog when Model Mapping entries look suspicious or models lack pricing.
   const [pendingSaveConfirmation, setPendingSaveConfirmation] = useState<{
     data: ChannelForm;
     unreachableMappingKeys: string[];
     unknownMappingTargets: { source: string; target: string }[];
+    pricingGaps: ChannelPricingGap[];
   } | null>(null);
   const schema = useMemo(() => createChannelSchema((key, defaultValue) => tr(key, defaultValue)), [tr]);
   const form = useForm<ChannelFormInput, unknown, ChannelForm>({
@@ -394,63 +396,26 @@ export const useChannelForm = () => {
   }, [normalizedChannelType, loadDefaultPricing]);
 
   /**
-   * getMappingWarnings inspects Model Mapping entries against the channel's configuration to
-   * surface silent misconfigurations before saving:
-   * - Source (key) not in Supported Models → requests to the alias cannot reach this channel.
-   * - Target (value) not in either the channel's supported list or the channel-type catalog →
-   *   likely a typo that will cause the upstream to reject requests.
+   * onSubmit intercepts a validated save so admins can review Model Mapping entries that look wrong
+   * and supported models that request admission would refuse for missing channel pricing; it takes
+   * the form data and either opens the save warning dialog or submits. The pricing check is
+   * advisory and fails open, so it never blocks saving by itself.
    */
-  const getMappingWarnings = (data: ChannelForm): { unreachableKeys: string[]; unknownTargets: { source: string; target: string }[] } => {
-    const empty = { unreachableKeys: [] as string[], unknownTargets: [] as { source: string; target: string }[] };
-    const mappingRaw = (data.model_mapping || '').trim();
-    if (!mappingRaw) {
-      return empty;
-    }
-    let parsed: unknown;
-    try {
-      parsed = parsePrivateChannelJSON(sanitizeJsonInput(mappingRaw));
-    } catch {
-      return empty;
-    }
-    if (!parsed || Array.isArray(parsed) || typeof parsed !== 'object') {
-      return empty;
-    }
-    const supported = new Set((data.models || []).map((model) => model.trim()).filter((model) => model.length > 0));
-    const channelType = normalizeChannelType(data.type);
-    const catalog = channelType !== null ? (modelsCatalog[channelType] ?? []) : [];
-    const catalogSet = new Set(catalog.map((model) => model.trim()).filter((model) => model.length > 0));
-    const knownTargets = new Set<string>();
-    supported.forEach((entry) => knownTargets.add(entry));
-    catalogSet.forEach((entry) => knownTargets.add(entry));
-
-    const unreachableKeys: string[] = [];
-    const unknownTargets: { source: string; target: string }[] = [];
-    for (const [rawKey, rawValue] of Object.entries(parsed as Record<string, unknown>)) {
-      const key = rawKey.trim();
-      if (key.length === 0) continue;
-      if (!supported.has(key)) {
-        unreachableKeys.push(key);
-      }
-      if (catalogSet.size === 0) continue; // Cannot judge target validity without a catalog.
-      if (typeof rawValue !== 'string') continue;
-      const target = rawValue.trim();
-      if (target.length === 0) continue;
-      if (!knownTargets.has(target)) {
-        unknownTargets.push({ source: key, target });
-      }
-    }
-    return { unreachableKeys, unknownTargets };
-  };
-
   const onSubmit = async (data: ChannelForm) => {
-    // Intercept before hitting the network so admins can review Model Mapping entries that
-    // look wrong (sources unreachable or targets not recognized by this channel).
-    const { unreachableKeys, unknownTargets } = getMappingWarnings(data);
-    if (unreachableKeys.length > 0 || unknownTargets.length > 0) {
+    const { unreachableKeys, unknownTargets } = getChannelMappingWarnings(data, modelsCatalog);
+    let pricingGaps: ChannelPricingGap[] = [];
+    setIsSubmitting(true);
+    try {
+      pricingGaps = await fetchChannelPricingGaps(data, { isEdit, watchType: data.type, watchConfig });
+    } finally {
+      setIsSubmitting(false);
+    }
+    if (unreachableKeys.length > 0 || unknownTargets.length > 0 || pricingGaps.length > 0) {
       setPendingSaveConfirmation({
         data,
         unreachableMappingKeys: unreachableKeys,
         unknownMappingTargets: unknownTargets,
+        pricingGaps,
       });
       return;
     }
@@ -674,7 +639,7 @@ export const useChannelForm = () => {
   }, []);
 
   /**
-   * Confirms the pending save (dismissing the Model Mapping warning) and submits.
+   * Confirms the pending save (dismissing the Model Mapping and pricing warnings) and submits.
    */
   const confirmSave = useCallback(async () => {
     const pending = pendingSaveConfirmation;
@@ -763,7 +728,7 @@ export const useChannelForm = () => {
     requestTypeChange,
     confirmTypeChange,
     cancelTypeChange,
-    // Save warning handling (Model Mapping keys missing from Supported Models)
+    // Save warning handling (suspicious Model Mapping entries and models lacking channel pricing)
     pendingSaveConfirmation,
     confirmSave,
     cancelSave,

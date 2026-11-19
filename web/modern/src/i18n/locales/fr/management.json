@@ -405,8 +405,18 @@
         "confirm": "Enregistrer quand même",
         "description": "Les clés de Model Mapping suivantes ne figurent pas dans les Modèles Pris en Charge. Les requêtes vers ces alias seront rejetées par le routeur même si le mappage est enregistré :",
         "hint": "Corrigez chaque entrée, ou enregistrez quand même pour conserver le mappage tel quel.",
+        "pricing_description": "Les requêtes vers les modèles suivants seront refusées tant que ce canal ne leur aura pas attribué de prix dans les Configurations de modèle :",
+        "pricing_hint": "Ajoutez maintenant les prix manquants, ou enregistrez quand même et tarifez ces modèles avant de leur envoyer du trafic.",
+        "pricing_requirement": {
+          "image_price_per_image_usd": "Définissez un image.price_per_image_usd positif (le prix de réservation et de repli par image).",
+          "live_tariff": "Définissez les prix Live : ratio, completion_ratio, les ratios prompt et completion audio, et le prompt_ratio image.",
+          "tariff_supplement": "Définissez les prix de cache exigés par ce fournisseur : cached_input_ratio et, si nécessaire, cache_write_5m_ratio et cache_write_1h_ratio.",
+          "token_tariff": "Définissez un ratio et un completion_ratio positifs, y compris pour chaque palier."
+        },
         "target_description": "Les cibles de Model Mapping suivantes ne sont pas reconnues comme des modèles de ce canal. Le fournisseur upstream peut rejeter ces requêtes :",
-        "title": "Model Mapping contient des entrées suspectes"
+        "title": "Model Mapping contient des entrées suspectes",
+        "title_combined": "Vérifiez la configuration du canal avant d’enregistrer",
+        "title_pricing": "Certains modèles nécessitent une tarification du canal"
       },
       "spark": {
         "api_key": {
