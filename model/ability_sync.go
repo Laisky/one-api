@@ -133,14 +133,15 @@ func syncAbilitiesWithDB(db *gorm.DB, channel *Channel, liftSuspensions bool) er
 		}
 	}
 	lifted := int64(0)
+	newEpoch := time.Now().UTC().UnixNano()
 	if liftSuspensions {
 		// Any existing ability can have an attempt still in flight against the
 		// old upstream. Fence those attempts even if there is no current deadline.
-		now := time.Now().UTC().UnixNano()
 		result := db.Model(&Ability{}).Where("channel_id = ?", channel.Id).
 			Updates(map[string]any{
 				"suspend_until": nil, "adaptive_suspend_until": nil,
-				"cooldown_recovery": gorm.Expr("CASE WHEN cooldown_recovery < ? THEN ? ELSE cooldown_recovery END", now, now),
+				"cooldown_config_changed_at": gorm.Expr("CASE WHEN cooldown_config_changed_at < ? THEN ? ELSE cooldown_config_changed_at END", newEpoch, newEpoch),
+				"cooldown_recovery":          0, "cooldown_history": "", "cooldown_failures": 0, "cooldown_last_failure": 0,
 				"cooldown_revision": gorm.Expr("cooldown_revision + 1"),
 			})
 		if result.Error != nil {
@@ -151,6 +152,7 @@ func syncAbilitiesWithDB(db *gorm.DB, channel *Channel, liftSuspensions bool) er
 	missing := make([]Ability, 0, len(desired))
 	for _, ability := range desired {
 		if _, ok := present[abilityKey{group: ability.Group, model: ability.Model}]; !ok {
+			ability.CooldownConfigChangedAt = newEpoch
 			missing = append(missing, ability)
 		}
 	}

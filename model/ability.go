@@ -31,14 +31,16 @@ type Ability struct {
 	// solely on the parent channel (channels.weight, the single source of truth) and
 	// is read there by both routing paths. See getRandomSatisfiedChannel and
 	// pickWeightedChannel.
-	SuspendUntil         *time.Time `json:"suspend_until,omitempty" gorm:"index"`
-	AdaptiveSuspendUntil *time.Time `json:"-" gorm:"index"`
-	CooldownFailures     int        `json:"-" gorm:"not null;default:0"`
-	CooldownLastFailure  int64      `json:"-" gorm:"not null;default:0"`
-	CooldownRecovery     int64      `json:"-" gorm:"not null;default:0"`
-	CooldownRevision     int64      `json:"-" gorm:"not null;default:0"`
-	CreatedAt            int64      `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
-	UpdatedAt            int64      `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
+	SuspendUntil            *time.Time `json:"suspend_until,omitempty" gorm:"index"`
+	AdaptiveSuspendUntil    *time.Time `json:"-" gorm:"index"`
+	CooldownHistory         string     `json:"-" gorm:"type:varchar(128);not null;default:''"`
+	CooldownConfigChangedAt int64      `json:"-" gorm:"not null;default:0"`
+	CooldownFailures        int        `json:"-" gorm:"not null;default:0"`
+	CooldownLastFailure     int64      `json:"-" gorm:"not null;default:0"`
+	CooldownRecovery        int64      `json:"-" gorm:"not null;default:0"`
+	CooldownRevision        int64      `json:"-" gorm:"not null;default:0"`
+	CreatedAt               int64      `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
+	UpdatedAt               int64      `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 }
 
 // exactModelPredicate returns a parameterized equality predicate for a trusted,

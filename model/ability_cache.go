@@ -118,6 +118,15 @@ func routableCachedChannelsLocked(group, model string, excluded map[int]bool, no
 	return candidates, routable
 }
 
+// publishAbilityCooldownRecovery refreshes the merged deadline after a successful
+// recovery changed adaptive state. It takes the writer lock only on that slow
+// path, so a watermark-only update never waits for cache rebuild database I/O.
+func publishAbilityCooldownRecovery(ctx context.Context, key cachedAbilityKey) error {
+	abilityCacheUpdateLock.Lock()
+	defer abilityCacheUpdateLock.Unlock()
+	return refreshCachedAbilityDeadline(ctx, key)
+}
+
 // publishCachedAbilitySuspension makes a persisted suspension visible to cached
 // routing immediately. The caller must hold abilityCacheUpdateLock and must call
 // it only after the database write succeeded, so the cache never claims a

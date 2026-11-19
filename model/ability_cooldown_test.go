@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -62,10 +63,10 @@ func TestAdaptiveAbilityCooldownPersistsAndResets(t *testing.T) {
 		failure = failure.Add(expected + 2*time.Second)
 	}
 
-	// A success from before the latest failure is not evidence that the channel recovered.
+	// A success from before the latest failure retains that later failure.
 	lastFailure := time.Unix(0, read().CooldownLastFailure).UTC()
-	require.NoError(t, ResetAbilityCooldown(ctx, key.group, key.model, key.channelID, lastFailure.Add(-time.Second), lastFailure.Add(time.Second)))
-	require.Equal(t, 5, read().CooldownFailures)
+	require.NoError(t, ResetAbilityCooldown(ctx, key.group, key.model, key.channelID, lastFailure.Add(-2*time.Second), lastFailure.Add(-time.Second)))
+	require.Equal(t, 1, read().CooldownFailures)
 
 	fixed := failure.Add(20 * time.Minute)
 	require.NoError(t, exactCooldownAbility(DB, key).Update("suspend_until", fixed).Error)
@@ -81,9 +82,9 @@ func TestAdaptiveAbilityCooldownPersistsAndResets(t *testing.T) {
 	got, err := RecordAbilityCooldownFailure(ctx, key.group, key.model, key.channelID, failure.Add(-2*time.Second), failure.Add(-time.Second))
 	require.NoError(t, err)
 	require.Zero(t, got, "a delayed older failure cannot reopen cooldown after success")
-	got, err = RecordAbilityCooldownFailure(ctx, key.group, key.model, key.channelID, failure.Add(-time.Second), failure.Add(2*time.Second))
+	got, err = RecordAbilityCooldownFailure(ctx, key.group, key.model, key.channelID, failure.Add(-time.Second), failure.Add(time.Second))
 	require.NoError(t, err)
-	require.Zero(t, got, "an overlapping older attempt finishing late cannot reopen cooldown")
+	require.Zero(t, got, "a failure tied with a recovery cannot reopen cooldown")
 	got, err = RecordAbilityCooldownFailure(ctx, key.group, key.model, key.channelID, failure.Add(2*time.Second), failure.Add(3*time.Second))
 	require.NoError(t, err)
 	require.Equal(t, 10*time.Second, got)
@@ -186,6 +187,7 @@ func TestAdaptiveAbilityCooldownRetriesConflict(t *testing.T) {
 			"cooldown_failures": 1, "cooldown_revision": 1,
 			"adaptive_suspend_until": at.Add(10 * time.Second),
 			"cooldown_last_failure":  at.UnixNano(),
+			"cooldown_history":       fmt.Sprintf("[%d]", at.UnixNano()),
 		})
 		if result.Error != nil {
 			_ = tx.AddError(result.Error)
@@ -200,4 +202,96 @@ func TestAdaptiveAbilityCooldownRetriesConflict(t *testing.T) {
 	require.Equal(t, 2, row.CooldownFailures)
 	require.EqualValues(t, 2, row.CooldownRevision)
 	require.Equal(t, at.Add(31*time.Second), *row.AdaptiveSuspendUntil)
+}
+
+// TestAdaptiveAbilityCooldownCompletionOrdering checks both write permutations
+// of overlapping outcomes. A later failure retains only its own rung after recovery.
+func TestAdaptiveAbilityCooldownCompletionOrdering(t *testing.T) {
+	db := setupTestDB(t)
+	previous := DB
+	DB = db
+	t.Cleanup(func() { DB = previous })
+	ctx := context.Background()
+	at := time.Now().UTC().Truncate(time.Second)
+	for _, laterFailure := range []bool{false, true} {
+		for _, successFirst := range []bool{false, true} {
+			name := fmt.Sprintf("later-failure=%t/success-first=%t", laterFailure, successFirst)
+			t.Run(name, func(t *testing.T) {
+				const channel = 729
+				require.NoError(t, db.Create(&Ability{Group: "test", Model: name, ChannelId: channel, Enabled: true}).Error)
+				succeed := func() {
+					require.NoError(t, ResetAbilityCooldown(ctx, "test", name, channel, at.Add(2*time.Second), at.Add(4*time.Second)))
+				}
+				fail := func(startSeconds, finishSeconds time.Duration) {
+					_, err := RecordAbilityCooldownFailure(ctx, "test", name, channel, at.Add(startSeconds*time.Second), at.Add(finishSeconds*time.Second))
+					require.NoError(t, err)
+				}
+				fail(0, 1)
+				if successFirst {
+					succeed()
+				}
+				fail(1, 3)
+				if laterFailure {
+					fail(3, 5) // Started before success completed, but finished later.
+					fail(3, 5) // Duplicate outcome cannot advance the streak.
+				}
+				if !successFirst {
+					succeed()
+				}
+				var row Ability
+				require.NoError(t, exactCooldownAbility(db, cachedAbilityKey{"test", name, channel}).Take(&row).Error)
+				require.Equal(t, at.Add(4*time.Second).UnixNano(), row.CooldownRecovery)
+				if laterFailure {
+					require.Equal(t, 1, row.CooldownFailures)
+					require.Equal(t, at.Add(15*time.Second), *row.AdaptiveSuspendUntil)
+					require.JSONEq(t, fmt.Sprintf("[%d]", at.Add(5*time.Second).UnixNano()), row.CooldownHistory)
+				} else {
+					require.Zero(t, row.CooldownFailures)
+					require.Nil(t, row.AdaptiveSuspendUntil)
+				}
+			})
+		}
+	}
+}
+
+// TestAdaptiveAbilityCooldownUpstreamReplacement verifies a changed upstream
+// discards its predecessor's streak and fences earlier dispatched outcomes.
+func TestAdaptiveAbilityCooldownUpstreamReplacement(t *testing.T) {
+	db := setupTestDB(t)
+	previous := DB
+	DB = db
+	t.Cleanup(func() { DB = previous })
+	ctx := context.Background()
+	channel := &Channel{Id: 730, Group: "test", Models: "route", Status: ChannelStatusEnabled}
+	require.NoError(t, syncAbilitiesWithDB(db, channel, false))
+	key := cachedAbilityKey{"test", "route", channel.Id}
+	read := func() Ability {
+		var row Ability
+		require.NoError(t, exactCooldownAbility(db, key).Take(&row).Error)
+		return row
+	}
+	at := time.Unix(0, read().CooldownConfigChangedAt).UTC()
+	for i, rung := range abilityCooldownLadder {
+		event := at.Add(time.Duration(i+1) * time.Nanosecond)
+		got, err := RecordAbilityCooldownFailure(ctx, key.group, key.model, key.channelID, event, event)
+		require.NoError(t, err)
+		require.Equal(t, rung, got)
+	}
+	require.Equal(t, 5, read().CooldownFailures)
+	require.NoError(t, syncAbilitiesWithDB(db, channel, true))
+	row := read()
+	require.Zero(t, row.CooldownFailures)
+	require.Zero(t, row.CooldownLastFailure)
+	require.Empty(t, row.CooldownHistory)
+	require.Nil(t, row.AdaptiveSuspendUntil)
+	require.Greater(t, row.CooldownConfigChangedAt, at.UnixNano())
+	after := time.Unix(0, row.CooldownConfigChangedAt).UTC().Add(time.Second)
+	stale, err := RecordAbilityCooldownFailure(ctx, key.group, key.model, key.channelID, at, after)
+	require.NoError(t, err)
+	require.Zero(t, stale)
+	fresh, err := RecordAbilityCooldownFailure(ctx, key.group, key.model, key.channelID, after, after)
+	require.NoError(t, err)
+	require.Equal(t, 10*time.Second, fresh)
+	require.NoError(t, ResetAbilityCooldown(ctx, key.group, key.model, key.channelID, at, after.Add(time.Second)))
+	require.Equal(t, 1, read().CooldownFailures, "an old provider's late success cannot clear the new provider's streak")
 }

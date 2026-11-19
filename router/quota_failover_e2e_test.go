@@ -151,10 +151,13 @@ func runQuotaRouterSpec(t *testing.T, spec quotaRouterSpec) quotaRouterResult {
 		winnerID = 929293
 	}
 	if spec.seedExpiredCooldown {
-		failedAt := time.Now().UTC().Add(-time.Minute)
-		duration, err := model.RecordAbilityCooldownFailure(context.Background(), "default", passthroughKeysAllowedModel, winnerID, failedAt.Add(-time.Second), failedAt)
+		started := time.Now().UTC()
+		failedAt := time.Now().UTC()
+		duration, err := model.RecordAbilityCooldownFailure(context.Background(), "default", passthroughKeysAllowedModel, winnerID, started, failedAt)
 		require.NoError(t, err)
 		require.Equal(t, 10*time.Second, duration)
+		// Expire only the fixture deadline; retain the actual persisted streak.
+		require.NoError(t, model.DB.Model(&model.Ability{}).Where(&model.Ability{Group: "default", Model: passthroughKeysAllowedModel, ChannelId: winnerID}).Update("adaptive_suspend_until", failedAt.Add(-time.Second)).Error)
 	}
 	config.MemoryCacheEnabled = memory
 	if memory {
