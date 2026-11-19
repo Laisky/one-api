@@ -2,7 +2,6 @@ package message
 
 import (
 	"fmt"
-	"html"
 
 	"github.com/Laisky/one-api/common/config"
 )
@@ -12,7 +11,7 @@ import (
 // Parameters:
 //   - title: plain text shown as the heading; it is HTML-escaped here.
 //   - content: the body as trusted HTML markup. Callers own this markup and must
-//     HTML-escape (html.EscapeString) every untrusted value they interpolate
+//     HTML-escape (EscapeHTML) every untrusted value they interpolate
 //     into it, such as provider error text, user input, or channel names.
 //
 // Returns: the complete HTML document. The operator's SystemName in the footer
@@ -40,5 +39,5 @@ func EmailTemplate(title, content string) string {
     </div>
 </body>
 </html>
-`, html.EscapeString(title), content, html.EscapeString(config.SystemName))
+`, EscapeHTML(title), content, EscapeHTML(config.SystemName))
 }

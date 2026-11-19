@@ -2,7 +2,6 @@ package message
 
 import (
 	"fmt"
-	"html"
 
 	"github.com/Laisky/errors/v2"
 
@@ -30,7 +29,7 @@ const (
 //
 // Returns: the delivery errors, joined for ByAll.
 func Notify(by string, title string, description string, content string) error {
-	emailBody := html.EscapeString(content)
+	emailBody := EscapeHTML(content)
 	switch by {
 	case ByAll:
 		var errMsgs []string

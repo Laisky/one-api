@@ -2,7 +2,6 @@ package controller
 
 import (
 	"fmt"
-	"html"
 	"net/url"
 
 	"github.com/Laisky/one-api/common"
@@ -24,7 +23,7 @@ func emailVerificationContent(subject, code string) string {
 			<p>Your verification code is:</p>
 			<p style="font-size: 24px; font-weight: bold; color: #333; background-color: #f8f8f8; padding: 10px; text-align: center; border-radius: 4px;">%s</p>
 			<p style="color: #666;">The verification code is valid for %d minutes. If you did not request this, please ignore.</p>
-		`, html.EscapeString(config.SystemName), html.EscapeString(code), common.VerificationValidMinutes))
+		`, message.EscapeHTML(config.SystemName), message.EscapeHTML(code), common.VerificationValidMinutes))
 }
 
 // passwordResetLink builds the password-reset URL for an address and token.
@@ -51,7 +50,7 @@ func passwordResetLink(email, code string) string {
 // valid but quote-bearing address (for example "a\"x"@example.com) cannot
 // break out of the href attribute.
 func passwordResetEmailContent(subject, email, code string) string {
-	link := html.EscapeString(passwordResetLink(email, code))
+	link := message.EscapeHTML(passwordResetLink(email, code))
 	return message.EmailTemplate(subject, fmt.Sprintf(`
 			<p>Hello!</p>
 			<p>You are resetting your password for %s.</p>
@@ -62,5 +61,5 @@ func passwordResetEmailContent(subject, email, code string) string {
 			<p style="color: #666;">If the button doesn't work, please copy the following link and paste it into your browser:</p>
 			<p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px; word-break: break-all;">%s</p>
 			<p style="color: #666;">The reset link is valid for %d minutes. If you didn't request this, please ignore.</p>
-		`, html.EscapeString(config.SystemName), link, link, common.VerificationValidMinutes))
+		`, message.EscapeHTML(config.SystemName), link, link, common.VerificationValidMinutes))
 }

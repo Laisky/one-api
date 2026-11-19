@@ -580,20 +580,7 @@ func PreConsumeTokenQuota(ctx context.Context, tokenId int, quota int64) (err er
 				contentText = "Your quota is about to be exhausted"
 			}
 			if email != "" {
-				topUpLink := fmt.Sprintf("%s/topup", config.ServerAddress)
-				content := message.EmailTemplate(
-					prompt,
-					fmt.Sprintf(`
-								<p>Hello!</p>
-								<p>%s, your current remaining quota is <strong>%d</strong>.</p>
-								<p>To avoid any disruption to your service, please top up in a timely manner.</p>
-								<p style="text-align: center; margin: 30px 0;">
-									<a href="%s" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Top Up Now</a>
-								</p>
-								<p style="color: #666;">If the button does not work, please copy the following link and paste it into your browser:</p>
-								<p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px; word-break: break-all;">%s</p>
-					`, contentText, quotaRemaining, topUpLink, topUpLink),
-				)
+				content := quotaReminderEmailContent(prompt, contentText, quotaRemaining, config.ServerAddress)
 				// Local variable: assigning to the enclosing function's named
 				// return value from this goroutine would race with the caller.
 				// The address is never logged (see the no-email rule).
@@ -682,4 +669,33 @@ func adjustPostConsumeQuota(tx *gorm.DB, token *Token, quota int64) error {
 		return errors.Errorf("insufficient token quota or missing token %d", token.Id)
 	}
 	return nil
+}
+
+// quotaReminderEmailContent renders the quota reminder email body.
+//
+// Parameters:
+//   - prompt: the email heading.
+//   - contentText: the reminder sentence.
+//   - quotaRemaining: the remaining quota shown to the user.
+//   - serverAddress: the operator-configured public server address used to
+//     build the top-up link.
+//
+// Returns: the complete HTML email document.
+func quotaReminderEmailContent(prompt, contentText string, quotaRemaining int64, serverAddress string) string {
+	// The server address is operator configuration; escape it so a quote or
+	// markup in it cannot break out of the href attribute.
+	topUpLink := message.EscapeHTML(fmt.Sprintf("%s/topup", serverAddress))
+	return message.EmailTemplate(
+		prompt,
+		fmt.Sprintf(`
+								<p>Hello!</p>
+								<p>%s, your current remaining quota is <strong>%d</strong>.</p>
+								<p>To avoid any disruption to your service, please top up in a timely manner.</p>
+								<p style="text-align: center; margin: 30px 0;">
+									<a href="%s" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block;">Top Up Now</a>
+								</p>
+								<p style="color: #666;">If the button does not work, please copy the following link and paste it into your browser:</p>
+								<p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px; word-break: break-all;">%s</p>
+					`, message.EscapeHTML(contentText), quotaRemaining, topUpLink, topUpLink),
+	)
 }

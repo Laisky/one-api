@@ -3,7 +3,6 @@ package monitor
 import (
 	"context"
 	"fmt"
-	"html"
 
 	"github.com/Laisky/zap"
 
@@ -141,7 +140,7 @@ func NotifyChannelDisabled(channelId int, channelName string, reason string) {
             <p><strong>%s</strong> has been disabled.</p>
             <p>Reason for disabling:</p>
             <p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px;">%s</p>
-        `, html.EscapeString(announcedChannelRef(channelId).String()), html.EscapeString(reason)),
+        `, message.EscapeHTML(announcedChannelRef(channelId).String()), message.EscapeHTML(reason)),
 	)
 	notifyRootUser(subject, content)
 }
@@ -169,7 +168,7 @@ func MetricDisableChannel(channelId int, successRate float64) {
             <p><strong>%s</strong> has been automatically disabled by the system.</p>
             <p>Reason for disabling:</p>
             <p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px;">In the last %d calls, the success rate of this channel was <strong>%.2f%%</strong>, which is below the system threshold of <strong>%.2f%%</strong>.</p>
-        `, html.EscapeString(announcedChannelRef(channelId).String()), config.MetricQueueSize, successRate*100, config.MetricSuccessRateThreshold*100),
+        `, message.EscapeHTML(announcedChannelRef(channelId).String()), config.MetricQueueSize, successRate*100, config.MetricSuccessRateThreshold*100),
 	)
 	notifyRootUser(subject, content)
 }
@@ -208,7 +207,7 @@ func NotifyChannelEnabled(channelId int, channelName string) {
             <p>Hello!</p>
             <p><strong>%s</strong> has been re-enabled.</p>
             <p>You can now continue using this channel.</p>
-        `, html.EscapeString(announcedChannelRef(channelId).String())),
+        `, message.EscapeHTML(announcedChannelRef(channelId).String())),
 	)
 	notifyRootUser(subject, content)
 }
