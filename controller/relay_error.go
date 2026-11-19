@@ -181,7 +181,7 @@ func isAdaptorInternalError(err *model.ErrorWithStatusCode) bool {
 	if err == nil {
 		return false
 	}
-	if err.StatusCode >= http.StatusInternalServerError && err.Type == model.ErrorTypeOneAPI {
+	if err.StatusCode >= http.StatusInternalServerError && err.IsOneAPIError() {
 		return true
 	}
 	return false
@@ -416,7 +416,7 @@ func appendRelayFailureFields(params processChannelRelayErrorParams, extra ...za
 		if params.Err.MessageContainsRawBody {
 			upstreamError = applog.Redact(params.Err.Message)
 		}
-		if params.Err.Type == model.ErrorTypeOneAPI {
+		if params.Err.IsOneAPIError() {
 			fields = append(fields, zap.String("one_api_error", upstreamError))
 		} else {
 			fields = append(fields, zap.String("upstream_error", upstreamError))
@@ -430,7 +430,7 @@ func appendRelayFailureFields(params processChannelRelayErrorParams, extra ...za
 // Parameters: relayErr is the standardized relay error and errorCode is its normalized code.
 // Returns: one_api_user or one_api_token for local quota failures, otherwise an empty string.
 func oneAPIQuotaScope(relayErr model.ErrorWithStatusCode, errorCode string) string {
-	if relayErr.Type != model.ErrorTypeOneAPI {
+	if !relayErr.IsOneAPIError() {
 		return ""
 	}
 
@@ -703,7 +703,7 @@ func isUserOriginatedRelayError(e *model.ErrorWithStatusCode) bool {
 		return true
 	}
 
-	if e.StatusCode == http.StatusBadRequest && e.Type == model.ErrorTypeOneAPI {
+	if e.StatusCode == http.StatusBadRequest && e.IsOneAPIError() {
 		return true
 	}
 
@@ -715,7 +715,9 @@ func isUserOriginatedRelayError(e *model.ErrorWithStatusCode) bool {
 		return false
 	}
 
-	if e.Type != model.ErrorTypeOneAPI {
+	// Only one-api's own rejection proves the caller was at fault; an upstream
+	// gateway's echoed one_api_error describes that channel's account instead.
+	if !e.IsOneAPIError() {
 		return false
 	}
 

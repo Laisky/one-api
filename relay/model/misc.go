@@ -190,9 +190,25 @@ type Error struct {
 	Code    any       `json:"code"`
 	// MessageContainsRawBody identifies complete-body parser fallbacks for explicit application log redaction; API JSON stays unchanged.
 	MessageContainsRawBody bool `json:"-"`
+	// FromUpstream records that Type, Code and Param were taken from a provider
+	// response rather than produced by one-api. It is omitted from JSON, so a
+	// provider cannot set it. See IsOneAPIError.
+	FromUpstream bool `json:"-"`
 	// RawError preserves the original upstream or internal error for diagnostics.
 	// Omitted from JSON to avoid leaking provider internals.
 	RawError error `json:"-"`
+}
+
+// IsOneAPIError reports whether one-api itself produced e with ErrorTypeOneAPI.
+// A provider body that carries "one_api_error" (for example another one-api
+// instance behind a channel) describes that provider, not this gateway, so every
+// classifier that exempts one-api's own errors from retry, ability suspension,
+// channel health or delivery attribution must use this instead of comparing Type.
+//
+// Returns:
+//   - bool: true only for locally produced one_api_error values.
+func (e Error) IsOneAPIError() bool {
+	return e.Type == ErrorTypeOneAPI && !e.FromUpstream
 }
 
 type ErrorWithStatusCode struct {

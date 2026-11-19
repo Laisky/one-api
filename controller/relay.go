@@ -266,32 +266,30 @@ func Relay(c *gin.Context) {
 		)
 	}
 
+	// Track failed channels to avoid retrying them, especially for 429 errors
+	failedChannels := make(map[int]bool)
+	failedChannels[lastFailedChannelId] = true
+
 	// For 413 errors, increase retry attempts to exhaust all available channels
 	// to avoid returning 413 to users when other channels might be available
 	if bizErr.StatusCode == http.StatusRequestEntityTooLarge && retryAllowed {
-		// Get the total number of channels for this model/group
-		// and try to retry all channels
-		channels, err := dbmodel.GetChannelsFromCache(group, originalModel)
+		// Count the eligible channels that remain after excluding the failed one.
+		// Subtracting one from the routable pool would assume the failed channel
+		// is still listed, but a concurrent cooldown may already have hidden it.
+		remaining, err := dbmodel.CountCachedRetryCandidates(group, originalModel, failedChannels)
 		if err != nil {
 			retryTimes = 1
-			lg.Debug("413 error detected, Get channels from cache error",
-				zap.Error(err),
-			)
 			lg.Warn("413 error detected, Failed to get total number of channels for a model/group from cache. increasing retry attempts",
 				zap.Int("retry_attempts", retryTimes),
 				zap.Error(err),
 			)
 		} else {
-			retryTimes = len(channels) - 1
+			retryTimes = remaining
 			lg.Info("413 error detected, increasing retry attempts to exhaust alternative channels",
 				zap.Int("retry_attempts", retryTimes),
 			)
 		}
 	}
-
-	// Track failed channels to avoid retrying them, especially for 429 errors
-	failedChannels := make(map[int]bool)
-	failedChannels[lastFailedChannelId] = true
 
 	// Debug logging to track channel exclusions (only when debug is enabled)
 	if config.DebugEnabled {

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -13,6 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/Laisky/one-api/common"
+	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	dbmodel "github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/channeltype"
@@ -26,7 +28,11 @@ func setupAffinityTestDB(t *testing.T, channel *dbmodel.Channel) {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
 	require.NoError(t, err)
-	require.NoError(t, db.AutoMigrate(&dbmodel.Channel{}, &dbmodel.ChannelGroup{}))
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	// One connection keeps every query on the same in-memory database.
+	sqlDB.SetMaxOpenConns(1)
+	require.NoError(t, db.AutoMigrate(&dbmodel.Channel{}, &dbmodel.ChannelGroup{}, &dbmodel.Ability{}))
 	require.NoError(t, db.Create(channel).Error)
 
 	originalDB := dbmodel.DB
@@ -143,4 +149,40 @@ func TestResponseStateAffinityModelMismatchFallsBack(t *testing.T) {
 	gwID := enableAffinityState(t, 7)
 	c := affinityContext(t, gwID)
 	require.Nil(t, responseStateAffinityChannel(c, relaymode.ResponseAPI, "default", "gpt-5", false))
+}
+
+// TestResponseStateAffinityCoolingAbilityFallsBack requires provider affinity to
+// honor the same exact-ability cooldown as normal routing. A bound channel whose
+// (group, model) ability was just suspended after a 429 must not be pinned, so
+// normal selection (and canonical replay) picks a healthy channel instead; a
+// cooldown for another model or an expired cooldown keeps the binding.
+func TestResponseStateAffinityCoolingAbilityFallsBack(t *testing.T) {
+	for _, memory := range []bool{true, false} {
+		t.Run(map[bool]string{true: "memory-cache", false: "database"}[memory], func(t *testing.T) {
+			bound := &dbmodel.Channel{
+				Id: 7, Type: channeltype.OpenAI, Name: "bound",
+				Status: dbmodel.ChannelStatusEnabled, Models: "gpt-5,gpt-4o", Group: "default", Config: "{}",
+			}
+			setupAffinityTestDB(t, bound)
+			require.NoError(t, bound.AddAbilities())
+			originalMemory := config.MemoryCacheEnabled
+			config.MemoryCacheEnabled = memory
+			t.Cleanup(func() { config.MemoryCacheEnabled = originalMemory })
+			require.NoError(t, dbmodel.InitChannelCacheContext(context.Background()))
+			t.Cleanup(dbmodel.InitChannelCache)
+			gwID := enableAffinityState(t, 7)
+
+			require.NoError(t, dbmodel.SuspendAbility(context.Background(), "default", "gpt-4o", 7, time.Hour))
+			got := responseStateAffinityChannel(affinityContext(t, gwID), relaymode.ResponseAPI, "default", "gpt-5", false)
+			require.NotNil(t, got, "a cooldown for another model must not unpin this binding")
+
+			require.NoError(t, dbmodel.SuspendAbility(context.Background(), "default", "gpt-5", 7, 300*time.Millisecond))
+			require.Nil(t, responseStateAffinityChannel(affinityContext(t, gwID), relaymode.ResponseAPI, "default", "gpt-5", false),
+				"a cooling ability must fall back to normal selection")
+
+			require.Eventually(t, func() bool {
+				return responseStateAffinityChannel(affinityContext(t, gwID), relaymode.ResponseAPI, "default", "gpt-5", false) != nil
+			}, 2*time.Second, 10*time.Millisecond, "an expired cooldown must restore the binding")
+		})
+	}
 }
