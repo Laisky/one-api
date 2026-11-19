@@ -3,6 +3,7 @@ package controller
 import (
 	"math"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -107,6 +108,35 @@ func TestClientCompatibilityMCPMergeRejectsOverflow(t *testing.T) {
 			require.Error(t, mergeErr)
 			require.Nil(t, merged, "unrepresentable cross-round usage must be rejected before pricing")
 			require.Equal(t, before, *first, "failed merge must not partially mutate the accumulator")
+		})
+	}
+}
+
+// TestMergeUsageServiceTier keeps every tool round's tier evidence: rounds on
+// one tier keep it, a round without a tier inherits the other, and rounds on
+// different tiers (which one tier field cannot represent) or an unverified
+// round mark the merged receipt's tier unverified.
+func TestMergeUsageServiceTier(t *testing.T) {
+	for _, tc := range []struct {
+		name           string
+		left, right    relaymodel.Usage
+		wantTier       string
+		wantUnverified bool
+	}{
+		{name: "same_tier", left: relaymodel.Usage{ServiceTier: "default"}, right: relaymodel.Usage{ServiceTier: " Default "}, wantTier: "default"},
+		{name: "later_round_only", right: relaymodel.Usage{ServiceTier: "default"}, wantTier: "default"},
+		{name: "earlier_round_only", left: relaymodel.Usage{ServiceTier: "default"}, wantTier: "default"},
+		{name: "different_tiers", left: relaymodel.Usage{ServiceTier: "default"}, right: relaymodel.Usage{ServiceTier: "priority"},
+			wantTier: "default", wantUnverified: true},
+		{name: "unverified_round", left: relaymodel.Usage{ServiceTier: "default"},
+			right: relaymodel.Usage{ServiceTier: "default", ServiceTierUnverified: true}, wantTier: "default", wantUnverified: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.left.PromptTokens, tc.right.PromptTokens = 1, 1
+			merged, err := mergeUsage(&tc.left, &tc.right)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantTier, strings.TrimSpace(strings.ToLower(merged.ServiceTier)))
+			require.Equal(t, tc.wantUnverified, merged.ServiceTierUnverified)
 		})
 	}
 }

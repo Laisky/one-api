@@ -225,8 +225,13 @@ func TestQuotaFailoverPublicRouter(t *testing.T) {
 						} else {
 							require.Equal(t, http.StatusTooManyRequests, got.status, got.body)
 							require.Zero(t, got.healthyCalls)
-							require.Empty(t, got.billed, "an unsettled terminal hold is not a completed consume log")
-							require.Positive(t, got.quotaDelta, "terminal forwarded errors retain their conservative hold")
+							// A provider 4xx without a usage receipt rejected the request
+							// before inference, so its hold is refunded at once; only the
+							// voided (zero-quota) attempt row remains.
+							require.Zero(t, got.quotaDelta, "a terminal provider 4xx without a receipt refunds its hold")
+							require.Zero(t, got.positiveConsumes, "a refunded attempt is not a charged consume log")
+							require.Zero(t, got.logQuota)
+							require.Zero(t, got.failedUsed)
 						}
 						t.Logf("status=%d failed_calls=%d healthy_calls=%d debit=%d consume_logs=%d", got.status, got.failedCalls, got.healthyCalls, got.quotaDelta, len(got.billed))
 					})

@@ -110,21 +110,43 @@ func TestGPT6CyberReceiptScopeAndEmptyError(t *testing.T) {
 	}
 }
 
-// TestGPT6CyberReceiptCaptureLimit keeps large envelope bytes out of token
-// billing while marking the missing envelope evidence. Parameter t asserts;
-// none return, and the native handler's measured counts must remain intact.
+// TestGPT6CyberReceiptCaptureLimit reads the receipt of an envelope larger
+// than the capture window, whose service_tier and usage follow the bytes that
+// made it large, and keeps the actual tier for the Standard-only guard. An
+// envelope the observer cannot follow keeps the handler's measured counts,
+// never its JSON bytes, and marks the actual tier unverified. Parameter t
+// asserts; none return.
 func TestGPT6CyberReceiptCaptureLimit(t *testing.T) {
-	c, _ := newDirectStreamContext()
-	info := &metalib.Meta{ChannelType: channeltype.OpenAI, ActualModelName: "gpt-6-cyber", Mode: relaymode.ResponseAPI}
-	metalib.Set2Context(c, info)
-	body := `{"id":"resp_large","object":"response","model":"gpt-6-cyber","padding":"` + strings.Repeat("x", 2<<20) +
-		`","service_tier":"fast","output":[],"usage":{"input_tokens":20,"output_tokens":2,"total_tokens":22}}`
-	response := fakeUpstream(body)
-	response.Header.Set("Content-Type", "application/json")
-	usage, apiErr := (&Adaptor{ChannelType: channeltype.OpenAI}).DoResponse(c, response, info)
-	require.Nil(t, apiErr)
-	require.NotNil(t, usage)
-	require.Equal(t, 20, usage.PromptTokens)
-	require.Equal(t, 2, usage.CompletionTokens)
-	require.Equal(t, "response_usage_capture_limit", usage.BillingEstimateReason)
+	padding := strings.Repeat("x", 2<<20)
+	for _, tc := range []struct {
+		name, body string
+		reason     string
+		tier       string
+		unverified bool
+	}{
+		{name: "receipt_after_window", tier: "fast",
+			body: `{"id":"resp_large","object":"response","model":"gpt-6-cyber","padding":"` + padding +
+				`","service_tier":"fast","output":[],"usage":{"input_tokens":20,"output_tokens":2,"total_tokens":22}}`},
+		{name: "unfollowable_envelope", reason: "response_usage_capture_limit", unverified: true,
+			// A usage member larger than any receipt cannot be trusted as one.
+			body: `{"id":"resp_large","object":"response","model":"gpt-6-cyber","padding":"` + padding +
+				`","service_tier":"fast","output":[],"usage":{"input_tokens":20,"output_tokens":2,"total_tokens":22,"note":"` +
+				strings.Repeat("y", 128<<10) + `"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _ := newDirectStreamContext()
+			info := &metalib.Meta{ChannelType: channeltype.OpenAI, ActualModelName: "gpt-6-cyber", Mode: relaymode.ResponseAPI}
+			metalib.Set2Context(c, info)
+			response := fakeUpstream(tc.body)
+			response.Header.Set("Content-Type", "application/json")
+			usage, apiErr := (&Adaptor{ChannelType: channeltype.OpenAI}).DoResponse(c, response, info)
+			require.Nil(t, apiErr)
+			require.NotNil(t, usage)
+			require.Equal(t, 20, usage.PromptTokens)
+			require.Equal(t, 2, usage.CompletionTokens)
+			require.Equal(t, tc.reason, usage.BillingEstimateReason)
+			require.Equal(t, tc.tier, usage.ServiceTier, "the actual tier drives the Standard-only billing guard")
+			require.Equal(t, tc.unverified, usage.ServiceTierUnverified)
+		})
+	}
 }

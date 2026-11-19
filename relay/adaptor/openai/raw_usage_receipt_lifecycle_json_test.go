@@ -92,16 +92,15 @@ func TestRawUsageReceiptTruncatedJSONEnvelope(t *testing.T) {
 }
 
 // TestRawUsageReceiptJSONCaptureLimit sends native Cyber JSON envelopes larger
-// than the accumulator's capture limit through every client format. The
-// observer cannot parse such an envelope, so the settlement usage must be
-// flagged response_usage_capture_limit (keeping the reservation as the floor)
-// while its counters are exactly the rendering handler's measured ones: the
-// envelope's JSON bytes are never billed as tokens. The Chat and Responses
-// handlers fall back to the admitted prompt estimate when usage is absent; the
-// Claude converter measures nothing, and the controller's zero-usage path then
-// retains the reservation. A failed oversized envelope settles a zero-counter
-// flagged receipt beside its error so it is retained, not refunded; the Claude
-// converter renders that envelope itself and publishes its measured receipt.
+// than the accumulator's capture window through every client format. The
+// observer follows such an envelope past the window and keeps only its receipt
+// members, so a complete receipt (including a paid failure's, settled beside its
+// error) settles exactly with its actual tier, and the envelope's JSON bytes are
+// never billed as tokens. Without a usage member the settlement is flagged
+// response_usage_capture_limit (keeping the reservation as the floor) with the
+// rendering handler's measured counters: the Chat and Responses handlers fall
+// back to the admitted prompt estimate; the Claude converter measures nothing,
+// and the controller's zero-usage path then retains the reservation.
 func TestRawUsageReceiptJSONCaptureLimit(t *testing.T) {
 	padding := strings.Repeat("x", 2<<20+4096)
 	head := `{"id":"resp_large","object":"response","model":"gpt-6-cyber","service_tier":"default","metadata":{"padding":"` + padding + `"},`
@@ -118,10 +117,15 @@ func TestRawUsageReceiptJSONCaptureLimit(t *testing.T) {
 		// nativeErr reports that the Responses and Chat handlers return the
 		// provider failure beside the retained receipt.
 		nativeErr bool
+		// reason is the settled estimate label; empty for a complete receipt.
+		reason string
 	}{
+		// The receipt members follow the padding; they are still read.
 		{name: "measured_usage", body: measured, native: counters{20, 2}, claude: counters{20, 2}},
-		{name: "no_usage_non_text_padding", body: unmeasured, native: counters{rawReceiptPromptTokens, 0}, claude: counters{0, 0}},
-		{name: "failed_with_usage", body: failed, native: counters{0, 0}, claude: counters{20, 2}, nativeErr: true},
+		{name: "no_usage_non_text_padding", body: unmeasured, native: counters{rawReceiptPromptTokens, 0}, claude: counters{0, 0},
+			reason: "response_usage_capture_limit"},
+		// A paid failure's receipt settles exactly beside its error.
+		{name: "failed_with_usage", body: failed, native: counters{20, 2}, claude: counters{20, 2}, nativeErr: true},
 	} {
 		for _, mode := range rawReceiptModes {
 			t.Run(tc.name+"/"+mode.name, func(t *testing.T) {
@@ -144,9 +148,10 @@ func TestRawUsageReceiptJSONCaptureLimit(t *testing.T) {
 				require.Equal(t, want.prompt, settled.PromptTokens, "envelope bytes must never become prompt tokens")
 				require.Equal(t, want.completion, settled.CompletionTokens, "envelope bytes must never become completion tokens")
 				require.Equal(t, want.prompt+want.completion, settled.TotalTokens)
-				// The unparsed envelope's service tier is unknown; the flagged
-				// estimate keeps the reservation floor an unpriced tier would.
-				require.Equal(t, "response_usage_capture_limit", settled.BillingEstimateReason)
+				require.Equal(t, tc.reason, settled.BillingEstimateReason)
+				// The followed envelope proves its actual tier.
+				require.Equal(t, "default", settled.ServiceTier)
+				require.False(t, settled.ServiceTierUnverified)
 			})
 		}
 	}

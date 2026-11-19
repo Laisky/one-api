@@ -115,6 +115,12 @@ func (r *rawUsageReceipt) finish(c *gin.Context, usage *model.Usage, convertedBo
 	if observed.ServiceTier != "" {
 		receipt.ServiceTier = observed.ServiceTier
 	}
+	if observed.ServiceTierUnverified {
+		// An envelope that may carry the actual tier could not be read; a tier
+		// seen earlier (for example on response.created) is only the requested
+		// one. Settlement must not price the receipt as a verified Standard tier.
+		receipt.ServiceTierUnverified = true
+	}
 	if observed.SystemFingerprint != "" {
 		receipt.SystemFingerprint = observed.SystemFingerprint
 	}

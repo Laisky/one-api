@@ -35,6 +35,13 @@ type ResponseUsageAccumulator struct {
 	jsonDeltas                          []responseUsageJSONDelta
 	jsonPartKeys                        map[string]*responseUsageJSONPart
 	jsonCaptureBytes, jsonOverflowBytes int
+	// receiptScan follows a JSON body or SSE data line past the capture
+	// window, retaining only its receipt members (response_usage_scanner.go).
+	receiptScan *responseReceiptScanner
+	// envelopeLost records an oversized envelope the scanner could not follow
+	// and no later Responses terminal event superseded; its actual service
+	// tier is then unknown (Usage.ServiceTierUnverified).
+	envelopeLost bool
 }
 
 // NewResponseUsageAccumulator creates a bounded observer. eventStream enables
@@ -60,15 +67,26 @@ func (a *ResponseUsageAccumulator) Observe(p []byte) {
 		a.decided = true
 	}
 	if !a.stream {
-		remaining := responseUsageCaptureLimit - len(a.body)
-		if len(p) > remaining {
+		if a.receiptScan != nil {
+			_, _ = a.receiptScan.Write(p)
+			return
+		}
+		if len(p) > responseUsageCaptureLimit-len(a.body) {
+			// Past the capture window the envelope is no longer retained, but
+			// its receipt members still are: OpenAI renders usage and
+			// service_tier after the output array that makes a body large.
 			a.limited = true
-			p = p[:remaining]
+			a.receiptScan = newResponseReceiptScanner()
+			_, _ = a.receiptScan.Write(a.body)
+			_, _ = a.receiptScan.Write(p)
+			a.body = nil
+			return
 		}
 		a.body = append(a.body, p...)
 		return
 	}
-	for _, b := range p {
+	for i := 0; i < len(p); i++ {
+		b := p[i]
 		if b == '\n' && a.afterCR {
 			a.afterCR = false
 			continue
@@ -78,13 +96,26 @@ func (a *ResponseUsageAccumulator) Observe(p []byte) {
 			a.consumeLine()
 			continue
 		}
-		if a.droppingLine {
-			continue
-		}
-		if len(a.line) == responseUsageCaptureLimit {
+		if !a.droppingLine && len(a.line) == responseUsageCaptureLimit {
 			a.limited, a.droppingLine = true, true
+			a.receiptScan = a.oversizedLineScanner()
+			if a.receiptScan == nil && (len(a.event) > 0 || bytes.HasPrefix(a.line, []byte("data:"))) {
+				a.envelopeLost = true
+			}
 			a.line = a.line[:0]
 			a.event = a.event[:0]
+		}
+		if a.droppingLine {
+			// Forward the rest of this line's bytes in this write at once; the
+			// scanner skips string content without stepping through it.
+			end := bytes.IndexAny(p[i:], "\r\n")
+			if end < 0 {
+				end = len(p) - i
+			}
+			if a.receiptScan != nil {
+				_, _ = a.receiptScan.Write(p[i : i+end])
+			}
+			i += end - 1
 			continue
 		}
 		a.line = append(a.line, b)
@@ -96,6 +127,14 @@ func (a *ResponseUsageAccumulator) Observe(p []byte) {
 func (a *ResponseUsageAccumulator) consumeLine() {
 	if a.droppingLine {
 		a.droppingLine = false
+		if scan := a.receiptScan; scan != nil {
+			a.receiptScan = nil
+			if receipt, ok := scan.Result(); ok {
+				a.consumeJSON(receipt)
+			} else {
+				a.envelopeLost = true
+			}
+		}
 		return
 	}
 	line := a.line
@@ -131,7 +170,7 @@ func (a *ResponseUsageAccumulator) consumeLine() {
 		}
 	}
 	if len(a.event)+len(data)+1 > responseUsageCaptureLimit {
-		a.limited = true
+		a.limited, a.envelopeLost = true, true
 		a.event = a.event[:0]
 		return
 	}
@@ -139,6 +178,20 @@ func (a *ResponseUsageAccumulator) consumeLine() {
 	// repeated whole-prefix parsing would make long multiline events quadratic.
 	a.event = append(a.event, data...)
 	a.event = append(a.event, '\n')
+}
+
+// oversizedLineScanner starts following a single-line SSE data event that has
+// outgrown the capture window, seeded with the data already buffered. It
+// returns nil for other lines and for a multiline event already in progress,
+// whose envelope cannot be followed from one of its lines.
+func (a *ResponseUsageAccumulator) oversizedLineScanner() *responseReceiptScanner {
+	if len(a.event) > 0 || !bytes.HasPrefix(a.line, []byte("data:")) {
+		return nil
+	}
+	data := bytes.TrimPrefix(bytes.TrimPrefix(a.line, []byte("data:")), []byte(" "))
+	scan := newResponseReceiptScanner()
+	_, _ = scan.Write(data)
+	return scan
 }
 
 // consumeEvent parses a complete multiline SSE payload and releases its bytes.
@@ -157,11 +210,17 @@ func (a *ResponseUsageAccumulator) Finish(promptTokens int, countText func(strin
 		if a.stream {
 			a.consumeLine()
 			a.consumeEvent()
+		} else if a.receiptScan != nil {
+			if receipt, ok := a.receiptScan.Result(); ok {
+				a.consumeJSON(receipt)
+			} else {
+				a.envelopeLost = true
+			}
 		} else if len(a.body) > 0 && !a.limited {
 			a.consumeJSON(a.body)
 		}
 		a.finished = true
-		a.line, a.event, a.body = nil, nil, nil
+		a.line, a.event, a.body, a.receiptScan = nil, nil, nil, nil
 		// A transport failure after the provider's terminal receipt loses no
 		// billable work; only an interruption before it leaves output partial.
 		a.incomplete = a.interrupted && !a.terminal
@@ -231,6 +290,7 @@ func (a *ResponseUsageAccumulator) Finish(promptTokens int, countText func(strin
 	if a.incomplete {
 		usage.BillingEstimateReason = "response_usage_incomplete_stream"
 	}
+	usage.ServiceTierUnverified = a.envelopeLost
 	return &usage
 }
 
@@ -272,6 +332,9 @@ func (a *ResponseUsageAccumulator) consumeJSON(data []byte) {
 	case "response.completed", "response.failed", "response.incomplete", "message_stop":
 		// Protocol terminal events close the provider's work for this stream.
 		a.terminal = true
+		// A Responses terminal event restates the final usage and actual tier,
+		// superseding any earlier envelope the scanner could not follow.
+		a.envelopeLost = a.envelopeLost && kind == "message_stop"
 	}
 	claude := strings.HasPrefix(kind, "message_") || strings.HasPrefix(kind, "content_block_") || kind == "message"
 	a.consumeUsage(root["usage"], claude, kind == "message_start" || kind == "response.created" || kind == "response.in_progress")

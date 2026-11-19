@@ -149,7 +149,9 @@ func TestGPT6CyberPartialDeliverySettlementHTTP(t *testing.T) {
 			},
 		},
 		{
-			name: "oversized_json_receipt_with_measured_usage", estimated: true,
+			// The receipt follows the bytes that outgrow the capture window; the
+			// observer still reads it, so the response settles exactly.
+			name: "oversized_json_receipt_with_measured_usage", exact: cyberPartialExactCharge,
 			serve: func(t *testing.T, w http.ResponseWriter) {
 				w.Header().Set("Content-Type", "application/json")
 				_, _ = io.WriteString(w, `{"id":"resp_cyber_partial","object":"response","model":"gpt-6-cyber","status":"completed","service_tier":"default","output":`+
@@ -164,10 +166,20 @@ func TestGPT6CyberPartialDeliverySettlementHTTP(t *testing.T) {
 			},
 		},
 		{
-			name: "oversized_terminal_receipt", stream: true, estimated: true,
+			name: "oversized_terminal_receipt", stream: true, exact: cyberPartialExactCharge,
 			serve: func(t *testing.T, w http.ResponseWriter) {
 				w.Header().Set("Content-Type", "text/event-stream")
 				_, _ = io.WriteString(w, cyberDeltaEvent("ack")+cyberTerminalEvent("completed", cyberOutput(hugeText), cyberPartialUsage)+"data: [DONE]\n\n")
+			},
+		},
+		{
+			// The oversized terminal event is cut off before its receipt: the
+			// work is unobservable and must retain at least the reservation.
+			name: "oversized_terminal_receipt_cut_off", stream: true, estimated: true,
+			serve: func(t *testing.T, w http.ResponseWriter) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				terminal := cyberTerminalEvent("completed", cyberOutput(hugeText), cyberPartialUsage)
+				_, _ = io.WriteString(w, cyberDeltaEvent("ack")+terminal[:len(terminal)-len(cyberPartialUsage)-64])
 			},
 		},
 	}

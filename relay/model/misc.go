@@ -51,6 +51,12 @@ type Usage struct {
 	CompletionTokensDetails *UsageCompletionTokensDetails `json:"completion_tokens_details,omitempty"`
 	ServiceTier             string                        `json:"service_tier,omitempty"`
 	SystemFingerprint       string                        `json:"system_fingerprint,omitempty"`
+	// ServiceTierUnverified is server-only settlement evidence: the provider
+	// returned a receipt whose actual service tier could not be read (for
+	// example an envelope too large or malformed for the raw-receipt observer),
+	// or merged receipts that disagree. A tariff restricted to particular tiers
+	// must then treat the receipt as unpriced instead of assuming Standard.
+	ServiceTierUnverified bool `json:"-"`
 
 	// -------------------------------------
 	// Custom fields

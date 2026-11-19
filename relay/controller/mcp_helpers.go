@@ -94,6 +94,24 @@ func buildToolResultMessage(callID string, result *mcp.CallToolResult) (relaymod
 	return message, nil
 }
 
+// mergeServiceTier combines the actual service tiers of two tool-round
+// receipts. Parameters: left is the accumulated receipt and right the next
+// round. It returns the tier to report and whether the merged receipt's tier is
+// unverified: either operand already was, or the rounds ran on different tiers,
+// which one tier field cannot represent. Matching ignores case and whitespace.
+func mergeServiceTier(left, right relaymodel.Usage) (string, bool) {
+	unverified := left.ServiceTierUnverified || right.ServiceTierUnverified
+	leftTier, rightTier := strings.TrimSpace(left.ServiceTier), strings.TrimSpace(right.ServiceTier)
+	switch {
+	case leftTier == "":
+		return right.ServiceTier, unverified
+	case rightTier == "" || strings.EqualFold(leftTier, rightTier):
+		return left.ServiceTier, unverified
+	default:
+		return left.ServiceTier, true
+	}
+}
+
 // mergeUsage accumulates independent upstream receipts across tool rounds.
 // Parameters: base is the owned accumulator and next is a provider snapshot.
 // Returns: merged counters or an error before mutating either operand when a
@@ -151,6 +169,7 @@ func mergeUsage(base *relaymodel.Usage, next *relaymodel.Usage) (*relaymodel.Usa
 	} else {
 		merged.BillingEstimateReason = right.BillingEstimateReason
 	}
+	merged.ServiceTier, merged.ServiceTierUnverified = mergeServiceTier(left, right)
 	cachedLeft, cachedRight := 0, 0
 	details := left.PromptTokensDetails
 	if details == nil {

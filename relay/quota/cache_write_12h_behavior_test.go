@@ -29,3 +29,30 @@ func TestGPT61TerraUnverifiedActualServiceTier(t *testing.T) {
 	input.Usage.ServiceTier = "default"
 	require.False(t, Compute(input).UnpricedUsage, "supported Standard receipts must retain historical pricing")
 }
+
+// TestServiceTierUnverifiedReceipt checks that a receipt whose actual tier
+// could not be read (Usage.ServiceTierUnverified) is not priced as Standard by
+// a tier-restricted tariff, while models without a tier restriction keep their
+// exact price. Parameter t reports failures; nothing returns.
+func TestServiceTierUnverifiedReceipt(t *testing.T) {
+	for _, tc := range []struct {
+		modelName string
+		unpriced  bool
+	}{
+		{modelName: "gpt-6.1-terra", unpriced: true},
+		{modelName: "gpt-6-cyber", unpriced: true},
+		{modelName: "gpt-4o-mini", unpriced: false},
+	} {
+		t.Run(tc.modelName, func(t *testing.T) {
+			input := ComputeInput{
+				Usage:     &model.Usage{PromptTokens: 200, CompletionTokens: 50, ServiceTier: "default", ServiceTierUnverified: true},
+				ModelName: tc.modelName, ModelRatio: 1, GroupRatio: 1,
+			}
+			result := Compute(input)
+			require.Equal(t, tc.unpriced, result.UnpricedUsage)
+			require.Positive(t, result.TotalQuota, "the priced part is still computed for the estimate floor")
+			input.Usage.ServiceTierUnverified = false
+			require.False(t, Compute(input).UnpricedUsage, "a verified Standard receipt keeps its exact price")
+		})
+	}
+}

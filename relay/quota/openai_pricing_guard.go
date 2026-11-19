@@ -34,6 +34,11 @@ func hasUnpricedOpenAIReceipt(input ComputeInput, cfg adaptor.ModelConfig) bool 
 	if tier := strings.TrimSpace(input.Usage.ServiceTier); tier != "" && !policy.SupportsServiceTier(tier) {
 		return true
 	}
+	if input.Usage.ServiceTierUnverified && policy.RestrictsServiceTier() {
+		// A tier-restricted tariff prices only the tiers it lists; a receipt
+		// whose actual tier is unknown is not proven to be one of them.
+		return true
+	}
 	if input.Usage.CacheWrite5mTokens <= 0 {
 		return false
 	}
