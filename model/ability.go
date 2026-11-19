@@ -415,7 +415,20 @@ func GetGroupModelsV2(ctx context.Context, group string) ([]dto.EnabledAbility, 
 	return models, nil
 }
 
-// SuspendAbility sets the SuspendUntil timestamp for a given ability.
+// SuspendAbility persists and immediately publishes a cooldown for one exact
+// (group, model, channel) ability. The database write and the cache publication
+// run under abilityCacheUpdateLock (see ability_cache.go), and the cache is only
+// updated after the write succeeded. Other replicas observe the persisted
+// deadline on their next cache rebuild.
+//
+// Parameters:
+//   - ctx: lifecycle scope for the database write.
+//   - group, modelName: the exact ability; modelName is the caller-facing name.
+//   - channelId: the channel whose ability is suspended.
+//   - duration: how long routing must avoid the ability, from now.
+//
+// Return values:
+//   - error: a wrapped failure when the write fails or does not affect exactly one row.
 func SuspendAbility(ctx context.Context, group string, modelName string, channelId int, duration time.Duration) error {
 	if DB == nil {
 		return errors.New("database not initialized")
@@ -423,6 +436,8 @@ func SuspendAbility(ctx context.Context, group string, modelName string, channel
 	if group == "" || modelName == "" || channelId == 0 {
 		return errors.New("group, modelName, and channelId must be specified for suspending ability")
 	}
+	abilityCacheUpdateLock.Lock()
+	defer abilityCacheUpdateLock.Unlock()
 	suspendTime := time.Now().UTC().Add(duration)
 
 	// Handle database-specific identifier quoting like other functions
@@ -449,6 +464,7 @@ func SuspendAbility(ctx context.Context, group string, modelName string, channel
 				group, modelName, channelId, result.RowsAffected),
 			LookupChannelRef(ctx, channelId))
 	}
+	publishCachedAbilitySuspension(cachedAbilityKey{group, modelName, channelId}, suspendTime)
 	return nil
 }
 

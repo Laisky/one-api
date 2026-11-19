@@ -261,7 +261,7 @@ func handleClaudeHTTPJSON(c *gin.Context, resp *http.Response, modelName string,
 		if status < 400 {
 			status = http.StatusBadGateway
 		}
-		return &model.ErrorWithStatusCode{StatusCode: status, Error: model.Error{Type: model.ErrorType(envelope.Error.Type), Code: envelope.Error.Type, Message: envelope.Error.Message, RawError: errors.New("Claude returned an error envelope")}}, nil
+		return &model.ErrorWithStatusCode{StatusCode: status, Error: model.Error{Type: model.ErrorType(envelope.Error.Type), Code: envelope.Error.Type, Message: envelope.Error.Message, FromUpstream: true, RawError: errors.New("Claude returned an error envelope")}}, nil
 	}
 	if envelope.Type != "message" || receipt.input == nil || receipt.output == nil {
 		return claudeHTTPError(errors.New("Claude response has no valid message and complete usage")), nil

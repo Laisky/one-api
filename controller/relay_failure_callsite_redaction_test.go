@@ -118,6 +118,9 @@ func TestRelayFailureExplicitURLSanitization(t *testing.T) {
 }
 
 // TestRelayFailureNumericJSONErrorRedaction takes t and verifies raw numeric decoder values never escape serialized relay diagnostics while the client error remains unchanged.
+// The upstream parser now treats an out-of-range numeric code as absent, so the
+// body below no longer yields a decoder error; the cause is therefore a genuine
+// decoder error for the same literal, which is what the call-site redaction guards.
 func TestRelayFailureNumericJSONErrorRedaction(t *testing.T) {
 	const literal = "918273645546372819e9999"
 	for _, status := range []int{400, 502} {
@@ -132,9 +135,17 @@ func TestRelayFailureNumericJSONErrorRedaction(t *testing.T) {
 					response.Body = io.NopCloser(strings.NewReader(body))
 					parsed = relaycontroller.RelayErrorHandlerWithContext(c, response)
 				}
+				// No readable message: the client keeps the raw-body fallback, and the
+				// unrepresentable optional code no longer turns into a decoder error.
 				require.Contains(t, parsed.Message, literal)
-				require.Contains(t, parsed.RawError.Error(), literal)
-				parsed.RawError = errors.Wrap(parsed.RawError, "decode synthetic relay body")
+				require.True(t, parsed.MessageContainsRawBody)
+				require.NotContains(t, parsed.RawError.Error(), literal)
+				var overflow struct {
+					Code float64 `json:"code"`
+				}
+				decodeErr := json.Unmarshal([]byte(`{"code":`+literal+`}`), &overflow)
+				require.ErrorContains(t, decodeErr, literal)
+				parsed.RawError = errors.Wrap(decodeErr, "decode synthetic relay body")
 				before, err := json.Marshal(parsed)
 				require.NoError(t, err)
 				fixture.params.Err = *parsed

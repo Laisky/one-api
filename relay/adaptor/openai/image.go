@@ -132,6 +132,7 @@ func buildImageUpstreamError(responseBody []byte, statusCode int) *model.ErrorWi
 			upstreamErr.Message = boundImageErrorMessage(upstreamErr.Message)
 			upstreamErr.Param = boundImageLogField(upstreamErr.Param)
 			upstreamErr.Code = boundImageErrorCode(upstreamErr.Code)
+			upstreamErr.FromUpstream = true
 			upstreamErr.RawError = errors.New(upstreamErr.Message)
 			return &model.ErrorWithStatusCode{Error: upstreamErr, StatusCode: statusCode}
 		}

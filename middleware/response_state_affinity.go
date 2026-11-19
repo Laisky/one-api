@@ -64,10 +64,11 @@ func parseConversationSelector(raw json.RawMessage) string {
 // response or conversation (provider affinity, proposal ST-005 / row R01). It
 // returns a channel only when the binding is present AND the bound channel is
 // still eligible for this request (enabled, serves the group, supports the model,
-// endpoint, and — for websocket handshakes — the Responses websocket transport,
-// row R07). Any miss, unhealthy binding, or store error returns nil so the caller
-// falls back to normal selection and the fallback path replays canonical items
-// (rows R02, R05). It is a no-op unless the feature is enabled for this owner.
+// is not cooling down for that exact group and model, endpoint, and — for
+// websocket handshakes — the Responses websocket transport, row R07). Any miss,
+// unhealthy binding, or store error returns nil so the caller falls back to
+// normal selection and the fallback path replays canonical items (rows R02, R05).
+// It is a no-op unless the feature is enabled for this owner.
 func responseStateAffinityChannel(c *gin.Context, relayMode int, userGroup, requestModel string, isResponseWSHandshake bool) *model.Channel {
 	if relayMode != relaymode.ResponseAPI {
 		return nil
@@ -137,6 +138,21 @@ func responseStateAffinityChannel(c *gin.Context, relayMode int, userGroup, requ
 	if requestModel != "" && !channel.SupportsModel(requestModel) {
 		return unpinned()
 	}
+	// Honor the same exact-ability cooldown as normal routing: a binding is a soft
+	// preference, so a cooling (group, model, channel) ability falls back to normal
+	// selection and canonical replay instead of re-sending to a rate-limited channel.
+	lg := gmw.GetLogger(c)
+	if requestModel != "" {
+		cooling, err := model.AbilityCoolingDown(ctx, userGroup, requestModel, channel.Id)
+		if err != nil {
+			lg.Warn("response state affinity cooldown check failed; using normal selection",
+				zap.Int("channel_id", channel.Id), zap.Error(err))
+			return unpinned()
+		}
+		if cooling {
+			return unpinned()
+		}
+	}
 	if !channelSupportsEndpointWithContext(c, channel, relayMode) {
 		return unpinned()
 	}
@@ -145,7 +161,7 @@ func responseStateAffinityChannel(c *gin.Context, relayMode int, userGroup, requ
 	}
 
 	metrics.RecordStateEvent(metrics.StateCategoryAffinity, metrics.StateOutcomePinned)
-	gmw.GetLogger(c).Debug("response state affinity pinned bound channel",
+	lg.Debug("response state affinity pinned bound channel",
 		zap.Int("channel_id", channel.Id),
 		zap.Int("user_id", userID),
 	)
