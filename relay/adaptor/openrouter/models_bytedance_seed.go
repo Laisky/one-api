@@ -13,7 +13,7 @@ func bytedanceSeedModels() map[string]adaptor.ModelConfig {
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.5),
 				CompletionRatio:     8,
-				InputTokenThreshold: 128000,
+				InputTokenThreshold: 128001,
 			},
 			},
 			ContextLength:               262144,
@@ -28,9 +28,9 @@ func bytedanceSeedModels() map[string]adaptor.ModelConfig {
 			Ratio:           nativeRate(0.075),
 			CompletionRatio: 4,
 			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(0.09999999999999999),
+				Ratio:               nativeRate(0.1),
 				CompletionRatio:     8,
-				InputTokenThreshold: 128000,
+				InputTokenThreshold: 128001,
 			},
 			},
 			ContextLength:               262144,
@@ -58,7 +58,7 @@ func bytedanceSeedModels() map[string]adaptor.ModelConfig {
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1),
 				CompletionRatio:     6,
-				InputTokenThreshold: 128000,
+				InputTokenThreshold: 128001,
 			},
 			},
 			ContextLength:               262144,
@@ -77,7 +77,7 @@ func bytedanceSeedModels() map[string]adaptor.ModelConfig {
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.5),
 				CompletionRatio:     8,
-				InputTokenThreshold: 128000,
+				InputTokenThreshold: 128001,
 			},
 			},
 			ContextLength:               262144,
@@ -91,13 +91,13 @@ func bytedanceSeedModels() map[string]adaptor.ModelConfig {
 			Description:                 "bytedance-seed/seed-2.0-lite on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"bytedance-seed/seed-2.0-mini": {
-			Ratio:           nativeRate(0.09999999999999999),
+			Ratio:           nativeRate(0.1),
 			CompletionRatio: 4,
 			Tiers: []adaptor.ModelRatioTier{
 				{
 					Ratio:               nativeRate(0.2),
 					CompletionRatio:     4,
-					InputTokenThreshold: 128000,
+					InputTokenThreshold: 128001,
 				},
 			},
 			ContextLength:               262144,

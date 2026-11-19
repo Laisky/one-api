@@ -9,7 +9,7 @@ func ibmGraniteModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"ibm-granite/granite-4.0-h-micro": {
 			Ratio:                       nativeRate(0.017),
-			CompletionRatio:             6.588235294117647,
+			CompletionRatio:             0.112 / 0.017,
 			ContextLength:               131000,
 			MaxOutputTokens:             117900,
 			InputModalities:             []string{"text"},

@@ -21,7 +21,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"alfredpros/codellama-7b-instruct-solidity": {
 			Ratio:                       nativeRate(0.8),
-			CompletionRatio:             1.4999999999999998,
+			CompletionRatio:             1.5,
 			ContextLength:               4096,
 			MaxOutputTokens:             4096,
 			InputModalities:             []string{"text"},
@@ -45,7 +45,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"allenai/olmo-3-32b-think": {
 			Ratio:                       nativeRate(0.15),
-			CompletionRatio:             3.3333333333333335,
+			CompletionRatio:             0.5 / 0.15,
 			ContextLength:               65536,
 			MaxOutputTokens:             65536,
 			InputModalities:             []string{"text"},
@@ -80,9 +80,9 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "apodex/apodex-1.1-mini:free on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified. Explicit free token tariff; upstream rate limits still apply.",
 		},
 		"bytedance/ui-tars-1.5-7b": {
-			Ratio:                       nativeRate(0.09999999999999999),
+			Ratio:                       nativeRate(0.1),
 			CompletionRatio:             2,
-			CachedInputRatio:            nativeRate(0.09999999999999999),
+			CachedInputRatio:            nativeRate(0.1),
 			ContextLength:               128000,
 			MaxOutputTokens:             2048,
 			InputModalities:             []string{"image", "text"},
@@ -93,7 +93,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "bytedance/ui-tars-1.5-7b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"cognitivecomputations/dolphin-mistral-24b-venice-edition": {
-			Ratio:                       nativeRate(0.19999999999999998),
+			Ratio:                       nativeRate(0.2),
 			CompletionRatio:             4.5,
 			ContextLength:               128000,
 			MaxOutputTokens:             8192,
@@ -189,7 +189,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		"inception/mercury-2": {
 			Ratio:                       nativeRate(0.25),
 			CompletionRatio:             3,
-			CachedInputRatio:            nativeRate(0.024999999999999998),
+			CachedInputRatio:            nativeRate(0.025),
 			ContextLength:               128000,
 			MaxOutputTokens:             50000,
 			InputModalities:             []string{"text"},
@@ -215,9 +215,9 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "inception/mercury-2.5 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"inference-net/schematron-v2-small": {
-			Ratio:                       nativeRate(0.049999999999999996),
+			Ratio:                       nativeRate(0.05),
 			CompletionRatio:             4.6,
-			CachedInputRatio:            nativeRate(0.049999999999999996),
+			CachedInputRatio:            nativeRate(0.05),
 			ContextLength:               128000,
 			MaxOutputTokens:             8192,
 			InputModalities:             []string{"text"},
@@ -360,7 +360,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"moondream/moondream3-preview": {
 			Ratio:                       nativeRate(0.3),
-			CompletionRatio:             8.33333333333333,
+			CompletionRatio:             2.5 / 0.3,
 			ContextLength:               32000,
 			MaxOutputTokens:             4096,
 			InputModalities:             []string{"text", "image"},
@@ -372,7 +372,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"moondream/moondream3.1-9b-a2b": {
 			Ratio:                       nativeRate(0.3),
-			CompletionRatio:             8.33333333333333,
+			CompletionRatio:             2.5 / 0.3,
 			ContextLength:               32000,
 			MaxOutputTokens:             4096,
 			InputModalities:             []string{"text", "image"},
@@ -383,7 +383,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "moondream/moondream3.1-9b-a2b on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"morph/morph-v3-fast": {
-			Ratio:                       nativeRate(0.7999999999999999),
+			Ratio:                       nativeRate(0.8),
 			CompletionRatio:             1.5,
 			ContextLength:               262144,
 			MaxOutputTokens:             131072,
@@ -394,8 +394,8 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "morph/morph-v3-fast on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"morph/morph-v3-large": {
-			Ratio:                       nativeRate(0.8999999999999999),
-			CompletionRatio:             2.111111111111111,
+			Ratio:                       nativeRate(0.9),
+			CompletionRatio:             1.9 / 0.9,
 			ContextLength:               262144,
 			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text"},
@@ -440,7 +440,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"particle-ai/particle-1": {
 			Ratio:                       nativeRate(0.06),
-			CompletionRatio:             8.33333333333333,
+			CompletionRatio:             0.5 / 0.06,
 			CachedInputRatio:            nativeRate(0.003),
 			ContextLength:               1048576,
 			MaxOutputTokens:             131072,
@@ -557,7 +557,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "reflection/beam-1.0-501b-a23b on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"rekaai/reka-edge": {
-			Ratio:                       nativeRate(0.09999999999999999),
+			Ratio:                       nativeRate(0.1),
 			CompletionRatio:             1,
 			ContextLength:               16384,
 			MaxOutputTokens:             14745,
@@ -569,7 +569,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:                 "rekaai/reka-edge on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"rekaai/reka-flash-3": {
-			Ratio:                       nativeRate(0.09999999999999999),
+			Ratio:                       nativeRate(0.1),
 			CompletionRatio:             2,
 			ContextLength:               65536,
 			MaxOutputTokens:             58982,
@@ -582,7 +582,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"relace/relace-apply-3": {
 			Ratio:                       nativeRate(0.85),
-			CompletionRatio:             1.4705882352941178,
+			CompletionRatio:             1.25 / 0.85,
 			ContextLength:               256000,
 			MaxOutputTokens:             128000,
 			InputModalities:             []string{"text"},

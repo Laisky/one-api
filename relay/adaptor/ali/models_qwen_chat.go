@@ -16,7 +16,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 		"qwen-flash": {
 			Ratio:            nativeRate(0.15),
 			CompletionRatio:  10,
-			CachedInputRatio: nativeRate(0.030000000000000002),
+			CachedInputRatio: nativeRate(0.03),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.6),
 				CompletionRatio:     10,
@@ -59,13 +59,13 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen-flash-character-2026-02-26": {
 			Ratio:           nativeRate(0.18),
-			CompletionRatio: 8.333333333333334,
+			CompletionRatio: 1.5 / 0.18,
 			Description:     "qwen-flash-character-2026-02-26 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"qwen-flash-latest": {
-			Ratio:                       0.010714285714285714,
+			Ratio:                       nativeRate(0.15),
 			CompletionRatio:             10,
-			CachedInputRatio:            nativeRate(0.030000000000000002),
+			CachedInputRatio:            nativeRate(0.03),
 			ContextLength:               1000000,
 			MaxOutputTokens:             8192,
 			InputModalities:             []string{"text"},
@@ -99,7 +99,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 		"qwen-max": {
 			Ratio:                       nativeRate(2.4),
 			CompletionRatio:             4,
-			CachedInputRatio:            nativeRate(0.48000000000000004),
+			CachedInputRatio:            nativeRate(0.48),
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
 			InputModalities:             []string{"text"},
@@ -109,9 +109,9 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 			Description:                 "qwen-max on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"qwen-max-latest": {
-			Ratio:                       0.17142857142857143,
+			Ratio:                       nativeRate(2.4),
 			CompletionRatio:             4,
-			CachedInputRatio:            nativeRate(0.48000000000000004),
+			CachedInputRatio:            nativeRate(0.48),
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
 			InputModalities:             []string{"text"},
@@ -121,9 +121,9 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen Max (latest snapshot alias).",
 		},
 		"qwen-max-longcontext": {
-			Ratio:                       0.17142857142857143,
+			Ratio:                       nativeRate(2.4),
 			CompletionRatio:             4,
-			CachedInputRatio:            nativeRate(0.48000000000000004),
+			CachedInputRatio:            nativeRate(0.48),
 			ContextLength:               30720,
 			MaxOutputTokens:             8192,
 			InputModalities:             []string{"text"},
@@ -227,7 +227,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 			Ratio:           nativeRate(6),
 			CompletionRatio: 4,
 			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(1e+01),
+				Ratio:               nativeRate(10),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
 			},
@@ -260,7 +260,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 			CompletionRatio:  4,
 			CachedInputRatio: nativeRate(0.5),
 			Tiers: []adaptor.ModelRatioTier{{
-				Ratio:               nativeRate(1e+01),
+				Ratio:               nativeRate(10),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
 			},
@@ -319,7 +319,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen3.5-plus": {
 			Ratio:            nativeRate(0.8),
-			CompletionRatio:  5.999999999999999,
+			CompletionRatio:  6,
 			CachedInputRatio: nativeRate(0.16),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(2),
@@ -342,7 +342,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen3.5-plus-2026-02-15": {
 			Ratio:           nativeRate(0.8),
-			CompletionRatio: 5.999999999999999,
+			CompletionRatio: 6,
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(2),
 				CompletionRatio:     6,
@@ -358,7 +358,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen3.5-plus-2026-04-20": {
 			Ratio:           nativeRate(0.8),
-			CompletionRatio: 5.999999999999999,
+			CompletionRatio: 6,
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(2),
 				CompletionRatio:     6,
@@ -375,7 +375,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 		"qwen3.6-flash": {
 			Ratio:            nativeRate(1.2),
 			CompletionRatio:  6,
-			CachedInputRatio: nativeRate(0.24000000000000002),
+			CachedInputRatio: nativeRate(0.24),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4.8),
 				CompletionRatio:     6,
@@ -484,7 +484,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 		"qwen3.7-max": {
 			Ratio:                       nativeRate(12),
 			CompletionRatio:             3,
-			CachedInputRatio:            0.08571428571428572,
+			CachedInputRatio:            nativeRate(1.2),
 			ContextLength:               1000000,
 			MaxOutputTokens:             65536,
 			InputModalities:             []string{"text"},
@@ -511,7 +511,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 		"qwen3.7-max-latest": {
 			Ratio:                       nativeRate(12),
 			CompletionRatio:             3,
-			CachedInputRatio:            0.08571428571428572,
+			CachedInputRatio:            nativeRate(1.2),
 			ContextLength:               1000000,
 			MaxOutputTokens:             65536,
 			InputModalities:             []string{"text"},

@@ -49,7 +49,7 @@ func qwenTranslationModels() map[string]adaptor.ModelConfig {
 			Quantization:                "",
 		},
 		"qwen-mt-turbo": {
-			Ratio:                       0.05142857142857143,
+			Ratio:                       nativeRate(0.72),
 			CompletionRatio:             2.79,
 			ContextLength:               4096,
 			MaxOutputTokens:             2048,

@@ -274,7 +274,7 @@ The gateway uses **different envelopes for the two surfaces** — know which one
 { "success": false, "message": "Token name is required" }
 ```
 
-`data` may be an object, an array, or `null`. Session/access-token **auth** failures are the exception that *do* set a real `401`/`403` status alongside `{"success":false,...}`.
+`data` may be an object, an array, or `null`. Session/access-token **auth** failures are the exception that *do* set a real `401`/`403` status alongside `{"success":false,...}`, and a missing or malformed resource UUID reference answers a real `400` (see [Resource reference errors](#resource-reference-errors-management-api)).
 
 **Inference / relay API** (`/v1/*`, etc.) — passes the upstream response through on success, and on failure emits an **OpenAI-style error object with the real HTTP status code**:
 
@@ -307,7 +307,7 @@ Chat/Responses/Claude endpoints support `stream: true`. The response is `text/ev
 
 See [Conventions](#two-response-envelopes) for the two envelopes. In short:
 
-- **Management** errors: `{"success": false, "message": "<reason>"}` (usually HTTP 200; auth failures use a real `401`/`403`).
+- **Management** errors: `{"success": false, "message": "<reason>"}` (usually HTTP 200; auth failures use a real `401`/`403`, and a missing or malformed resource reference uses `400` — see [Resource reference errors](#resource-reference-errors-management-api)).
 - **Relay** errors: `{"error": {"message", "type", "param", "code"}}` with the real HTTP status. `type` is one of the upstream error types or `one_api_error` for gateway-originated errors; `code` is a machine-readable string (e.g. `insufficient_user_quota`, `api_not_implemented`).
 
 ### HTTP status codes
@@ -315,7 +315,7 @@ See [Conventions](#two-response-envelopes) for the two envelopes. In short:
 | Code | Meaning in this gateway | Client action |
 |---|---|---|
 | `200 OK` | Success. Also the transport status for most management *logical errors* — check `success`. Relay success passes the upstream 200 through. | Proceed; for `/api`, read `success`. |
-| `400 Bad Request` | Malformed request, schema validation failure, or model unsupported by the chosen channel. | Fix the request; do not blind-retry. |
+| `400 Bad Request` | Malformed request, schema validation failure, or model unsupported by the chosen channel. On `/api/*`, a missing or malformed resource UUID reference (see [Resource reference errors](#resource-reference-errors-management-api)). | Fix the request; do not blind-retry. |
 | `401 Unauthorized` | Missing/invalid/expired credential (bad session, bad access token, or bad/disabled relay key). | Re-authenticate; check the key. |
 | `403 Forbidden` | Valid credential, not allowed: banned user, insufficient role, model not permitted for the key, subnet restriction, or insufficient quota (`insufficient_user_quota` / `insufficient_token_quota`). | Adjust scope/role, or top up quota. |
 | `404 Not Found` | Unknown route or resource. Relay returns an OpenAI-style `invalid_request_error`. | Check the path/id. |
@@ -327,6 +327,19 @@ See [Conventions](#two-response-envelopes) for the two envelopes. In short:
 | `502/503/504` | Upstream errors, or `503` "No available channels" when no channel serves the requested model+group. | Retry; verify model availability. |
 
 > **No client-facing rate-limit headers** are emitted — the gateway does not set `X-RateLimit-*` or `Retry-After`. Treat `429` as the signal and apply exponential backoff.
+
+### Resource reference errors (management API)
+
+Management endpoints identify resources by UUID: a path `:id`, a query filter (for example `channel` on the log endpoints, `user_id` on `GET /api/admin/tokens/`, `server_id` on `GET /api/mcp_tools/`), or a body field (`uuid` on the `PUT` update endpoints, `user_uuid` on `POST /api/topup`). A reference that cannot be resolved is classified by cause:
+
+| Condition | Response | Server log |
+|---|---|---|
+| The body omits the reference (for example an old client that sends only the integer `id`) | **400** `{"success": false, "message": "resource uuid is required"}` | WARN, no stack trace |
+| The reference is malformed: not a UUID, such as a legacy integer id (with compact UUID lookups enabled, anything other than a canonical UUIDv7) | **400** `{"success": false, "message": "invalid resource reference"}` | WARN, no stack trace |
+| A well-formed UUID matches no row | 200 `{"success": false, "message": "resource reference not found"}` | WARN, no stack trace |
+| The lookup itself failed (for example the database is unavailable) | 200 `{"success": false, "message": "<reason>"}` | ERROR |
+
+Some endpoints keep these statuses but replace the message in every case, including a failed lookup (the server log still records the underlying cause): the admin TOTP endpoints answer `Invalid user ID`, the passkey endpoints answer `invalid credential id`, and the `user_id` filter of `GET /api/user/dashboard` answers `Invalid user_id parameter`. `GET /api/admin/tokens/:id` prefixes `invalid token id: ` to the malformed-reference message only; an unknown UUID or a failed lookup there answers like any other endpoint. Optional filters treat an empty value or the legacy sentinel `0` as "no filter". A `400` is the caller's mistake: fix the reference instead of retrying. The body still carries `success:false` and `message`, but HTTP clients that reject non-2xx responses (for example `curl -f` or axios) raise the `400` as an error, so read `message` from the error's response body. Endpoints whose own sections document a different mapping (the trace lookups and the list-selection endpoints) follow those sections.
 
 ### Channel suspension (relay only)
 
@@ -575,7 +588,7 @@ _Total: 154 active routes across 15 sections (plus 38 reserved OpenAI endpoints 
 | `PUT` | [`/api/channel/pricing/:id`](#channel-administration--diagnostics) | Admin | Replace channel pricing (unified model_configs preferred; legacy ratios accepted). |
 | `DELETE` | [`/api/channel/disabled`](#channel-administration--diagnostics) | Admin | Delete all disabled channels; returns deleted row count. |
 | `DELETE` | [`/api/channel/:id`](#channel-administration--diagnostics) | Admin | Delete one channel by ID. |
-| `POST` | [`/api/debug/channel/:id/debug`](#channel-administration--diagnostics) | Admin | Log model-config diagnostics for one channel (4xx/5xx on error). |
+| `POST` | [`/api/debug/channel/:id/debug`](#channel-administration--diagnostics) | Admin | Log model-config diagnostics for one channel (400 for a malformed UUID, 5xx on diagnostic failure). |
 | `GET` | [`/api/debug/channels`](#channel-administration--diagnostics) | Admin | Log model-config summary across all channels. |
 | `POST` | [`/api/debug/channel/:id/fix`](#channel-administration--diagnostics) | Admin | Repair one channel's model config; logged. |
 | `GET` | [`/api/debug/channels/validate`](#channel-administration--diagnostics) | Admin | Validate model config of every channel; logged. |
@@ -600,7 +613,7 @@ _Total: 154 active routes across 15 sections (plus 38 reserved OpenAI endpoints 
 | `GET` | [`/api/log/search`](#redemptions-groups-logs-admin-token-visibility--model-catalog) | Admin | Keyword search across all users' logs, paginated and optionally sorted; total is matched count. |
 | `GET` | [`/api/admin/tokens/`](#redemptions-groups-logs-admin-token-visibility--model-catalog) | Admin | List relay tokens across all users read-only, optional user_id filter; key field is raw 48-char (not sk- pr… |
 | `GET` | [`/api/admin/tokens/search`](#redemptions-groups-logs-admin-token-visibility--model-catalog) | Admin | Keyword search tokens across users by name prefix, read-only, paginated/sorted. |
-| `GET` | [`/api/admin/tokens/:id`](#redemptions-groups-logs-admin-token-visibility--model-catalog) | Admin | Fetch any token by id regardless of owner, read-only; non-numeric id returns 'invalid token id: ...'. |
+| `GET` | [`/api/admin/tokens/:id`](#redemptions-groups-logs-admin-token-visibility--model-catalog) | Admin | Fetch any token by UUID regardless of owner, read-only; a malformed id returns HTTP 400 'invalid token id: invalid resource reference'. |
 | `GET` | [`/api/models`](#redemptions-groups-logs-admin-token-visibility--model-catalog) | Admin | Return full channel-type-ID to model-name-list catalog; data is an object keyed by channel type ID. |
 
 **[MCP Server & Tool Administration](#mcp-server--tool-administration)**
@@ -3922,20 +3935,20 @@ curl -X POST "$BASE_URL/api/user/reset" \
 
 **Binding identities via the OAuth callbacks.** `GET /api/oauth/github`, `/api/oauth/oidc`, and `/api/oauth/lark` double as bind endpoints: when the active **session cookie** already identifies a logged-in user (the session carries a `username`), the same callback links the external identity to that account instead of logging in, returning `{"success": true, "message": "bind"}`. (The callbacks still validate `oauth_state` before dispatching to the bind path.) Before the provider is contacted, the session account must pass the same checks as UserAuth: a malformed session or a missing account gets HTTP 401, a disabled, deleted or banned account gets HTTP 403 (`User has been banned`), and the rejected session is cleared. A bind writes only the identity column. Binding fails with the corresponding "account has been bound" / "already been bound" message (`The GitHub account has been bound`, `This OIDC account has already been bound`, `This Lark account has already been bound`) if the external identity is already linked elsewhere. WeChat and email use dedicated bind endpoints (`/api/oauth/wechat/bind`, `/api/oauth/email/bind`) which require UserAuth rather than reusing the login callback; on success `/api/oauth/wechat/bind` returns an empty `message` (not `"bind"`).
 
-Relevant source files (absolute paths):
-- `/home/laisky/repo/laisky/one-api/controller/user.go` (Register, Login, SetupLogin, Logout, EmailBind)
-- `/home/laisky/repo/laisky/one-api/controller/misc.go` (SendEmailVerification, SendPasswordResetEmail, ResetPassword)
-- `/home/laisky/repo/laisky/one-api/controller/passkey.go` (PasskeyLoginBegin, PasskeyLoginFinish)
-- `/home/laisky/repo/laisky/one-api/controller/auth/github.go`, `oidc.go`, `lark.go`, `wechat.go` (OAuth + GenerateOAuthCode + WeChatBind)
-- `/home/laisky/repo/laisky/one-api/router/api.go` (route + middleware wiring)
-- `/home/laisky/repo/laisky/one-api/model/user.go` (User struct validation tags)
-- `/home/laisky/repo/laisky/one-api/common/helper/helper.go` (RespondError / RespondErrorWithStatus envelope)
-- `/home/laisky/repo/laisky/one-api/middleware/auth.go` (UserAuth: session-then-access-token, 401/403 semantics)
+Relevant source files (repository paths):
+- `controller/user.go` (Register, Login, SetupLogin, Logout) and `controller/user_self.go` (EmailBind)
+- `controller/misc.go` (SendEmailVerification, SendPasswordResetEmail, ResetPassword)
+- `controller/passkey.go` (PasskeyLoginBegin, PasskeyLoginFinish)
+- `controller/auth/github.go`, `oidc.go`, `lark.go`, `wechat.go` (OAuth + GenerateOAuthCode + WeChatBind)
+- `router/api.go` (route + middleware wiring)
+- `model/user.go` (User struct validation tags)
+- `common/helper/helper.go` (RespondError / RespondErrorWithStatus envelope)
+- `middleware/auth.go` (UserAuth: session-then-access-token, 401/403 semantics)
 
 
 ## Self-Service Account, Access Token, 2FA, Passkeys, Logs, Trace & Cost
 
-This section documents the endpoints a signed-in user calls to manage their own account: reading and updating the profile, deleting the account, minting the management access token, viewing dashboards and affiliate codes, redeeming top-up keys, enrolling 2FA (TOTP) and passkeys, querying their own request logs and usage statistics, and inspecting per-request traces and costs. Every endpoint here is reached under `/api` and—except for `GET /api/cost/request/:request_id`—is protected by `UserAuth` (role >= 1). When there is no browser session, authenticate these calls with the management **access token** in the `Authorization` header (see `POST /api/user/token` below for how to mint it). Unless stated otherwise, responses use the management envelope `{"success": bool, "message": string, "data": ...}` returned with HTTP 200; error bodies from these handlers are also HTTP 200 with `{"success": false, "message": "<reason>"}` unless a specific status code is called out.
+This section documents the endpoints a signed-in user calls to manage their own account: reading and updating the profile, deleting the account, minting the management access token, viewing dashboards and affiliate codes, redeeming top-up keys, enrolling 2FA (TOTP) and passkeys, querying their own request logs and usage statistics, and inspecting per-request traces and costs. Every endpoint here is reached under `/api` and—except for `GET /api/cost/request/:request_id`—is protected by `UserAuth` (role >= 1). When there is no browser session, authenticate these calls with the management **access token** in the `Authorization` header (see `POST /api/user/token` below for how to mint it). Unless stated otherwise, responses use the management envelope `{"success": bool, "message": string, "data": ...}` returned with HTTP 200; error bodies from these handlers are also HTTP 200 with `{"success": false, "message": "<reason>"}` unless a specific status code is called out; a missing or malformed resource UUID reference answers HTTP 400 (see [Resource reference errors](#resource-reference-errors-management-api)).
 
 > **Quota unit reminder:** quota is an internal integer where `500000 quota = 1 USD` (1 quota = $0.000002).
 
@@ -4088,7 +4101,7 @@ Returns per-day usage breakdowns (by model, by user, by token, and by MCP tool) 
 |---|---|---|---|---|
 | `from_date` | string `YYYY-MM-DD` | No | today-6 | Inclusive start day (UTC). Must be paired with `to_date`; supplying only one is ignored and the default range applies. |
 | `to_date` | string `YYYY-MM-DD` | No | today | Inclusive end day (UTC). |
-| `user_id` | string | No | self (root: site-wide) | Root only. A numeric user ID, or `all` for site-wide stats. A non-root caller supplying this gets `success:false` with `No permission to view other users' dashboard data`. |
+| `user_id` | string | No | self (admin/root: site-wide) | Admin or root only. A user UUID, or `all` for site-wide stats. A common-user caller supplying this gets `success:false` with `No permission to view other users' dashboard data`. A value that does not resolve to a user answers `success:false` with `Invalid user_id parameter`, classified like every other [resource reference](#resource-reference-errors-management-api): a malformed value (not a UUID, such as a legacy integer id) is HTTP 400; a well-formed UUID that matches no user, or a failed lookup, is HTTP 200. |
 
 **Response:** HTTP 200. `data` aggregates several per-day arrays plus quota fields.
 
@@ -4594,7 +4607,8 @@ curl -s -X DELETE "$BASE_URL/api/user/passkey/018f0000-0000-7000-8000-0000000000
 
 | Condition | Meaning |
 |---|---|
-| `invalid credential id` | The path `id` was not a valid credential UUID or did not resolve for the caller. |
+| `invalid credential id` (HTTP 400) | The path `id` is missing or not a valid credential UUID. |
+| `invalid credential id` (HTTP 200) | The path `id` is a well-formed UUID that matches no credential, or the lookup failed. |
 
 ### PUT /api/user/passkey/:id
 
@@ -4642,7 +4656,8 @@ curl -s -X PUT "$BASE_URL/api/user/passkey/018f0000-0000-7000-8000-000000000007"
 
 | Condition | Meaning |
 |---|---|
-| `invalid credential id` | The path `id` was not a valid credential UUID or did not resolve for the caller. |
+| `invalid credential id` (HTTP 400) | The path `id` is missing or not a valid credential UUID. |
+| `invalid credential id` (HTTP 200) | The path `id` is a well-formed UUID that matches no credential, or the lookup failed. |
 | `name must be 1-128 characters` | Empty or over-length name. |
 | `passkey not found ...` | The credential does not exist or is not owned by the caller. |
 
@@ -4789,7 +4804,7 @@ Returns the total quota consumed by the authenticated user across logs matching 
 | `type` | integer | No | 0 | Log type filter. |
 | `model_name` | string | No | — | Filter by model name. |
 | `token_name` | string | No | — | Filter by token name. |
-| `channel` | string (UUID) | No | empty | Filter by channel UUID. |
+| `channel` | string (UUID) | No | empty | Filter by channel UUID; a malformed value answers HTTP 400 `invalid resource reference`. |
 | `start_timestamp` | integer (Unix sec) | No | 0 | Lower time bound. |
 | `end_timestamp` | integer (Unix sec) | No | 0 | Upper time bound. |
 
@@ -5010,14 +5025,14 @@ curl -s "$BASE_URL/api/cost/request/2026060812000042-aBcD"
 
 ---
 
-**Source files used (absolute paths):** `/home/laisky/repo/laisky/one-api/router/api.go`, `/home/laisky/repo/laisky/one-api/controller/user.go` (GetSelf, UpdateSelf, DeleteSelf, GetUserDashboard, GetDashboardUsers, GenerateAccessToken, GetAffCode, TopUp, SetupTotp, ConfirmTotp, DisableTotp, GetTotpStatus), `/home/laisky/repo/laisky/one-api/controller/model.go` (GetUserAvailableModels), `/home/laisky/repo/laisky/one-api/controller/passkey.go`, `/home/laisky/repo/laisky/one-api/controller/log.go` (GetUserLogs, SearchUserLogs, GetLogsSelfStat), `/home/laisky/repo/laisky/one-api/controller/tracing.go`, `/home/laisky/repo/laisky/one-api/controller/token.go` (GetRequestCost), `/home/laisky/repo/laisky/one-api/common/helper/helper.go` (RespondError), `/home/laisky/repo/laisky/one-api/model/user.go`, `/home/laisky/repo/laisky/one-api/model/user_metadata.go`, `/home/laisky/repo/laisky/one-api/model/log.go`, `/home/laisky/repo/laisky/one-api/model/trace.go`, `/home/laisky/repo/laisky/one-api/model/cost.go`, `/home/laisky/repo/laisky/one-api/common/random/main.go`, `/home/laisky/repo/laisky/one-api/common/helper/time.go`.
+**Source files used (repository paths):** `router/api.go`, `controller/user_self.go` (GetSelf, UpdateSelf, DeleteSelf, GenerateAccessToken, GetAffCode, TopUp), `controller/user_dashboard.go` (GetUserDashboard, GetDashboardUsers), `controller/user_totp.go` (SetupTotp, ConfirmTotp, DisableTotp, GetTotpStatus), `controller/model.go` (GetUserAvailableModels), `controller/passkey.go`, `controller/log.go` (GetUserLogs, SearchUserLogs, GetLogsSelfStat), `controller/tracing.go`, `controller/token.go` (GetRequestCost), `common/helper/helper.go` (RespondError), `model/user.go`, `model/user_metadata.go`, `model/log.go`, `model/trace.go`, `model/cost.go`, `common/random/main.go`, `common/helper/time.go`.
 
 
 ## API Key (Token) Management
 
 This section covers the management endpoints that create and administer **relay API keys** — the `sk-`-prefixed credentials your applications send to the inference endpoints (`/v1/chat/completions`, `/v1/responses`, `/v1/messages`, etc.). These are **not** the same as the management access token. To call any endpoint in this section you must authenticate as a logged-in user, using either a **management access token** (the 32-char UUID from `POST /api/user/token`, sent as `Authorization: $ACCESS_TOKEN`) or a browser session cookie. The relay API key these endpoints mint is a distinct, 48-character credential (16 random characters followed by a 32-character UUID-derived tail), returned with the configured prefix (default `sk-`). The two are easy to confuse: the **access token** lets you *manage* tokens via this REST API; the **relay API key** is what an end user puts in their OpenAI/Anthropic SDK to *make inference calls*. The full quick-start flow (mint a key, then use it) is at the end of `POST /api/token/`.
 
-All routes below are registered under the `/api/token` group guarded by `UserAuth` (role >= common user, 1). Each operates only on tokens owned by the authenticated caller: `user_id` is always taken from the caller's identity, never from the request. Responses use the management envelope `{"success": bool, "message": string, "data": ...}` with HTTP 200; on failure the envelope is `{"success": false, "message": "<reason>"}`, also with HTTP 200. The `key` field, wherever a token object is serialized, is rewritten at response time by a custom `MarshalJSON` to strip any stored legacy prefix (`sk-`/`laisky-`) and apply the configured prefix — so it always comes back as `<prefix><48 chars>` (e.g. `sk-...`).
+All routes below are registered under the `/api/token` group guarded by `UserAuth` (role >= common user, 1). Each operates only on tokens owned by the authenticated caller: `user_id` is always taken from the caller's identity, never from the request. Responses use the management envelope `{"success": bool, "message": string, "data": ...}` with HTTP 200; on failure the envelope is `{"success": false, "message": "<reason>"}`, also with HTTP 200, except that a missing or malformed token UUID (path `:id` or body `uuid`) answers HTTP 400 (see [Resource reference errors](#resource-reference-errors-management-api)). The `key` field, wherever a token object is serialized, is rewritten at response time by a custom `MarshalJSON` to strip any stored legacy prefix (`sk-`/`laisky-`) and apply the configured prefix — so it always comes back as `<prefix><48 chars>` (e.g. `sk-...`).
 
 The `Token` object shape returned in `data` (verbatim JSON keys):
 
@@ -5191,7 +5206,8 @@ curl -s "$BASE_URL/api/token/018f0000-0000-7000-8000-000000000012" \
 
 | Status | Meaning |
 | --- | --- |
-| 200 with `success:false` | `id` is not a valid token UUID, or no token with that UUID is owned by the caller (another user's token is treated as not found). The body carries `"message"` describing the failure. |
+| 400 `{"success": false, "message": "invalid resource reference"}` | `id` is not a valid token UUID. |
+| 200 with `success:false` | No token with that UUID is owned by the caller (another user's token is treated as not found). The body carries `"message"` describing the failure. |
 
 ### POST /api/token/
 
@@ -5394,6 +5410,8 @@ curl -s -X PUT "$BASE_URL/api/token/?status_only=1" \
 
 | Status | Meaning |
 | --- | --- |
+| 400 `{"success": false, "message": "resource uuid is required"}` | The body has no `uuid` (for example only the legacy integer `id`). |
+| 400 `{"success": false, "message": "invalid resource reference"}` | `uuid` is not a valid token UUID. |
 | 200 with `success:false` | `name` empty when not `status_only`; `name` over 30 chars; invalid `subnet`; token UUID not found for caller; attempting to enable a token that is still expired or still has zero/depleted quota. The body carries `"message"` describing the failure. |
 
 ### DELETE /api/token/:id
@@ -5428,12 +5446,13 @@ curl -s -X DELETE "$BASE_URL/api/token/018f0000-0000-7000-8000-000000000027" \
 
 | Status | Meaning |
 | --- | --- |
-| 200 with `success:false` | UUID not found for the caller (including when it belongs to another user), or the path is not a valid token UUID. The body carries `"message"` describing the failure. |
+| 400 `{"success": false, "message": "invalid resource reference"}` | The path is not a valid token UUID. |
+| 200 with `success:false` | UUID not found for the caller (including when it belongs to another user). The body carries `"message"` describing the failure. |
 
 
 ## User Administration & Top-up
 
-These endpoints comprise the administrative slice of the management REST API for inspecting, creating, mutating, and crediting user accounts. Every route in this section requires an administrator credential (role >= 10) enforced by `AdminAuth`; root-only constraints (role 100) are applied per-action inside the handlers. Send the management **access token** as `Authorization: $ACCESS_TOKEN` (a leading `Bearer ` is tolerated), or rely on a browser **session cookie** from `POST /api/user/login`; the relay API key (`sk-...`) is not accepted here. All responses use the management envelope `{"success": bool, "message": string, "data": <payload>}` with HTTP 200, including error cases (controllers respond through `helper.RespondError`, which always writes HTTP 200 with `{"success": false, "message": "<reason>"}`). Quota values are internal integers where 500000 quota = 1 USD.
+These endpoints comprise the administrative slice of the management REST API for inspecting, creating, mutating, and crediting user accounts. Every route in this section requires an administrator credential (role >= 10) enforced by `AdminAuth`; root-only constraints (role 100) are applied per-action inside the handlers. Send the management **access token** as `Authorization: $ACCESS_TOKEN` (a leading `Bearer ` is tolerated), or rely on a browser **session cookie** from `POST /api/user/login`; the relay API key (`sk-...`) is not accepted here. All responses use the management envelope `{"success": bool, "message": string, "data": <payload>}` with HTTP 200, including most error cases (controllers respond through `helper.RespondError`, which writes HTTP 200 with `{"success": false, "message": "<reason>"}`). The exception is a missing or malformed user UUID (path `:id`, body `uuid`, or `user_uuid`), which answers HTTP 400 with the same envelope (see [Resource reference errors](#resource-reference-errors-management-api)); the error tables below list it explicitly. Quota values are internal integers where 500000 quota = 1 USD.
 
 A cross-cutting permission rule applies to most handlers: an admin may only act on users strictly below their own role. An admin (role 10) cannot read, update, delete, or otherwise manage another admin or a root user; only a root user (role 100) may act on peers at the same level. Violations return `{"success": false}` with an explanatory message. (The one exception is `DELETE /api/user/:id`, which checks `caller role > target role` with no root self-exemption.)
 
@@ -5597,7 +5616,8 @@ curl -sS "$BASE_URL/api/user/018f0000-0000-7000-8000-000000000007" \
 
 | Condition | Envelope |
 | --- | --- |
-| `id` is not a valid UUID, or no such user | `{"success": false, "message": "..."}` (HTTP 200) |
+| `id` is not a valid UUID | `{"success": false, "message": "invalid resource reference"}` (HTTP 400) |
+| No such user | `{"success": false, "message": "..."}` (HTTP 200) |
 | Caller role <= target role and caller is not root | `{"success": false, "message": "No permission to get information of users at the same level or higher"}` |
 
 ### POST /api/user/
@@ -5775,7 +5795,9 @@ curl -sS -X PUT "$BASE_URL/api/user/" \
 
 | Condition | Envelope |
 | --- | --- |
-| Malformed body or missing `uuid` | `{"success": false, "message": "invalid parameter"}` |
+| Malformed body | `{"success": false, "message": "invalid parameter"}` (HTTP 200) |
+| Body has no `uuid` (for example only the legacy integer `id`) | `{"success": false, "message": "resource uuid is required"}` (HTTP 400) |
+| `uuid` is not a valid UUID | `{"success": false, "message": "invalid resource reference"}` (HTTP 400) |
 | No such user | `{"success": false, "message": "..."}` |
 | Caller role <= target role and caller not root | `{"success": false, "message": "No permission to update user information with the same permission level or higher permission level"}` |
 | Explicit `null` username | `{"success": false, "message": "Username cannot be null"}` |
@@ -5818,7 +5840,8 @@ curl -sS -X DELETE "$BASE_URL/api/user/018f0000-0000-7000-8000-000000000007" \
 
 | Condition | Envelope |
 | --- | --- |
-| `id` is not a valid UUID, or no such user | `{"success": false, "message": "..."}` |
+| `id` is not a valid UUID | `{"success": false, "message": "invalid resource reference"}` (HTTP 400) |
+| No such user | `{"success": false, "message": "..."}` (HTTP 200) |
 | Caller role <= target role | `{"success": false, "message": "No permission to delete users with the same permission level or higher permission level"}` (this path requires the caller's role to be strictly greater than the target's, with NO root exemption) |
 
 ### POST /api/user/totp/disable/:id
@@ -5853,7 +5876,8 @@ curl -sS -X POST "$BASE_URL/api/user/totp/disable/018f0000-0000-7000-8000-000000
 
 | Condition | Envelope |
 | --- | --- |
-| `id` is not a valid UUID | `{"success": false, "message": "Invalid user ID"}` |
+| `id` is not a valid UUID | `{"success": false, "message": "Invalid user ID"}` (HTTP 400) |
+| `id` is a well-formed UUID that matches no user, or the lookup failed | `{"success": false, "message": "Invalid user ID"}` (HTTP 200) |
 | No such user | `{"success": false, "message": "..."}` |
 | Caller role <= target role and caller not root | `{"success": false, "message": "No permission to modify user with the same or higher permission level"}` |
 | Target has no TOTP enabled | `{"success": false, "message": "TOTP is not enabled for this user"}` |
@@ -5868,13 +5892,13 @@ Credits (increases) a user's quota balance administratively and records a top-up
 
 | Field | JSON key | Type | Required | Default | Description |
 | --- | --- | --- | --- | --- | --- |
-| User UUID | `user_id` | string (UUID) | Yes | - | Target user whose quota is increased. The JSON key remains `user_id` for compatibility, but the value is a UUID string. |
+| User UUID | `user_uuid` | string (UUID) | Yes | - | Target user whose quota is increased. The legacy integer `user_id` key is still decoded for old clients but ignored: a body without `user_uuid` is rejected with HTTP 400 `resource uuid is required`, and a string value under `user_id` fails to decode. |
 | Quota | `quota` | integer | Yes | - | Amount of quota to add (internal units). |
 | Remark | `remark` | string | No | auto-generated | Note stored on the top-up log. If empty, defaults to a generated string like `Recharged via API $X.XX`. |
 
 ```json
 {
-  "user_id": "018f0000-0000-7000-8000-000000000007",
+  "user_uuid": "018f0000-0000-7000-8000-000000000007",
   "quota": 500000,
   "remark": "Manual grant for Q2 promo"
 }
@@ -5895,22 +5919,25 @@ Credits (increases) a user's quota balance administratively and records a top-up
 curl -sS -X POST "$BASE_URL/api/topup" \
   -H "Authorization: $ACCESS_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"user_id":7,"quota":500000,"remark":"Manual grant for Q2 promo"}'
+  -d '{"user_uuid":"018f0000-0000-7000-8000-000000000007","quota":500000,"remark":"Manual grant for Q2 promo"}'
 ```
 
 **Errors**
 
 | Condition | Envelope |
 | --- | --- |
-| Malformed body / bind failure | `{"success": false, "message": "..."}` |
-| Quota increase fails (e.g. no such user) | `{"success": false, "message": "..."}` |
+| Malformed body / bind failure (including a string under the legacy `user_id` key) | `{"success": false, "message": "..."}` (HTTP 200) |
+| Body has no `user_uuid` | `{"success": false, "message": "resource uuid is required"}` (HTTP 400) |
+| `user_uuid` is not a valid UUID | `{"success": false, "message": "invalid resource reference"}` (HTTP 400) |
+| `user_uuid` matches no user | `{"success": false, "message": "resource reference not found"}` (HTTP 200) |
+| Quota increase fails | `{"success": false, "message": "..."}` (HTTP 200) |
 
 
 ## Channel Administration & Diagnostics
 
-This section documents the management endpoints that create, inspect, test, price, and repair upstream provider channels. Every route here is mounted under `/api/channel` or `/api/debug` and is protected by `AdminAuth` (role >= 10): pass the management **access token** as `Authorization: $ACCESS_TOKEN` (a leading `Bearer ` is also accepted), or rely on a logged-in session cookie. These are management-API endpoints, so most use the management envelope (`{"success": ..., "message": ..., "data": ...}` with HTTP 200); the few that deviate (`GET /api/channel/models`, `POST /api/channel/test/:id`, `POST /api/channel/update_balance/:id`) are called out explicitly. A channel record is a large object; the create/update entries below document the operationally important fields and defer to `docs/manuals/channels.md` for the exhaustive schema. Channel `status` values are: `1` = enabled, `2` = manually disabled, `3` = auto-disabled. Quota fields are internal integers (500000 quota = 1 USD).
+This section documents the management endpoints that create, inspect, test, price, and repair upstream provider channels. Every route here is mounted under `/api/channel` or `/api/debug` and is protected by `AdminAuth` (role >= 10): pass the management **access token** as `Authorization: $ACCESS_TOKEN` (a leading `Bearer ` is also accepted), or rely on a logged-in session cookie. These are management-API endpoints, so most use the management envelope (`{"success": ..., "message": ..., "data": ...}` with HTTP 200), and a missing or malformed channel UUID (path `:id` or body `uuid`) answers HTTP 400 on every route here (see [Resource reference errors](#resource-reference-errors-management-api)); the few that deviate (`GET /api/channel/models`, `POST /api/channel/test/:id`, `POST /api/channel/update_balance/:id`) are called out explicitly. A channel record is a large object; the create/update entries below document the operationally important fields and defer to `docs/manuals/channels.md` for the exhaustive schema. Channel `status` values are: `1` = enabled, `2` = manually disabled, `3` = auto-disabled. Quota fields are internal integers (500000 quota = 1 USD).
 
-Note on HTTP status: the channel and most debug handlers report errors via `helper.RespondError`, which returns HTTP 200 with `{"success": false, "message": ...}`. The debug handlers that use `helper.RespondErrorWithStatus` (the `/api/debug/*` routes) return real 4xx/5xx codes; those are noted per endpoint.
+Note on HTTP status: the channel handlers report errors via `helper.RespondError`, which returns HTTP 200 with `{"success": false, "message": ...}`. Channel UUID resolution follows the shared reference contract on every route, including `/api/debug/*`: a missing or malformed UUID is HTTP 400, an unknown UUID is HTTP 200 `resource reference not found`, and a failed lookup is HTTP 200 `success:false` logged at ERROR. The `/api/debug/*` handlers otherwise use `helper.RespondErrorWithStatus` and return real 5xx codes for diagnostic failures; those are noted per endpoint.
 
 ### GET /api/channel/
 
@@ -6324,7 +6351,10 @@ curl -sS -X PUT "$BASE_URL/api/channel/?status_only=1" \
 
 | Status | Meaning |
 |--------|---------|
-| 200 `{"success": false, "message": "Channel id is required"}` | Status-only mode without a valid `uuid`. |
+| 400 `{"success": false, "message": "resource uuid is required"}` | The body has no `uuid` (for example only the legacy integer `id`). |
+| 400 `{"success": false, "message": "invalid resource reference"}` | `uuid` is not a valid channel UUID. |
+| 200 `{"success": false, "message": "resource reference not found"}` | `uuid` matches no channel. |
+| 400 `{"success": false, "message": "Invalid channel status"}` | Status-only mode with a `status` other than 1, 2, or 3. |
 | 200 `{"success": false, "message": "Channel name cannot be empty"}` | Full update with blank `name`. |
 | 200 `{"success": false, "message": "Invalid inference profile ARN map: ..."}` | Bad `inference_profile_arn_map` JSON. |
 | 200 `{"success": false, "message": "Invalid tooling config: ..."}` | `tooling` payload cannot be parsed (full update only). |
@@ -6733,7 +6763,9 @@ curl -sS -X POST "$BASE_URL/api/debug/channel/018f0000-0000-7000-8000-0000000000
 
 | Status | Meaning |
 |--------|---------|
-| 400 `{"success": false, "message": "Invalid channel ID"}` | `id` is not a valid channel UUID. |
+| 400 `{"success": false, "message": "invalid resource reference"}` | `id` is not a valid channel UUID. |
+| 200 `{"success": false, "message": "resource reference not found"}` | No channel with that UUID. |
+| 200 `{"success": false, "message": "..."}` | The channel lookup failed (for example the database is unavailable); logged at ERROR. |
 | 500 `{"success": false, "message": "Debug failed: ..."}` | Diagnostics could not be generated. |
 
 ### GET /api/debug/channels
@@ -6796,7 +6828,9 @@ curl -sS -X POST "$BASE_URL/api/debug/channel/018f0000-0000-7000-8000-0000000000
 
 | Status | Meaning |
 |--------|---------|
-| 400 `{"success": false, "message": "Invalid channel ID"}` | `id` is not a valid channel UUID. |
+| 400 `{"success": false, "message": "invalid resource reference"}` | `id` is not a valid channel UUID. |
+| 200 `{"success": false, "message": "resource reference not found"}` | No channel with that UUID. |
+| 200 `{"success": false, "message": "..."}` | The channel lookup failed (for example the database is unavailable); logged at ERROR. |
 | 500 `{"success": false, "message": "Fix failed: ..."}` | Repair could not be applied. |
 
 ### GET /api/debug/channels/validate
@@ -6911,8 +6945,9 @@ curl -sS "$BASE_URL/api/debug/channel/018f0000-0000-7000-8000-000000000012/migra
 
 | Status | Meaning |
 |--------|---------|
-| 400 `{"success": false, "message": "Invalid channel ID"}` | `id` is not a valid channel UUID. |
-| 404 `{"success": false, "message": "Channel not found"}` | No channel with that UUID. |
+| 400 `{"success": false, "message": "invalid resource reference"}` | `id` is not a valid channel UUID. |
+| 200 `{"success": false, "message": "resource reference not found"}` | No channel with that UUID, including one deleted while the request was in flight. |
+| 200 `{"success": false, "message": "..."}` | The channel lookup or row load failed (for example the database is unavailable); logged at ERROR. |
 
 ### POST /api/debug/channels/clean
 
@@ -6945,7 +6980,7 @@ curl -sS -X POST "$BASE_URL/api/debug/channels/clean" \
 
 ## Redemptions, Groups, Logs, Admin Token Visibility & Model Catalog
 
-This section documents the administrative endpoints for managing redemption (gift) codes, listing billing groups, browsing and purging usage logs across all users, inspecting any user's API keys read-only, and fetching the full channel-to-model catalog. Every route here is mounted under `/api` and protected by `AdminAuth` (role >= admin, 10). All calls use the management **ACCESS TOKEN** (`Authorization: $ACCESS_TOKEN`, a leading `Bearer ` is also accepted) or an equivalent session cookie, and return the standard management envelope `{"success", "message", "data"}` with HTTP 200; several list endpoints add a top-level `"total"` field for pagination. On a handler error the envelope is `{"success": false, "message": "<reason>"}`, also returned with HTTP 200 in these controllers. The quota unit throughout is the internal integer where 500000 quota = 1 USD.
+This section documents the administrative endpoints for managing redemption (gift) codes, listing billing groups, browsing and purging usage logs across all users, inspecting any user's API keys read-only, and fetching the full channel-to-model catalog. Every route here is mounted under `/api` and protected by `AdminAuth` (role >= admin, 10). All calls use the management **ACCESS TOKEN** (`Authorization: $ACCESS_TOKEN`, a leading `Bearer ` is also accepted) or an equivalent session cookie, and return the standard management envelope `{"success", "message", "data"}` with HTTP 200; several list endpoints add a top-level `"total"` field for pagination. On a handler error the envelope is `{"success": false, "message": "<reason>"}`, also returned with HTTP 200 in these controllers, except that a missing or malformed UUID reference (path `:id`, body `uuid`, or the `channel`/`user_id` filters) answers HTTP 400 (see [Resource reference errors](#resource-reference-errors-management-api)). The quota unit throughout is the internal integer where 500000 quota = 1 USD.
 
 ### GET /api/redemption/
 
@@ -7095,8 +7130,8 @@ curl -s "$BASE_URL/api/redemption/018f0000-0000-7000-8000-000000000012" \
 
 **Errors**
 
-- An invalid `:id` returns `{"success": false, "message": "..."}`.
-- A UUID that does not exist returns `{"success": false, "message": "get redemption by uuid <uuid>: record not found"}`.
+- A malformed `:id` returns HTTP 400 `{"success": false, "message": "invalid resource reference"}`.
+- A UUID that does not exist returns HTTP 200 `{"success": false, "message": "resource reference not found"}`.
 
 ### POST /api/redemption/
 
@@ -7220,7 +7255,9 @@ curl -s -X PUT "$BASE_URL/api/redemption/?status_only=1" \
 **Errors**
 
 - `"Redemption name cannot be empty"` - blank name in default (non status-only) mode.
-- `"get redemption by uuid <uuid>: record not found"` - the UUID does not exist.
+- `"resource uuid is required"` (HTTP 400) - the body has no `uuid` (for example only the legacy integer `id`).
+- `"invalid resource reference"` (HTTP 400) - `uuid` is not a valid redemption UUID.
+- `"resource reference not found"` (HTTP 200) - the UUID does not exist.
 
 ### DELETE /api/redemption/:id
 
@@ -7252,8 +7289,8 @@ curl -s -X DELETE "$BASE_URL/api/redemption/018f0000-0000-7000-8000-000000000012
 
 **Errors**
 
-- An invalid `:id` yields `{"success": false, "message": "id is empty!"}` or a resolver error.
-- A non-existent UUID returns `{"success": false, "message": "find redemption <uuid>: record not found"}`.
+- A malformed `:id` returns HTTP 400 `{"success": false, "message": "invalid resource reference"}`.
+- A non-existent UUID returns HTTP 200 `{"success": false, "message": "resource reference not found"}`.
 
 ### GET /api/group/
 
@@ -7297,7 +7334,7 @@ Lists usage/audit logs across all users with filtering, pagination, and optional
 | username | string | No | "" | Filter by username. |
 | token_name | string | No | "" | Filter by token name. |
 | model_name | string | No | "" | Filter by model name. |
-| channel | string (UUID) | No | empty | Filter by channel UUID. |
+| channel | string (UUID) | No | empty | Filter by channel UUID; a malformed value answers HTTP 400 `invalid resource reference`. |
 | start_timestamp | integer | No | 0 | Lower bound (Unix seconds). |
 | end_timestamp | integer | No | 0 | Upper bound (Unix seconds). |
 | size | integer | No | DefaultItemsPerPage | Items per page; legacy alias `items_per_page` accepted (only used if `size` is absent); clamped to MaxItemsPerPage. |
@@ -7424,7 +7461,7 @@ Returns the summed quota usage for logs matching the supplied filters (used for 
 | username | string | No | "" | Filter by username. |
 | token_name | string | No | "" | Filter by token name. |
 | model_name | string | No | "" | Filter by model name. |
-| channel | string (UUID) | No | empty | Filter by channel UUID. |
+| channel | string (UUID) | No | empty | Filter by channel UUID; a malformed value answers HTTP 400 `invalid resource reference`. |
 | start_timestamp | integer | No | 0 | Lower bound (Unix seconds). |
 | end_timestamp | integer | No | 0 | Upper bound (Unix seconds). |
 
@@ -7517,7 +7554,7 @@ Lists API keys (relay tokens) across all users, read-only, for administrative in
 |------|------|----------|---------|-------------|
 | p | integer | No | 0 | Zero-based page index; negatives clamped to 0. Offset = `p * size`. |
 | size | integer | No | DefaultItemsPerPage | Items per page; clamped to MaxItemsPerPage. |
-| user_id | string (UUID) | No | empty | Filter to one user's tokens; absent = all users. The JSON/query key remains `user_id`, but the value is a user UUID string. |
+| user_id | string (UUID) | No | empty | Filter to one user's tokens; absent = all users. The JSON/query key remains `user_id`, but the value is a user UUID string; a malformed value answers HTTP 400 `invalid resource reference`. |
 | sort | string | No | "" | Sort column. |
 | order | string | No | desc | Sort direction asc/desc. |
 
@@ -7674,8 +7711,9 @@ curl -s "$BASE_URL/api/admin/tokens/018f0000-0000-7000-8000-000000000041" \
 
 **Errors**
 
-- A non-numeric `:id` returns `{"success": false, "message": "invalid token id: ..."}` (parse error wrapped).
-- A non-existent id returns `{"success": false, "message": "failed to get token by id=<id>: record not found"}`.
+- A malformed `:id` (including a legacy integer id) returns HTTP 400 `{"success": false, "message": "invalid token id: invalid resource reference"}`.
+- A UUID that matches no token returns HTTP 200 `{"success": false, "message": "resource reference not found"}`.
+- A failed lookup (for example the database is unavailable) returns HTTP 200 `{"success": false, "message": "<reason>"}` and is logged at ERROR.
 
 ### GET /api/models
 
@@ -7717,7 +7755,7 @@ These endpoints let administrators register and manage the upstream Model Contex
 
 All routes in this section are mounted under `/api/mcp_servers` and `/api/mcp_tools`, and every route is guarded by `AdminAuth` — they require an **admin-or-higher** credential (role >= 10). Authenticate with the management **access token** (`Authorization: $ACCESS_TOKEN`; a leading `Bearer ` is also accepted) obtained from `POST /api/user/token`, or with an active admin **session cookie**. A relay API key (`sk-...`) is NOT accepted here.
 
-All routes follow the management API envelope: `{"success": true, "message": "", "data": <payload>}` on success (HTTP 200). Errors are also returned with **HTTP 200** and `{"success": false, "message": "<reason>"}` (the controllers use `helper.RespondError`, which always writes status 200). List endpoints additionally include a top-level `"total"` count.
+All routes follow the management API envelope: `{"success": true, "message": "", "data": <payload>}` on success (HTTP 200). Errors are also returned with **HTTP 200** and `{"success": false, "message": "<reason>"}` (the controllers use `helper.RespondError`, which writes status 200), except that a malformed MCP server UUID in the path or the `server_id` filter answers **HTTP 400** (see [Resource reference errors](#resource-reference-errors-management-api)). List endpoints additionally include a top-level `"total"` count.
 
 **Secret masking.** The MCP server `api_key` is stored encrypted (AES-GCM) and is never returned in plaintext. Read responses mask it: a configured key is returned as the literal `******`, while a server with no key set returns an empty string `""` (the mask helper only masks non-empty values). On create/update, sending the literal `******` back is treated as "leave the stored credential unchanged".
 
@@ -7870,8 +7908,8 @@ curl -s "$BASE_URL/api/mcp_servers/018f0000-0000-7000-8000-000000000001" \
 
 | Status / body | Meaning |
 |---|---|
-| 200 `{"success": false, "message": "get mcp server: record not found"}` | No server with that UUID (errors use HTTP 200 with `success:false`). |
-| 200 `{"success": false, "message": "invalid resource reference"}` | Invalid UUID in the path. |
+| 400 `{"success": false, "message": "invalid resource reference"}` | Invalid UUID in the path. |
+| 200 `{"success": false, "message": "resource reference not found"}` | No server with that UUID. |
 
 ### POST /api/mcp_servers/ (and /api/mcp_servers)
 
@@ -8051,7 +8089,7 @@ curl -s -X PUT "$BASE_URL/api/mcp_servers/018f0000-0000-7000-8000-000000000001" 
   -d '{"priority": 20, "status": 0, "auto_sync_interval_minutes": 120}'
 ```
 
-**Errors**: same validation errors as `POST` (name/base_url required, base_url scheme, interval range, pricing non-negative, empty pricing tool name). A non-existent UUID returns `{"success": false, "message": "get mcp server: record not found"}`; an invalid UUID returns a resource-reference validation error. Because the merged record is re-validated, a previously-stored server still cannot be saved with an out-of-range interval or invalid base_url.
+**Errors**: same validation errors as `POST` (name/base_url required, base_url scheme, interval range, pricing non-negative, empty pricing tool name). A non-existent UUID returns HTTP 200 `{"success": false, "message": "resource reference not found"}`; an invalid UUID returns HTTP 400 `{"success": false, "message": "invalid resource reference"}`. Because the merged record is re-validated, a previously-stored server still cannot be saved with an out-of-range interval or invalid base_url.
 
 ### DELETE /api/mcp_servers/:id
 
@@ -8085,7 +8123,8 @@ curl -s -X DELETE "$BASE_URL/api/mcp_servers/018f0000-0000-7000-8000-00000000000
 
 | Status / body | Meaning |
 |---|---|
-| 200 `{"success": false, "message": "mcp server id is invalid"}` | Invalid UUID or unresolved server. |
+| 400 `{"success": false, "message": "invalid resource reference"}` | Invalid UUID in the path. |
+| 200 `{"success": false, "message": "resource reference not found"}` | No server with that UUID. |
 
 ### POST /api/mcp_servers/:id/sync
 
@@ -8122,7 +8161,8 @@ curl -s -X POST "$BASE_URL/api/mcp_servers/018f0000-0000-7000-8000-000000000001/
 
 | Status / body | Meaning |
 |---|---|
-| 200 `{"success": false, "message": "get mcp server: record not found"}` | No server with that UUID. |
+| 400 `{"success": false, "message": "invalid resource reference"}` | Invalid UUID in the path. |
+| 200 `{"success": false, "message": "resource reference not found"}` | No server with that UUID. |
 | 200 `{"success": false, "message": "<upstream sync error>"}` | Upstream sync failed (e.g. unreachable host, auth rejected); before responding, the server's `last_sync_status` is set to `error` with the message. |
 
 ### POST /api/mcp_servers/:id/test
@@ -8161,7 +8201,8 @@ curl -s -X POST "$BASE_URL/api/mcp_servers/018f0000-0000-7000-8000-000000000001/
 
 | Status / body | Meaning |
 |---|---|
-| 200 `{"success": false, "message": "get mcp server: record not found"}` | No server with that UUID. |
+| 400 `{"success": false, "message": "invalid resource reference"}` | Invalid UUID in the path. |
+| 200 `{"success": false, "message": "resource reference not found"}` | No server with that UUID. |
 | 200 `{"success": false, "message": "<connection error>"}` | The upstream could not be reached or rejected the request within 15s; before responding, `last_test_status` is set to `error`. |
 
 ### GET /api/mcp_servers/:id/tools
@@ -8223,7 +8264,8 @@ curl -s "$BASE_URL/api/mcp_servers/018f0000-0000-7000-8000-000000000001/tools" \
 
 | Status / body | Meaning |
 |---|---|
-| 200 `{"success": false, "message": "get mcp server: record not found"}` | No server with that UUID (the handler loads the server before its tools). |
+| 400 `{"success": false, "message": "invalid resource reference"}` | Invalid UUID in the path. |
+| 200 `{"success": false, "message": "resource reference not found"}` | No server with that UUID (the handler resolves the server before loading its tools). |
 
 ### GET /api/mcp_tools/ (and /api/mcp_tools)
 
@@ -8239,7 +8281,7 @@ Lists synchronized MCP tools across all servers (or filtered to one server and/o
 | size | integer | No | server default | Page size; non-positive values use the server default, values above the server max are clamped to it. |
 | sort | string | No | (none) | Sort column: one of `id`, `name`, `status`, `created_at`, `updated_at`. Unknown/empty values fall back to `id desc`. |
 | order | string | No | `desc` | Sort direction: `asc` or `desc` (any other value is treated as `desc`). |
-| server_id | string (UUID) | No | empty (all servers) | Filter to tools belonging to this MCP server UUID. The query key remains `server_id`, but the value is a UUID string. |
+| server_id | string (UUID) | No | empty (all servers) | Filter to tools belonging to this MCP server UUID. The query key remains `server_id`, but the value is a UUID string; a malformed value answers HTTP 400 `invalid resource reference`. |
 | status | integer | No | (no filter) | Filter by tool status (`1` enabled, `0` disabled). Omit or send empty for no filter; non-integer values are ignored (treated as no filter). |
 
 **Response**: HTTP 200. `data` is an array of `MCPTool` objects (see the field table under `GET /api/mcp_servers/:id/tools`). `total` is the count of rows matching the `server_id`/`status` filter.

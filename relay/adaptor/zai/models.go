@@ -29,7 +29,8 @@ type usdPrice struct {
 //
 // It panics when the base id is absent so a rename on the BigModel side fails
 // loudly at boot (and in `go test`) rather than silently yielding an entry with
-// zero context length. Mirrors zhipu.mergeModelRatios' duplicate-key panic.
+// zero context length. Mirrors the duplicate-ID panic in zhipu's
+// adaptor.JoinModelCatalogs assembly.
 func derive(base string, p usdPrice, mutate ...func(*adaptor.ModelConfig)) adaptor.ModelConfig {
 	src, ok := zhipu.ModelRatios[base]
 	if !ok {

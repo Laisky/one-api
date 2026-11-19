@@ -68,7 +68,7 @@ func qwenAudioModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen3.5-omni-plus": {
 			Ratio:                       nativeRate(7),
-			CompletionRatio:             5.714285714285714,
+			CompletionRatio:             40.0 / 7.0,
 			ContextLength:               262144,
 			MaxOutputTokens:             8192,
 			InputModalities:             []string{"text", "image", "audio", "video"},
@@ -78,7 +78,7 @@ func qwenAudioModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen3.5 Omni Plus: closed-weight multimodal model accepting text/image/audio/video inputs with text and audio outputs; 262K context.",
 		},
 		"qwen3.5-omni-plus-realtime": {
-			Ratio:                       0.7142857142857143,
+			Ratio:                       nativeRate(10),
 			CompletionRatio:             6,
 			ContextLength:               262144,
 			MaxOutputTokens:             8192,

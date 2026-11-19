@@ -13,7 +13,9 @@ import (
 )
 
 // TestNovemberDeepInfraPublishedCatalog pins new model tariffs and host limits through
-// native and registered adaptor discovery. Fixtures were read from https://api.deepinfra.com/models/list.
+// native and registered adaptor discovery. Fixtures were read from https://api.deepinfra.com/models/list;
+// output limits and cached decimals were rechecked on 2026-11-18 against
+// https://api.deepinfra.com/models/<model> (max_output_tokens) and https://deepinfra.com/<model>.
 func TestNovemberDeepInfraPublishedCatalog(t *testing.T) {
 	t.Parallel()
 	a := &deepinfra.Adaptor{}
@@ -24,10 +26,10 @@ func TestNovemberDeepInfraPublishedCatalog(t *testing.T) {
 		input, cached, output float64
 		context, maxOutput    int32
 	}{
-		{"deepseek-ai/DeepSeek-V4.1-Flash-1017", 0.098, 0.00294, 0.294, 1048576, 0},
-		{"Qwen/Qwen4-Max", 1.413, 0.0710000001, 4.24, 1000000, 0},
-		{"moonshotai/Kimi-K3.1-Pro", 1.9, 0.19, 9.5, 1048576, 0},
-		{"nvidia/NVIDIA-Nemotron-3.5-Super-VL", 0.15, 0.0199999995, 0.5, 262144, 0},
+		{"deepseek-ai/DeepSeek-V4.1-Flash-1017", 0.098, 0.00294, 0.294, 1048576, 393216},
+		{"Qwen/Qwen4-Max", 1.413, 0.071, 4.24, 1000000, 0},
+		{"moonshotai/Kimi-K3.1-Pro", 1.9, 0.19, 9.5, 1048576, 943718},
+		{"nvidia/NVIDIA-Nemotron-3.5-Super-VL", 0.15, 0.02, 0.5, 262144, 0},
 		{"thinkingmachines/Inkling-2-Small", 0.285, 0.0285, 0.95, 1048576, 0},
 	} {
 		t.Run(tc.id, func(t *testing.T) {

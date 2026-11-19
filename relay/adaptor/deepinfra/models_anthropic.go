@@ -8,7 +8,7 @@ import "github.com/Laisky/one-api/relay/adaptor"
 func anthropicModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"anthropic/claude-fable-5": {
-			Ratio:                       nativeRate(1e+01),
+			Ratio:                       nativeRate(10),
 			CompletionRatio:             5,
 			ContextLength:               1000000,
 			InputModalities:             []string{"text", "image"},
@@ -68,8 +68,8 @@ func anthropicModels() map[string]adaptor.ModelConfig {
 			Description:       "anthropic/claude-opus-5-5 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"anthropic/claude-sonnet-4-6": {
-			Ratio:                       nativeRate(2.9999999999999996),
-			CompletionRatio:             5.000000000000001,
+			Ratio:                       nativeRate(3),
+			CompletionRatio:             5,
 			ContextLength:               1000000,
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
@@ -78,8 +78,8 @@ func anthropicModels() map[string]adaptor.ModelConfig {
 			Description:                 "anthropic/claude-sonnet-4-6 on deepinfra; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"anthropic/claude-sonnet-5": {
-			Ratio:                       nativeRate(2.9999999999999996),
-			CompletionRatio:             5.000000000000001,
+			Ratio:                       nativeRate(3),
+			CompletionRatio:             5,
 			ContextLength:               1000000,
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
@@ -95,7 +95,7 @@ func anthropicModels() map[string]adaptor.ModelConfig {
 			OutputModalities:  []string{"text"},
 			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			MaxOutputTokens:   128000,
-			Description:       "anthropic/claude-sonnet-5-5 on DeepInfra; public host catalogue verified 2026-10-12. Prices and limits are host-specific, not copied from another provider. Unpublished output limits, cache prices, sampling controls and reasoning-effort levels remain unspecified. This is a public partner-hosted endpoint; free anonymous access is not advertised. No native Anthropic cache tariff is inferred.",
+			Description:       "anthropic/claude-sonnet-5-5 on DeepInfra; public host catalogue verified 2026-10-12. Prices and limits are host-specific, not copied from another provider. The 128K output limit is stated on DeepInfra's own model page (its API leaves max_output_tokens null; rechecked 2026-11-18); cache prices, sampling controls and reasoning-effort levels remain unspecified. This is a public partner-hosted endpoint; free anonymous access is not advertised. No native Anthropic cache tariff is inferred.",
 		},
 	}
 }

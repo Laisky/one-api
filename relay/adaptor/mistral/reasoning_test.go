@@ -16,8 +16,9 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-// TestReasoningRequestCompatibility verifies Chat and Responses-style controls,
-// exact model IDs, tool payloads, replayed thinking, and input non-mutation.
+// TestReasoningRequestCompatibility verifies Chat and Responses-style controls
+// (forwarding only documented efforts), exact model IDs, tool payloads, replayed
+// thinking, and input non-mutation.
 func TestReasoningRequestCompatibility(t *testing.T) {
 	t.Parallel()
 	for _, effort := range []string{"none", "minimal", "low", "medium", "high", "xhigh"} {
@@ -40,7 +41,13 @@ func TestReasoningRequestCompatibility(t *testing.T) {
 				require.NoError(t, err)
 				var got map[string]json.RawMessage
 				require.NoError(t, json.Unmarshal(encoded, &got))
-				require.JSONEq(t, `"`+effort+`"`, string(got["reasoning_effort"]))
+				if effort == "none" || effort == "high" {
+					require.JSONEq(t, `"`+effort+`"`, string(got["reasoning_effort"]))
+				} else {
+					// Medium 3.5 documents only none/high; other values would be
+					// rejected upstream, so the provider default applies instead.
+					require.NotContains(t, got, "reasoning_effort")
+				}
 				require.NotContains(t, got, "reasoning")
 				require.NotContains(t, got, "seed")
 				require.NotContains(t, got, "max_completion_tokens")

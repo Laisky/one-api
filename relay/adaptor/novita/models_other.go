@@ -71,7 +71,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"mindai/macaron-v1-tall": {
 			Ratio:             nativeRate(0.2475),
-			CompletionRatio:   5.777777777777778,
+			CompletionRatio:   1.43 / 0.2475,
 			CachedInputRatio:  nativeRate(0.044),
 			ContextLength:     262144,
 			MaxOutputTokens:   32768,
@@ -82,7 +82,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"mindai/macaron-v1-venti": {
 			Ratio:             nativeRate(0.825),
-			CompletionRatio:   3.0000000000000004,
+			CompletionRatio:   3,
 			CachedInputRatio:  nativeRate(0.165),
 			ContextLength:     1048576,
 			MaxOutputTokens:   131072,
@@ -175,7 +175,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"stepfun/step-3.7-flash": {
 			Ratio:                       nativeRate(0.2),
-			CompletionRatio:             5.749999999999999,
+			CompletionRatio:             5.75,
 			CachedInputRatio:            nativeRate(0.04),
 			ContextLength:               262144,
 			MaxOutputTokens:             256000,
@@ -202,7 +202,7 @@ func otherModels() map[string]adaptor.ModelConfig {
 		},
 		"thudm/glm-4-32b-0414": {
 			Ratio:                       nativeRate(0.55),
-			CompletionRatio:             3.0181818181818176,
+			CompletionRatio:             1.66 / 0.55,
 			ContextLength:               32000,
 			MaxOutputTokens:             32000,
 			InputModalities:             []string{"text"},

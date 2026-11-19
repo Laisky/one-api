@@ -22,7 +22,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 		},
 		"google/gemma-3-27b-it": {
 			Ratio:                       nativeRate(0.119),
-			CompletionRatio:             1.6806722689075633,
+			CompletionRatio:             0.2 / 0.119,
 			ContextLength:               98304,
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text", "image"},
@@ -35,7 +35,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 		},
 		"google/gemma-4-26b-a4b-it": {
 			Ratio:                       nativeRate(0.13),
-			CompletionRatio:             3.076923076923077,
+			CompletionRatio:             0.4 / 0.13,
 			ContextLength:               262144,
 			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text", "image"},
@@ -48,7 +48,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 		},
 		"google/gemma-4-31b-it": {
 			Ratio:                       nativeRate(0.14),
-			CompletionRatio:             2.857142857142857,
+			CompletionRatio:             0.4 / 0.14,
 			ContextLength:               262144,
 			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text", "image"},

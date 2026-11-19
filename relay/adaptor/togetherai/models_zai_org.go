@@ -22,7 +22,7 @@ func zaiOrgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/GLM-5.1": {
 			Ratio:                       nativeRate(1.4),
-			CompletionRatio:             3.142857142857143,
+			CompletionRatio:             4.4 / 1.4,
 			CachedInputRatio:            nativeRate(0.26),
 			ContextLength:               202752,
 			MaxOutputTokens:             131072,

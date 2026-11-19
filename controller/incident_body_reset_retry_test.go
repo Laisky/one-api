@@ -193,9 +193,13 @@ func TestIncidentBodyResetRetryRouting(t *testing.T) {
 					require.Zero(t, secondCalls.Load())
 					require.Equal(t, incidentBodyResetBalance-firstHold, u.Quota, "one uncertain hold, without duplicate dispatch or debit")
 					require.Len(t, rows, 1)
-					require.Equal(t, dbmodel.LogTypeProvisional, rows[0].Type)
+					// The terminal relay publishes the retained hold as a visible,
+					// estimate-flagged consume row (previously a stranded provisional row).
+					require.Equal(t, dbmodel.LogTypeConsume, rows[0].Type)
 					require.EqualValues(t, firstHold, rows[0].Quota)
-					require.Equal(t, true, rows[0].Metadata[dbmodel.LogMetadataKeyProvisional])
+					require.Equal(t, true, rows[0].Metadata["billing_estimated"])
+					require.Contains(t, rows[0].Metadata["billing_estimate_reason"], "retained_reservation_")
+					require.Equal(t, u.UsedQuota, firstHold, "used quota must account for the retained hold")
 					selection := logs.FilterMessage("relay retry exhausted: no alternative channel available").All()
 					require.Len(t, selection, 1)
 					require.Equal(t, "strict_priority", selection[0].ContextMap()["retry_selection_policy"])

@@ -7,7 +7,10 @@ import {
   registerRequestErrorCapture,
   reportUnexpectedRequestError,
 } from '../../../legacy/browser-request-errors.mjs';
-import { markPrivateError } from '../../../legacy/browser-sentry-privacy.mjs';
+import {
+  markPrivateError,
+  sanitizeBreadcrumb,
+} from '../../../legacy/browser-sentry-privacy.mjs';
 
 const require = createRequire(import.meta.url);
 const axios = require('axios');
@@ -23,6 +26,8 @@ afterEach(() => {
 /** createHarness evaluates the actual API client with offline UI, Axios factory and browser imports. */
 async function createHarness(pathname = '/app/channels') {
   const uiErrors = [];
+  // uiMessages snapshots error.message when the UI is notified, as the real toast reads it then.
+  const uiMessages = [];
   const removedKeys = [];
   const redirects = [];
   const actions = [];
@@ -77,11 +82,13 @@ async function createHarness(pathname = '/app/channels') {
     './utils': {
       showError(error) {
         uiErrors.push(error);
+        uiMessages.push(error?.message);
       },
     },
     './common': {
       showError(error) {
         uiErrors.push(error);
+        uiMessages.push(error?.message);
       },
     },
     'store/index': {
@@ -123,6 +130,7 @@ async function createHarness(pathname = '/app/channels') {
     fulfill: fulfilledResponse,
     request: requestHandler,
     uiErrors,
+    uiMessages,
     removedKeys,
     redirects,
     actions,
@@ -263,3 +271,73 @@ test('preserves successful response and configured base URL without capture', as
   assert.equal(harness.createdOptions.baseURL, theme === 'berry' ? '/' : '');
   assert.deepEqual(captured, []);
 });
+
+/** statusError creates a native Axios response failure carrying axios's own generic message. */
+function statusError(status, data) {
+  return new axios.AxiosError(
+    'Request failed with status code ' + status,
+    status >= 500 ? 'ERR_BAD_RESPONSE' : 'ERR_BAD_REQUEST',
+    undefined,
+    {},
+    { status, statusText: 'fixture status', data, headers: {}, config: {} },
+  );
+}
+
+test('hands the UI and caller the server message for a 4xx rejection', async () => {
+  const harness = await createHarness();
+  const data = { success: false, message: 'resource uuid is required' };
+  const error = statusError(400, data);
+  const stack = error.stack;
+  await rejectSame(harness, error);
+  assert.deepEqual(harness.uiErrors, [error]);
+  assert.deepEqual(harness.uiMessages, ['resource uuid is required']);
+  assert.equal(error.message, 'resource uuid is required');
+  assert.equal(error.code, 'ERR_BAD_REQUEST');
+  assert.equal(error.response.status, 400);
+  assert.equal(error.response.data, data);
+  assert.equal(error.stack, stack);
+});
+
+test('keeps the generic Axios text in telemetry for a promoted 4xx server message', async () => {
+  const harness = await createHarness();
+  const error = statusError(400, {
+    success: false,
+    message: 'invalid resource reference',
+  });
+  await rejectSame(harness, error);
+  assert.equal(error.message, 'invalid resource reference');
+  const breadcrumb = sanitizeBreadcrumb(
+    { category: 'console', message: 'fixture' },
+    { input: [error] },
+  );
+  assert.equal(breadcrumb.message, 'Request failed with status code 400');
+});
+
+for (const [status, data] of [
+  [404, { success: false }],
+  [422, { success: false, message: '' }],
+  [422, { success: false, message: '   ' }],
+  [409, { success: false, message: { detail: 'not a string' } }],
+  [400, 'plain text body'],
+  [400, null],
+  [500, { success: false, message: 'internal detail' }],
+  [502, { success: false, message: 'internal detail' }],
+]) {
+  test(
+    'keeps the Axios message for HTTP ' +
+      status +
+      ' body ' +
+      JSON.stringify(data),
+    async () => {
+      const harness = await createHarness();
+      const error = statusError(status, data);
+      await rejectSame(harness, error);
+      assert.deepEqual(harness.uiErrors, [error]);
+      assert.deepEqual(harness.uiMessages, [
+        'Request failed with status code ' + status,
+      ]);
+      assert.equal(error.message, 'Request failed with status code ' + status);
+      assert.equal(error.response.status, status);
+    },
+  );
+}

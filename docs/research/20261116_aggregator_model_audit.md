@@ -33,8 +33,10 @@ routing defaults, not a guarantee that a live aggregator quote cannot change.
 ## Units and interpretation
 
 - OpenRouter quotes USD per token. Multiply by 1,000,000 before converting to the
-  gateway token ratio. `pricing.overrides.min_prompt_tokens` is an inclusive
-  threshold. UTC day/time overrides remain provider-specific; absent overrides
+  gateway token ratio. `pricing.overrides.min_prompt_tokens` applies when the
+  prompt is strictly greater than the threshold, so the catalog tier uses
+  `InputTokenThreshold = min_prompt_tokens + 1` (corrected 2026-11-18; the
+  original capture read it as inclusive). UTC day/time overrides remain provider-specific; absent overrides
   remove a stale current default, without inventing a retrospective cutover date.
 - DeepInfra quotes cents per token. Multiply by 10,000 for USD per million, then
   apply `1 - discount` exactly once. `rate_per_input_token_cached` is a multiplier
@@ -237,9 +239,10 @@ are discussed separately; the historical audit remains unchanged.
 ### OpenRouter
 
 - Terra 6.1 and its Pro alias use $1/$0.05/$5 input/cache/output and $1.25 cache
-  writes below 272,000 prompt tokens; at the inclusive 272,000 minimum they use
-  $2/$0.10/$7.50 and $2.50 writes. This host boundary intentionally differs from
-  native OpenAI. `none` is available for Terra, not the Pro alias.
+  writes up to 272,000 prompt tokens; above 272,000 they use $2/$0.10/$7.50 and
+  $2.50 writes. OpenRouter documents `min_prompt_tokens` as strictly greater
+  than the threshold, so this host boundary matches native OpenAI (corrected
+  2026-11-18). `none` is available for Terra, not the Pro alias.
 - DeepSeek Flash 1017 uses $0.15/$0.003/$0.60 off peak. On weekdays, 01:00–04:00
   and 06:00–10:00 UTC double all three rates. Weekends stay off peak.
 - MiniMax M3.1 Flash uses $0.075/$0.0075/$0.30 from 15:00 through 01:00 UTC and

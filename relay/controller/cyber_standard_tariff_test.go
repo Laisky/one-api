@@ -49,7 +49,7 @@ func TestGPT6CyberNativeResponseTariff(t *testing.T) {
 	}
 	var other map[string]json.RawMessage
 	require.NoError(t, json.Unmarshal([]byte(`{"service_tier":"fast"}`), &other))
-	changed, err := normalizeOpenAITerraStandardPricing(other, "gpt-6-cyber", channeltype.OpenAICompatible)
+	changed, err := normalizeNativeOpenAIStandardTier(other, "gpt-6-cyber", channeltype.OpenAICompatible)
 	require.NoError(t, err)
 	require.False(t, changed)
 	require.Equal(t, `"fast"`, string(other["service_tier"]))

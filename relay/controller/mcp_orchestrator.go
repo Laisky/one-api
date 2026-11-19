@@ -549,7 +549,10 @@ func doChatRequestOnce(c *gin.Context, meta *metalib.Meta, adaptorInstance adapt
 		return nil, nil, openai.ErrorWrapper(err, "do_request_failed", 500)
 	}
 	if isErrorHappened(meta, resp) {
-		return nil, nil, RelayErrorHandlerWithContext(c, resp)
+		// A provider error carrying a usage receipt is accepted, paid work for
+		// this round; the loop retains it instead of refunding the round.
+		paid := paidUpstreamErrorUsage(c, meta, adaptorInstance, resp)
+		return nil, paid, RelayErrorHandlerWithContext(c, resp)
 	}
 
 	origWriter := c.Writer

@@ -153,6 +153,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 	common.SetEventStreamHeaders(c)
 
 	var streamErr error
+	providerEnded := false
 	for {
 		line, err := lineReader.Next()
 		if err != nil {
@@ -193,6 +194,7 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 				lg.Error("error unmarshalling stream response", zap.Error(err))
 				continue
 			}
+			providerEnded = true
 			response, zhipuUsage := streamMetaResponseZhipu2OpenAI(&zhipuResponse)
 			if err := openai_compatible.RenderStreamChunkWithBridge(c, response); err != nil {
 				lg.Error("error marshalling stream response", zap.Error(err))
@@ -203,6 +205,11 @@ func StreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusC
 
 	if streamErr != nil {
 		lg.Error("error reading stream", zap.Error(streamErr))
+	}
+	// A read error or EOF before the provider's end event is an interruption;
+	// report it so a Claude client never sees the stream as complete.
+	if streamErr != nil || !providerEnded {
+		openai_compatible.MarkStreamInterrupted(c)
 	}
 
 	openai_compatible.FinalizeStreamWithBridge(c, usage)

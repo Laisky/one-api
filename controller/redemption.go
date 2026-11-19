@@ -89,7 +89,7 @@ func SearchRedemptions(c *gin.Context) {
 func GetRedemption(c *gin.Context) {
 	id, err := resolveRedemptionRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	redemption, err := model.GetRedemptionById(id)
@@ -165,7 +165,7 @@ func AddRedemption(c *gin.Context) {
 func DeleteRedemption(c *gin.Context) {
 	id, err := resolveRedemptionRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	err = model.DeleteRedemptionById(id)
@@ -191,12 +191,12 @@ func UpdateRedemption(c *gin.Context) {
 	}
 	ref, err := preferUUIDRef(redemption.UUID, redemption.Id)
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	redemption.Id, err = resolveRedemptionRef(ref)
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	redemption.UUID = ""

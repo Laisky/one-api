@@ -104,8 +104,11 @@ type GeneralOpenAIRequest struct {
 	ToolChoice       any             `json:"tool_choice,omitempty"`
 	ParallelTooCalls *bool           `json:"parallel_tool_calls,omitempty"`
 	User             string          `json:"user,omitempty"`
-	FunctionCall     any             `json:"function_call,omitempty"`
-	Functions        []Function      `json:"functions,omitempty"`
+	// PromptCacheKey is OpenAI's prompt_cache_key. Only a tenant-scoped value
+	// set for a native OpenAI destination is ever encoded; see PromptCacheKey.
+	PromptCacheKey PromptCacheKey `json:"prompt_cache_key,omitzero"`
+	FunctionCall   any            `json:"function_call,omitempty"`
+	Functions      []Function     `json:"functions,omitempty"`
 	// https://platform.openai.com/docs/api-reference/embeddings/create
 	Input          any    `json:"input,omitempty"`
 	EncodingFormat string `json:"encoding_format,omitempty"`
@@ -265,6 +268,10 @@ type ClaudeRequest struct {
 	ToolChoice    any             `json:"tool_choice,omitempty"`
 	Thinking      *Thinking       `json:"thinking,omitempty"`
 	Metadata      any             `json:"metadata,omitempty"`
+	// PromptCacheKey is a gateway extension carrying OpenAI's prompt_cache_key
+	// for Claude clients served by native OpenAI. It is never encoded unless
+	// the OpenAI converter scopes it; see PromptCacheKey.
+	PromptCacheKey PromptCacheKey `json:"prompt_cache_key,omitzero"`
 }
 
 // ClaudeMessage represents a message that can have either string or structured content

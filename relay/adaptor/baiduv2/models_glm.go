@@ -27,7 +27,7 @@ func glmModels() map[string]adaptor.ModelConfig {
 				DateTo:   "2026-10-08",
 				Overlay: adaptor.ModelConfig{
 					Ratio:            nativeRate(4.8),
-					CompletionRatio:  3.5000000000000004,
+					CompletionRatio:  3.5,
 					CachedInputRatio: nativeRate(1.2),
 				},
 			},
@@ -43,7 +43,7 @@ func glmModels() map[string]adaptor.ModelConfig {
 					DateTo:   "2026-10-08",
 					Overlay: adaptor.ModelConfig{
 						Ratio:            nativeRate(4.8),
-						CompletionRatio:  3.5000000000000004,
+						CompletionRatio:  3.5,
 						CachedInputRatio: nativeRate(1.2),
 					},
 				},

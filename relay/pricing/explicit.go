@@ -26,7 +26,8 @@ func RequireExplicitTokenPricing(c *gin.Context, m *meta.Meta) error {
 		name = m.OriginModelName
 	}
 	missing := func() error {
-		return errors.Errorf("model %q requires explicit positive input and output pricing in channel model_configs", name)
+		return adaptor.RequestPricingNotConfigured(
+			errors.Errorf("model %q requires explicit positive input and output pricing in channel model_configs", name))
 	}
 	value, ok := c.Get(ctxkey.ChannelModel)
 	if !ok {
@@ -69,4 +70,23 @@ func validateExplicitTokenTariff(cfg adaptor.ModelConfig) error {
 // values from the admission calculation without changing configured valid rates.
 func positiveFinitePrice(value float64) bool {
 	return value > 0 && !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+// ValidateOperatorTariff enforces adaptor.OperatorTariffPolicy before paid
+// dispatch. Parameters: c carries the selected channel, m identifies the mapped
+// model, and provider is the dispatching adaptor. Returns: nil when the provider
+// has a qualified tariff for the model, otherwise RequireExplicitTokenPricing's
+// verdict, so an unpriced model never reaches the upstream.
+func ValidateOperatorTariff(c *gin.Context, m *meta.Meta, provider adaptor.Adaptor) error {
+	if m == nil {
+		return errors.New("operator tariff validation requires model metadata")
+	}
+	name := m.ActualModelName
+	if name == "" {
+		name = m.OriginModelName
+	}
+	if !adaptor.RequiresOperatorTariff(provider, name) {
+		return nil
+	}
+	return RequireExplicitTokenPricing(c, m)
 }

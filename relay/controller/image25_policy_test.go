@@ -23,16 +23,19 @@ func TestGPTImage25ReservationPolicy(t *testing.T) {
 		{"nan", math.NaN(), 1, 1, 1},
 		{"infinite", math.Inf(1), 1, 1, 1},
 		{"zero_tier", 0.1, 0, 1, 1},
-		{"zero_group", 0.1, 1, 0, 1},
+		{"negative_group", 0.1, 1, -1, 1},
 		{"invalid_count", 0.1, 1, 1, 0},
 		{"overflow", math.MaxFloat64, 1, 1, 10},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Error(t, validateGPTImage25Billing("gpt-image-2.5-sunburst", tc.price, tc.tier, tc.group, tc.count))
+			require.Error(t, validateStrictGPTImageBilling("gpt-image-2.5-sunburst", tc.price, tc.tier, tc.group, tc.count))
 		})
 	}
-	require.NoError(t, validateGPTImage25Billing("gpt-image-2.5-flare", 0.1, 1, 1.5, 10))
-	require.NoError(t, validateGPTImage25Billing("dall-e-3", 0, 0, 0, 0))
+	require.NoError(t, validateStrictGPTImageBilling("gpt-image-2.5-flare", 0.1, 1, 1.5, 10))
+	// A free group (ratio 0) is served free, consistent with tier admission's
+	// free-group rule; the operator fallback is still required.
+	require.NoError(t, validateStrictGPTImageBilling("gpt-image-2.5-sunburst", 0.1, 1, 0, 1))
+	require.NoError(t, validateStrictGPTImageBilling("dall-e-3", 0, 0, 0, 0))
 }
 
 // TestGPTImage25SignedSettlement protects refunds of unused reservations.
@@ -51,7 +54,7 @@ func TestGPTImage25SignedSettlement(t *testing.T) {
 func TestGPTImage25PriceOnlyOverrideKeepsRequestDefaults(t *testing.T) {
 	t.Parallel()
 	input := &adaptor.ImagePricingConfig{PricePerImageUsd: 0.1}
-	got := completeGPTImage25Defaults("gpt-image-2.5-sunburst", input)
+	got := completeStrictGPTImageDefaults("gpt-image-2.5-sunburst", input)
 	require.Equal(t, 0.1, got.PricePerImageUsd)
 	require.Equal(t, "auto", got.DefaultSize)
 	require.Equal(t, "auto", got.DefaultQuality)
@@ -62,8 +65,8 @@ func TestGPTImage25PriceOnlyOverrideKeepsRequestDefaults(t *testing.T) {
 	require.Zero(t, input.MaxImages)
 	input.DefaultQuality = "high"
 	input.MaxImages = 2
-	got = completeGPTImage25Defaults("gpt-image-2.5-flare", input)
+	got = completeStrictGPTImageDefaults("gpt-image-2.5-flare", input)
 	require.Equal(t, "high", got.DefaultQuality)
 	require.Equal(t, 2, got.MaxImages)
-	require.Same(t, input, completeGPTImage25Defaults("dall-e-3", input))
+	require.Same(t, input, completeStrictGPTImageDefaults("dall-e-3", input))
 }

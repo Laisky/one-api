@@ -47,6 +47,12 @@ type ImageRequest struct {
 	ResponseFormat string `json:"response_format,omitempty"`
 	Style          string `json:"style,omitempty"`
 	User           string `json:"user,omitempty"`
+	// OutputFormat is the GPT Image encoded output format (png, jpeg, webp).
+	OutputFormat string `json:"output_format,omitempty"`
+	// Complexity is the GPT Image 2.6 rendering complexity (low, medium, high).
+	Complexity string `json:"complexity,omitempty"`
+	// SafetyIdentifier is the end-user identifier OpenAI recommends in place of User.
+	SafetyIdentifier string `json:"safety_identifier,omitempty"`
 }
 
 type WhisperJSONResponse struct {
@@ -105,10 +111,15 @@ type UsageOrResponseText struct {
 	ResponseText string
 }
 
+// SlimTextResponse is the non-streaming Chat Completions body a handler
+// re-renders after normalizing choices and usage.
 type SlimTextResponse struct {
 	Choices     []TextResponseChoice `json:"choices"`
 	model.Usage `json:"usage"`
 	Error       *model.Error `json:"error,omitempty"`
+	// ChatCompletionIdentity keeps the provider's root identity fields when the
+	// handler re-renders this struct for the client.
+	model.ChatCompletionIdentity
 }
 
 type TextResponseChoice struct {

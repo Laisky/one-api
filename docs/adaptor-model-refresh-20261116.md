@@ -49,6 +49,68 @@ from a supported gateway transport. Public access requirements alone do not
 remove a compatible model from discovery. Unknown prices and limits remain
 unknown; they are not converted into free tariffs or copied from a sibling host.
 
+## Mutable alias and legacy ID changes
+
+This section lists existing model IDs whose behavior or price changes in this
+refresh. Newly added IDs are covered elsewhere. A client or channel mapping that
+already uses one of these IDs gets the new behavior without changing its
+request. To keep the previous model, map to a pinned ID where the provider
+publishes one.
+
+**`mistral-large-latest` (Mistral channel) now targets Mistral Large 4.**
+
+| | Before (Large 3) | After (Large 4) |
+| --- | --- | --- |
+| USD per 1M input / cache read / output | 0.50 / 0.05 / 1.50 | 0.70 / 0.07 / 2.10 |
+| Context | 262,144 | 1,000,000 |
+| `reasoning_effort` | Not advertised; always omitted upstream | `low`, `medium`, `high`; provider default `high` |
+
+- Supported effort values are trimmed and lowercased before forwarding.
+  Unsupported values are dropped rather than sent to Mistral, which would reject
+  them; the provider default then applies. Mistral removed `none` from Large 4 on
+  October 29, so `none` is dropped for this model. `minimal`, `xhigh` and unknown
+  values are also dropped. This applies to Chat `reasoning_effort` and to
+  Responses `reasoning.effort`. Models that document `none`, such as
+  `mistral-small-latest` and `mistral-medium-latest`, still forward it.
+- `?thinking=true` now injects `reasoning_effort: "high"` for this alias.
+  Previously, no effort reached Mistral for this alias.
+- The pinned Large 3 ID `mistral-large-2512` keeps 0.50 / 0.05 / 1.50. The
+  expired Large 4 launch discount applies only to the pinned Large 4 IDs, not
+  the alias.
+
+**`voxtral-mini-tts-latest` (Mistral channel)** now targets Voxtral Mini TTS 3
+preview. Its price changes from $16 to $13 per million input characters. The
+March 2026 pinned IDs (`voxtral-mini-tts-2603`, `voxtral-tts-2603`) keep $16.
+
+**Cohere North legacy spellings.** Cohere publishes `north-mini-code-1.0` and
+`north-small-translate-1.0`. The earlier gateway spellings `north-mini-code-1-0`
+and `north-small-translate-1-0` remain in the catalog so that existing channel
+model mappings and direct requests keep working. On every chat entrypoint
+(Chat, streaming, Responses and Claude Messages), the adaptor rewrites them to
+the published dotted IDs before sending the request upstream. Billing and logs
+keep the name configured by the administrator, and both spellings share the
+same free public-API tariff.
+
+**OpenRouter `~…-latest` routing aliases** have new routing-default quotes (USD
+per 1M input / cache read / output; parenthesized values are cache writes or
+the long-context tier):
+
+| Alias | Before | After |
+| --- | --- | --- |
+| `~anthropic/claude-fable-latest` | 10 / 0.25 / 50 (cache write 5m 12.5, 1h 20) | 8 / 0.20 / 40 (cache write 5m 10, 1h 16) |
+| `~deepseek/deepseek-pro-latest` | 0.24948 / 0.007938 / 0.74844 | 0.0999 / 0.0999 / 8.0 |
+| `~deepseek/deepseek-flash-latest` | 0.0336 / 0.0336 / 1.188 | 0.036 / 0.01 / 0.5 |
+| `~deepseek/deepseek-v4-flash-latest` | 0.0128 / 0.0128 / 0.768 | 0.0434 / 0.035 / 0.3 |
+| `~google/gemini-pro-latest` | 2 / 0.2 / 12 (above 200K input: 4 / 0.4 / 18) | 2 / 0.1 / 10, long-context tier removed |
+| `~google/gemini-flash-latest` | 0.75 / 0.075 / 3.75 | 1.5 / 0.075 / 7.5 |
+| `~moonshotai/kimi-latest` | 0.72 / 0.3 / 24 | 0.1824 / 0.18 / 11.0055 |
+| `~openai/gpt-terra-latest` | 2 / 0.2 / 12 (above 272K: 4 / 0.4 / 18) | 1 / 0.05 / 5 (above 272K: 2 / 0.1 / 7.5) |
+| `~z-ai/glm-flash-latest` | 0.0232 / 0.0232 / 1.2 | 0.0399 / 0.03 / 0.0784 |
+| `~z-ai/glm-latest` | 0.055 / 0.06 / 5 | 0.0699 / 0.0689 / 1.4 |
+
+The `~deepseek/*-latest` and `~moonshotai/kimi-latest` aliases also advertise
+`none` as a reasoning effort.
+
 ## Implementation highlights
 
 ### Native OpenAI and billing
@@ -62,16 +124,57 @@ information for settlement. A long-context cache-write tariff is not published;
 those receipts remain unpriced unless an applicable explicit operator tier
 supplies a rate. This prevents inheriting a short-context write rate silently.
 
+OpenAI caches GPT-5.6+ prompts implicitly by default, so cache writes are the
+normal case rather than an exception. Admission therefore funds implicit 30m
+writes in short-context tiers. Above 272,000 input tokens it pins
+`prompt_cache_options.mode="explicit"`, which disables the implicit write, and
+refuses explicit client write controls with HTTP 400. This applies unless an
+operator tier prices long-context writes. Without the pin, nearly every
+long-context Cyber receipt settled its whole reservation as an estimate. See
+"Native OpenAI Prompt-Cache Admission" in `docs/arch/billing.md`.
+
 Image 2.6 uses the established Images API reservation/fallback policy and the
 five distinct text/image/cache/output token buckets. Exact model matching avoids
-invented dated aliases. A positive operator fallback is still required for an
-ambiguous or missing receipt. Actual token usage can refund excess reservation.
+invented dated aliases. A positive operator fallback is still required for a
+missing or unusable receipt. Actual token usage can refund excess reservation.
 The fallback is operator policy, not an invented official per-image tariff.
+A receipt with usable totals but an incomplete modality or cache split (for
+example `input_tokens` without `input_tokens_details`) settles the most
+expensive assignment consistent with its totals: unclassified input at the
+higher of the text/image input rates, and an unsplit cache read credited where
+the cache discount is smallest. The charge is logged as
+`billing_source=provider_tokens_upper_bound` with `billing_estimated` metadata;
+the configured fallback is also flagged as an estimate. Previously unclassified
+input was billed at the text rate and an unsplit cache read fell back to the
+operator price, both of which could under-bill.
+On OpenAI and Azure channels the Images API also accepts the 2.6 request
+controls: `complexity` (`low`, `medium` or `high`, valid only for the two 2.6
+IDs and rejected for older models), `safety_identifier` (at most 128
+characters, forwarded alongside the deprecated `user`), and `output_format`
+limited to `png`, `jpeg` and `webp`. Azure documents neither `complexity` nor
+`safety_identifier` for image requests, so Azure generation bodies keep
+omitting both, exactly as before these fields were decoded. SVG and GIF output,
+whose billing differs from the qualified image-token tariff, are rejected
+before quota reservation.
+
+A native OpenAI or Azure OpenAI non-2xx response whose body nevertheless
+carries an explicit usage receipt (a root `usage` object or a failed Responses
+envelope) is settled exactly like a 2xx response with the same receipt and is
+never refunded or replayed on another channel. OpenAI's documented error schema
+carries no usage, so this closes a possible rather than an observed
+under-billing window; error bodies without a receipt keep the existing
+retained-hold and retry path. See
+[billing architecture](arch/billing.md#paid-upstream-error-receipts).
 
 Azure and legacy AIProxy no longer automatically inherit these three new native
 IDs without their own provider contract. Existing mappings and historical
 membership remain. Native lifecycle notices are updated without assigning
-OpenAI shutdown dates to Azure deployments.
+OpenAI shutdown dates to Azure deployments. The exclusion is enforced where
+prices are resolved, not only in discovery: both adaptors declare the IDs
+through `adaptor.OperatorTariffPolicy`, so no pricing layer substitutes native
+OpenAI's global tariff, and dispatch is refused before any upstream contact
+unless the channel's `model_configs` supplies a complete operator tariff (see
+[billing architecture](arch/billing.md#operator-only-tariffs)).
 
 ### Provider-owned catalogs
 
@@ -90,7 +193,12 @@ OpenAI shutdown dates to Azure deployments.
   the existing duration/character audio billing paths.
 - Cohere Embed 5 gains its documented dimensions and tariffs while preserving
   model-specific older validation. NVIDIA hosted limits and effort vocabularies
-  remain distinct from model-creator maxima. Replicate Gemini 3.1 Pro now applies
+  remain distinct from model-creator maxima. NVIDIA forwards a reasoning effort
+  only when the model's hosted vocabulary lists it (trimmed and lowercased);
+  any other value, including one arriving as a Responses `reasoning.effort`, is
+  dropped so the provider applies its default. NVIDIA, xAI (Chat and native
+  Responses), Mistral, Moonshot and Vertex GPT-OSS now share one helper,
+  `adaptor.SupportedReasoningEffort`. Replicate Gemini 3.1 Pro now applies
   its already documented expensive bracket above 200,000 input tokens.
 - Cloudflare and Fireworks gain hosted additions with their own cache prices and
   actual capabilities. SiliconFlow MOSS-Image uses CNY 0.30/image under the

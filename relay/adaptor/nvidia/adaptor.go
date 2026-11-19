@@ -23,6 +23,8 @@ import (
 	"net/http"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/relay/adaptor"
@@ -61,20 +63,48 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	return nil
 }
 
-// ConvertRequest preserves model-specific documented effort controls while
-// retaining the preceding normalization for other NVIDIA models. Parameters are the request
-// context, relay mode and chat request; it returns the normalized request or an
-// error for nil input. The hosted endpoint schema, rather than the creator's
-// checkpoint capabilities, determines which models advertise reasoning_effort.
+// ConvertRequest lowers a Chat request (or a Responses request converted to
+// Chat by the fallback layer) to NVIDIA's hosted chat schema. Parameters are
+// the request context (used only for DEBUG logging, may be nil), the relay
+// mode and the chat request, which is normalized in place as before. It
+// returns the normalized request, or an error for nil input.
+//
+// NVIDIA's documented effort control is the top-level reasoning_effort field;
+// the Responses-style reasoning object is not part of its chat schema. An
+// effort supplied only as reasoning.effort is therefore promoted, and the
+// reasoning object is dropped. The effort is then kept only when the hosted
+// model's catalog lists it (trimmed and lowercased); unlisted values, models
+// without a published vocabulary and unknown models omit the field so NVIDIA
+// applies its documented default. The hosted endpoint schema, rather than the
+// creator's checkpoint capabilities, determines which models advertise efforts.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
-	if request.ReasoningEffort != nil && len(ModelRatios[request.Model].SupportedReasoningEfforts) == 0 {
-		request.ReasoningEffort = nil
+	requested := request.ReasoningEffort
+	if requested == nil && request.Reasoning != nil {
+		requested = request.Reasoning.Effort
+	}
+	request.Reasoning = nil
+	request.ReasoningEffort = adaptor.SupportedReasoningEffort(ModelRatios, request.Model, requested)
+	if requested != nil && request.ReasoningEffort == nil && c != nil {
+		// Bound the caller-controlled value echoed in DEBUG logs.
+		value := *requested
+		if len(value) > maxLoggedReasoningEffort {
+			value = value[:maxLoggedReasoningEffort]
+		}
+		lg := gmw.GetLogger(c)
+		lg.Debug("dropped unsupported NVIDIA reasoning_effort; provider default applies",
+			zap.String("model", request.Model),
+			zap.String("requested_effort", value),
+			zap.Strings("supported_efforts", ModelRatios[request.Model].SupportedReasoningEfforts),
+		)
 	}
 	return request, nil
 }
+
+// maxLoggedReasoningEffort bounds the caller-controlled effort echoed in DEBUG logs.
+const maxLoggedReasoningEffort = 32
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error) {
 	return nil, errors.New("nvidia does not support image generation")

@@ -86,9 +86,16 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	}
 
 	imagePricingCfg, _ := pricing.ResolveImagePricing(imageRequest.Model, channelModelConfigs, adaptor, meta.StartTime)
-	imagePricingCfg = completeGPTImage25Defaults(imageRequest.Model, imagePricingCfg)
+	imagePricingCfg = completeStrictGPTImageDefaults(imageRequest.Model, imagePricingCfg)
+	clientImageSize := imageRequest.Size
 	if err := prepareImageRequest(imageRequest, imagePricingCfg, meta); err != nil {
 		return openai.ErrorWrapper(err, "invalid_image_request", http.StatusBadRequest)
+	}
+	// Together renders the width/height it receives and ignores size, so its
+	// billed size comes from those controls and is forwarded as them.
+	togetherImage, togetherErr := prepareTogetherImageRequest(c, meta, imageRequest, clientImageSize, imagePricingCfg)
+	if togetherErr != nil {
+		return togetherErr
 	}
 
 	bizErr := validateImageRequest(imageRequest, meta, imagePricingCfg)
@@ -120,7 +127,13 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		requestToMarshal := any(imageRequest)
 		if meta.Mode != relaymode.ImagesEdits &&
 			(meta.ChannelType == channeltype.OpenAI || meta.ChannelType == channeltype.Azure) {
-			requestToMarshal = buildOpenAIImageRequest(imageRequest)
+			requestToMarshal = buildOpenAIImageRequestForChannel(imageRequest, meta.ChannelType)
+		} else if meta.ChannelType == channeltype.Azure {
+			// Azure documents neither control for image edits either; keep
+			// omitting them as before they were decoded.
+			scoped := *imageRequest
+			scoped.SafetyIdentifier, scoped.Complexity = "", ""
+			requestToMarshal = &scoped
 		}
 		jsonStr, err := json.Marshal(requestToMarshal)
 		if err != nil {
@@ -176,9 +189,15 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			return openai.ErrorWrapper(err, "marshal_image_request_failed", http.StatusInternalServerError)
 		}
 		requestBody = bytes.NewBuffer(jsonStr)
+	case channeltype.TogetherAI:
+		encoded, err := togetherImage.body(imageRequest.Model)
+		if err != nil {
+			return openai.ErrorWrapper(err, "marshal_image_request_failed", http.StatusInternalServerError)
+		}
+		requestBody = bytes.NewReader(encoded)
 	case channeltype.OpenAI:
 		if meta.Mode != relaymode.ImagesEdits {
-			jsonStr, err := json.Marshal(buildOpenAIImageRequest(imageRequest))
+			jsonStr, err := json.Marshal(buildOpenAIImageRequestForChannel(imageRequest, meta.ChannelType))
 			if err != nil {
 				return openai.ErrorWrapper(err, "marshal_image_request_failed", http.StatusInternalServerError)
 			}
@@ -198,12 +217,24 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	if override, ok := getChannelImageTierOverride(channelModelRatio, imageModel, imageRequest.Size, imageRequest.Quality); ok {
 		imageCostRatio = override
 	}
+	// Together bills steps above a model's published default proportionally.
+	imageCostRatio *= togetherImage.stepMultiplier()
 
 	// PricePerImageUsd is a render price for legacy models, but an explicit
 	// reservation/fallback tariff for GPT Image 2.5 (see docs/usage/openai-image25-billing.md).
 	imagePriceUsd := 0.0
 	if imagePricingCfg != nil {
 		imagePriceUsd = imagePricingCfg.PricePerImageUsd
+	}
+	// An opt-in megapixel tariff replaces the flat render price with the price
+	// of the requested output size plus every uploaded reference image, so the
+	// reservation below and the settlement share one unit price.
+	megapixelCharge, megapixelErr := quoteImageMegapixelChargeWithOptions(c, rawBody, imageRequest, imagePricingCfg, togetherImage.quoteOptions())
+	if megapixelErr != nil {
+		return megapixelErr
+	}
+	if megapixelCharge != nil {
+		imagePriceUsd = megapixelCharge.Quote.UnitUsd
 	}
 
 	ratio := modelRatio * groupRatio
@@ -215,7 +246,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	if meta.ChannelType == channeltype.Replicate && billedCount > 1 {
 		billedCount = 1
 	}
-	if err := validateGPTImage25Billing(imageModel, imagePriceUsd, imageCostRatio, groupRatio, billedCount); err != nil {
+	if err := validateStrictGPTImageBilling(imageModel, imagePriceUsd, imageCostRatio, groupRatio, billedCount); err != nil {
 		return openai.ErrorWrapper(err, "image_billing_not_configured", http.StatusServiceUnavailable)
 	}
 	perImageBilling := imagePriceUsd > 0
@@ -234,6 +265,12 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	usedQuota := baseQuota
 	tokenQuota := int64(0)
 	tokenQuotaFloat := 0.0
+	// A strict GPT Image settlement without a usable receipt is the operator
+	// fallback, an estimate; finalizeImageQuota refines it from the receipt.
+	estimateReason := ""
+	if usesStrictGPTImageTokenBilling(imageModel) {
+		estimateReason = strictImageConfiguredFallbackReason
+	}
 
 	// Every paid image contract shares the same atomic owner/token admission.
 	// Cached affordability alone must not authorize concurrent paid dispatch.
@@ -259,7 +296,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		}
 	}
 
-	imageUsageConfig := resolveGPTImage25UsageConfig(imageModel, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
+	imageUsageConfig := resolveStrictGPTImageUsageConfig(imageModel, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 
 	// do request
 	resp, err := adaptor.DoRequest(c, meta, requestBody)
@@ -290,6 +327,9 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		defer cancel()
 
 		if imageResponseRequiresFailureReconciliation(resp) || c.GetBool(relayadaptor.ImageReceiptRejectedKey) {
+			if resp != nil {
+				recordUpstreamClientRejection(c, resp.StatusCode)
+			}
 			reconcileImageFailureBilling(c, bgCtx, meta.TokenId, preConsumedQuota, provLogID, "upstream_http_error")
 			return
 		}
@@ -323,6 +363,9 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			lg.Error("error update user quota cache", zap.Error(err))
 		}
 		if usedQuota >= 0 {
+			if estimateReason == "" && megapixelCharge != nil {
+				estimateReason = megapixelCharge.EstimateReason
+			}
 			tokenName := c.GetString(ctxkey.TokenName)
 			logContent := formatImageBillingLog(imageBillingLogParams{
 				OriginModel:     visibleModelName,
@@ -339,13 +382,16 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 				TotalQuota:      usedQuota,
 				GroupRatio:      groupRatio,
 				ModelRatio:      modelRatio,
+				EstimateReason:  estimateReason,
+				MegapixelDetail: formatImageMegapixelDetail(megapixelCharge) + togetherImage.logDetail(),
 			})
+			logMetadata := billingEstimateMetadata(nil, estimateReason)
 			// Reconcile provisional log if one exists, otherwise create a new log entry.
 			elapsedTime := helper.CalcElapsedTime(meta.StartTime)
 			if provLogID > 0 {
 				if err := model.ReconcileConsumeLog(bgCtx, provLogID, usedQuota,
 					logContent, promptTokens, completionTokens,
-					elapsedTime, nil); err != nil {
+					elapsedTime, logMetadata); err != nil {
 					lg.Error("failed to reconcile provisional log, falling back to new log entry",
 						zap.Error(err), zap.Int("provisional_log_id", provLogID))
 					model.RecordConsumeLog(bgCtx, &model.Log{
@@ -363,6 +409,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 						ElapsedTime:      elapsedTime,
 						RequestId:        requestId,
 						TraceId:          traceId,
+						Metadata:         logMetadata,
 					})
 				}
 			} else {
@@ -381,6 +428,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 					ElapsedTime:      elapsedTime,
 					RequestId:        requestId,
 					TraceId:          traceId,
+					Metadata:         logMetadata,
 				})
 			}
 			model.UpdateUserUsedQuotaAndRequestCountWithContext(bgCtx, meta.UserId, usedQuota)
@@ -410,6 +458,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			tokenQuota = summary.TokenQuota
 			tokenQuotaFloat = summary.TokenQuotaFloat
 			usedQuota = summary.TotalQuota
+			estimateReason = summary.EstimateReason
 		}
 		return respErr
 	}
@@ -423,6 +472,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 		tokenQuota = summary.TokenQuota
 		tokenQuotaFloat = summary.TokenQuotaFloat
 		usedQuota = summary.TotalQuota
+		estimateReason = summary.EstimateReason
 	}
 
 	return nil
@@ -509,6 +559,10 @@ type imageBillingLogParams struct {
 	TotalQuota      int64
 	GroupRatio      float64
 	ModelRatio      float64
+	// EstimateReason labels a charge that is not an exact provider price.
+	EstimateReason string
+	// MegapixelDetail lists the billed megapixels of an opt-in megapixel tariff.
+	MegapixelDetail string
 }
 
 // formatImageBillingLog renders a concise billing summary including size, quality, pricing tiers, and token costs.
@@ -541,10 +595,14 @@ func formatImageBillingLog(params imageBillingLogParams) string {
 	fmt.Fprintf(&builder, " total_usd=%.4f", totalUsd)
 	fmt.Fprintf(&builder, " group_rate=%.2f", params.GroupRatio)
 
-	if isGPTImage25Model(params.Model) {
+	if usesStrictGPTImageTokenBilling(params.Model) {
 		source := "provider_tokens"
-		if params.TokenQuota == 0 {
+		switch {
+		case params.TokenQuota == 0:
 			source = "configured_fallback"
+		case params.EstimateReason == strictImageModalityUpperBoundReason,
+			params.EstimateReason == strictImageIncompleteReceiptReason:
+			source = "provider_tokens_upper_bound"
 		}
 		fmt.Fprintf(&builder, " billing_source=%s reserved_usd=%.4f fallback_unit_usd=%.4f",
 			source, float64(params.BaseQuota)/billingratio.QuotaPerUsd, params.ImagePriceUsd*params.ImageTier)
@@ -552,6 +610,7 @@ func formatImageBillingLog(params imageBillingLogParams) string {
 		unitUsd := params.ImagePriceUsd * params.ImageTier
 		baseUsd := float64(params.BaseQuota) / billingratio.QuotaPerUsd
 		fmt.Fprintf(&builder, " unit_usd=%.4f tier=%.2f base_usd=%.4f", unitUsd, params.ImageTier, baseUsd)
+		builder.WriteString(params.MegapixelDetail)
 	} else if params.ModelRatio > 0 {
 		fmt.Fprintf(&builder, " model_ratio=%.4f", params.ModelRatio)
 	}

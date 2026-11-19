@@ -34,7 +34,7 @@ func GetMCPTools(c *gin.Context) {
 
 	serverID, err := resolveOptionalMCPServerRef(c.Query("server_id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	status, statusProvided := parseOptionalInt(c.Query("status"))

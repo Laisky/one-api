@@ -197,7 +197,7 @@ func Relay(c *gin.Context) {
 	// may increase an allowed budget, but must never undo a safety veto.
 	retryAllowed := true
 	lastDispatchErr := bizErr
-	if adaptor.IsRESTTransportMismatch(bizErr.RawError) {
+	if isLocalDispatchRefusal(bizErr.RawError) {
 		// No provider attempt was made. Reserve the initial dispatch, not an
 		// expanded budget of paid retries proportional to the channel count.
 		retryTimes++
@@ -444,9 +444,10 @@ func Relay(c *gin.Context) {
 			ActualModel:   retryActualModel,
 			RequestURL:    requestURL,
 		})
-		if adaptor.IsRESTTransportMismatch(bizErr.RawError) {
-			// Exclusions make this finite. Local incompatibility consumes neither
-			// a provider call nor its retry slot, wherever it occurs in the pool.
+		if isLocalDispatchRefusal(bizErr.RawError) {
+			// Exclusions make this finite. Local incompatibility or a missing
+			// channel tariff consumes neither a provider call nor its retry slot,
+			// wherever it occurs in the pool.
 			i++
 			continue
 		}
@@ -469,12 +470,24 @@ func Relay(c *gin.Context) {
 		observation.retryOutcome = relayObservedRetryStop(c, retryAllowed)
 	}
 
-	// An exhausted local transport candidate is not evidence that the caller
-	// used an invalid transport when a compatible provider was actually tried.
-	if bizErr != nil && adaptor.IsRESTTransportMismatch(bizErr.RawError) && lastDispatchErr != nil {
+	// An exhausted local candidate (transport mismatch or missing tariff) is not
+	// evidence about the request when a provider was actually tried: answer the
+	// last real dispatch failure instead.
+	if bizErr != nil && isLocalDispatchRefusal(bizErr.RawError) && lastDispatchErr != nil {
 		bizErr = lastDispatchErr
 	}
 	if bizErr != nil {
+		// No further attempt will run: publish a retained reservation of the
+		// final failed attempt so the debit is visible in every ledger.
+		rcontroller.SettleTerminalRetainedReservation(c)
+		// Every attempted candidate was refused before any upstream contact
+		// because its channel lacks a required tariff (a real dispatch failure
+		// would have replaced bizErr above). Answer the billing-configuration
+		// contract shared with image requests, not a generic dispatch failure.
+		if adaptor.IsRequestPricingNotConfigured(bizErr.RawError) {
+			bizErr.StatusCode = http.StatusServiceUnavailable
+			bizErr.Error.Code = "model_pricing_not_configured"
+		}
 		if bizErr.StatusCode == http.StatusTooManyRequests {
 			// Provide more specific messaging for 429 errors after exhausting retries
 			if len(failedChannels) > 1 {
@@ -493,6 +506,16 @@ func Relay(c *gin.Context) {
 			rcontroller.LogClientResponse(c, "client error response sent")
 		}
 	}
+}
+
+// isLocalDispatchRefusal reports whether err refused an attempt locally,
+// before any provider contact: the selected channel cannot use this REST
+// transport, or it lacks the tariff its provider requires. Such refusals spend
+// no provider call, so they never consume a paid retry slot and never mask a
+// real dispatch failure. Parameters: err is the attempt's raw error. Returns:
+// true for a local refusal.
+func isLocalDispatchRefusal(err error) bool {
+	return adaptor.IsRESTTransportMismatch(err) || adaptor.IsRequestPricingNotConfigured(err)
 }
 
 // retrySelectionPolicy names how the relay retry loop picks the next channel

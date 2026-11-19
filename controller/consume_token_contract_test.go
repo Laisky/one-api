@@ -13,7 +13,7 @@ import (
 	"github.com/Laisky/one-api/common/config"
 )
 
-// ConsumeToken (controller/token.go) is the only TokenAuth/API-client-facing site
+// ConsumeToken (controller/token_consume.go) is the only TokenAuth/API-client-facing site
 // that echoes a token entity back as `data`, so its response shape is an external
 // client contract rather than an internal management-console detail. The key sets
 // frozen below are the exact bytes the pre-refactor binary emits; they must not

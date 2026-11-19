@@ -20,46 +20,76 @@ import (
 // - https://platform.claude.com/docs/en/models/sonnet-5-5/whats-new-sonnet-5-5#pricing
 
 // awsClaudeModelPricing contains complete Bedrock claude model defaults.
+//
+// Cache dimensions follow the usage types Bedrock actually sells (AWS Price List
+// API, offer AmazonBedrockFoundationModels, us-east-1 and us-west-2, publication
+// 2026-11-09T22:43:12Z, fetched 2026-11-18). Claude Instant, Claude 2.0/2.1,
+// Claude 3 Haiku/Sonnet/Opus and Claude 3.5 Sonnet (June 2024) have no cache
+// usage type, so they carry no cache ratios: a zero ratio inherits the input
+// rate, the only SKU Bedrock could meter such tokens under, and never undercuts
+// it with an invented discount. Claude 3.5 Haiku, 3.5 Sonnet v2, 3.7 Sonnet,
+// Sonnet 4 and Opus 4/4.1 sell 5-minute writes only (Bedrock documents that a
+// ttl field on these models may raise a ValidationException), so a reported
+// 1-hour write bills at their only cache-write SKU: below it would undercut
+// Bedrock's write charge, above it would invent Anthropic's first-party 1h rate.
+// Lifecycle dates come from
+// https://docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html
+// (fetched 2026-11-18); end-of-life IDs stay configurable for other Regions.
 var awsClaudeModelPricing = map[string]adaptor.ModelConfig{
 	"claude-instant-1.2": {
 		Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 3.0,
-		CachedInputRatio: 0.08 * ratio.MilliTokensUsd, CacheWrite5mRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite1hRatio: 1.6 * ratio.MilliTokensUsd,
 		ContextLength: 100000, MaxOutputTokens: 4096,
 		InputModalities: awsTextInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeLegacyFeatures, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Anthropic Claude Instant 1.2 on AWS Bedrock (legacy fast text model).",
+		Description: "Anthropic Claude Instant 1.2 on AWS Bedrock (legacy fast text model). No Bedrock prompt-cache SKU, so cache tokens bill as input.",
 	},
 	"claude-2.0": {
 		Ratio: 8 * ratio.MilliTokensUsd, CompletionRatio: 3.0,
-		CachedInputRatio: 0.8 * ratio.MilliTokensUsd, CacheWrite5mRatio: 10 * ratio.MilliTokensUsd, CacheWrite1hRatio: 16 * ratio.MilliTokensUsd,
 		ContextLength: 100000, MaxOutputTokens: 4096,
 		InputModalities: awsTextInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeLegacyFeatures, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Anthropic Claude 2.0 on AWS Bedrock (legacy text model).",
+		Description: "Anthropic Claude 2.0 on AWS Bedrock (legacy text model). No Bedrock prompt-cache SKU, so cache tokens bill as input.",
 	},
 	"claude-2.1": {
 		Ratio: 8 * ratio.MilliTokensUsd, CompletionRatio: 3.0,
-		CachedInputRatio: 0.8 * ratio.MilliTokensUsd, CacheWrite5mRatio: 10 * ratio.MilliTokensUsd, CacheWrite1hRatio: 16 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 4096,
 		InputModalities: awsTextInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeLegacyFeatures, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Anthropic Claude 2.1 on AWS Bedrock with 200k context.",
+		Description: "Anthropic Claude 2.1 on AWS Bedrock with 200k context. No Bedrock prompt-cache SKU, so cache tokens bill as input.",
 	},
 	"claude-3-haiku-20240307": {
 		Ratio: 0.25 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 0.03 * ratio.MilliTokensUsd, CacheWrite5mRatio: 0.30 * ratio.MilliTokensUsd, CacheWrite1hRatio: 0.5 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 4096,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesNoReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude 3 Haiku on AWS Bedrock (compact multimodal model).",
+		Description: "Claude 3 Haiku on AWS Bedrock (compact multimodal model). Bedrock end-of-life: 2026-09-10 in us-east-1, us-east-2, us-west-2, ap-northeast-1, ap-southeast-2, eu-central-1, eu-west-1, eu-west-2 and eu-west-3, and 2026-11-13 in ap-northeast-2, ap-south-1 and ap-southeast-1; requests there fail. Kept only for other Regions or private access. No Bedrock prompt-cache SKU, so cache tokens bill as input.",
 	},
 	"claude-3-5-haiku-20241022": {
 		Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 0.08 * ratio.MilliTokensUsd, CacheWrite5mRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite1hRatio: 1.6 * ratio.MilliTokensUsd,
+		CachedInputRatio: 0.08 * ratio.MilliTokensUsd, CacheWrite5mRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite1hRatio: 1.0 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesNoReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude 3.5 Haiku on AWS Bedrock (fast multimodal model).",
+		Description: "Claude 3.5 Haiku on AWS Bedrock (fast multimodal model). Bedrock sells 5-minute cache writes only; a 1-hour write bills at the 5-minute write SKU.",
+	},
+	// claude-3-5-haiku-latest invokes the same Bedrock model as the dated ID
+	// (AwsModelIDMap: anthropic.claude-3-5-haiku-20241022-v1:0), so it carries
+	// Bedrock's own on-demand tariff instead of falling through to the global
+	// (Anthropic first-party) price. Bedrock Price List API, offer
+	// AmazonBedrockFoundationModels us-east-1 (publication 2026-11-09, fetched
+	// 2026-11-18): input $0.80, output $4.00, cache write $1.00, cache read $0.08
+	// per 1M tokens; the model is absent from the Bedrock Legacy/EOL tables
+	// (docs.aws.amazon.com/bedrock/latest/userguide/model-lifecycle-legacy.html).
+	// Bedrock publishes no 1h cache-write SKU for this model; like the dated
+	// entry, a 1h write bills at the only cache-write SKU (see the note above
+	// awsClaudeModelPricing).
+	"claude-3-5-haiku-latest": {
+		Ratio: 0.8 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
+		CachedInputRatio: 0.08 * ratio.MilliTokensUsd, CacheWrite5mRatio: 1.0 * ratio.MilliTokensUsd, CacheWrite1hRatio: 1.0 * ratio.MilliTokensUsd,
+		ContextLength: 200000, MaxOutputTokens: 8192,
+		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
+		SupportedFeatures: awsClaudeFeaturesNoReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
+		Description: "Claude 3.5 Haiku (latest alias of claude-3-5-haiku-20241022) on AWS Bedrock; Bedrock on-demand tariff checked 2026-11-18. Bedrock sells 5-minute cache writes only; a 1-hour write bills at the 5-minute write SKU.",
 	},
 	"claude-haiku-4-5": {
 		Ratio: 1 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -81,71 +111,69 @@ var awsClaudeModelPricing = map[string]adaptor.ModelConfig{
 	},
 	"claude-3-sonnet-20240229": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 4096,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesNoReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude 3 Sonnet on AWS Bedrock (balanced multimodal model).",
+		Description: "Claude 3 Sonnet on AWS Bedrock (balanced multimodal model). Bedrock end-of-life: 2026-11-13 in its remaining listed Regions (ap-south-1, ap-southeast-1, eu-west-2); requests there fail. Kept only for other Regions or private access. No Bedrock prompt-cache SKU, so cache tokens bill as input.",
 	},
 	"claude-3-5-sonnet-latest": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd,
+		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 3.75 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesNoReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude 3.5 Sonnet (latest alias) on AWS Bedrock.",
+		Description: "Claude 3.5 Sonnet (latest alias) on AWS Bedrock. Bedrock end-of-life: 2026-11-13 in its remaining listed Regions (ap-northeast-2, ap-south-1, ap-southeast-1); requests there fail. Kept only for other Regions or private access. Bedrock sells 5-minute cache writes only; a 1-hour write bills at the 5-minute write SKU.",
 	},
 	"claude-3-5-sonnet-20240620": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesNoReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude 3.5 Sonnet (June 2024 release) on AWS Bedrock.",
+		Description: "Claude 3.5 Sonnet (June 2024 release) on AWS Bedrock. Bedrock end-of-life: 2026-11-13 in its remaining listed Regions (ap-northeast-2, ap-south-1, ap-southeast-1); requests there fail. Kept only for other Regions or private access. No Bedrock prompt-cache SKU, so cache tokens bill as input.",
 	},
 	"claude-3-5-sonnet-20241022": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd,
+		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 3.75 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 8192,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesNoReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude 3.5 Sonnet v2 (October 2024 release) on AWS Bedrock.",
+		Description: "Claude 3.5 Sonnet v2 (October 2024 release) on AWS Bedrock. Bedrock end-of-life: 2026-11-13 in its remaining listed Regions (ap-northeast-2, ap-south-1, ap-southeast-1); requests there fail. Kept only for other Regions or private access. Bedrock sells 5-minute cache writes only; a 1-hour write bills at the 5-minute write SKU.",
 	},
 	"claude-3-7-sonnet-latest": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd,
+		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 3.75 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		MaxReasoningTokens: 60000,
-		Description:        "Claude 3.7 Sonnet (latest alias) on AWS Bedrock with extended thinking.",
+		Description:        "Claude 3.7 Sonnet (latest alias) on AWS Bedrock with extended thinking. Bedrock end-of-life: 2026-11-13 in its remaining listed Regions (ap-south-1, eu-west-2); requests there fail. Kept only for other Regions or private access. Bedrock sells 5-minute cache writes only; a 1-hour write bills at the 5-minute write SKU.",
 	},
 	"claude-3-7-sonnet-20250219": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd,
+		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 3.75 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		MaxReasoningTokens: 60000,
-		Description:        "Claude 3.7 Sonnet (February 2025 release) on AWS Bedrock with extended thinking.",
+		Description:        "Claude 3.7 Sonnet (February 2025 release) on AWS Bedrock with extended thinking. Bedrock end-of-life: 2026-11-13 in its remaining listed Regions (ap-south-1, eu-west-2); requests there fail. Kept only for other Regions or private access. Bedrock sells 5-minute cache writes only; a 1-hour write bills at the 5-minute write SKU.",
 	},
 	"claude-sonnet-4-0": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd,
+		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 3.75 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		MaxReasoningTokens: 60000,
-		Description:        "Claude Sonnet 4 (alias) on AWS Bedrock.",
+		Description:        "Claude Sonnet 4 (alias) on AWS Bedrock. Bedrock end-of-life: 2026-10-14 in us-east-1, us-east-2, us-west-1, us-west-2, ap-east-2, ap-northeast-1/2/3, ap-south-1/2, ap-southeast-1/2/3/4/5/7, eu-central-1, eu-north-1, eu-south-1/2, eu-west-1/3 and il-central-1; requests there fail. Kept only for other Regions or private access. Bedrock sells 5-minute cache writes only; a 1-hour write bills at the 5-minute write SKU.",
 	},
 	"claude-sonnet-4-20250514": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 6 * ratio.MilliTokensUsd,
+		CachedInputRatio: 0.3 * ratio.MilliTokensUsd, CacheWrite5mRatio: 3.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 3.75 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 64000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		MaxReasoningTokens: 60000,
-		Description:        "Claude Sonnet 4 (May 2025 release) on AWS Bedrock.",
+		Description:        "Claude Sonnet 4 (May 2025 release) on AWS Bedrock. Bedrock end-of-life: 2026-10-14 in us-east-1, us-east-2, us-west-1, us-west-2, ap-east-2, ap-northeast-1/2/3, ap-south-1/2, ap-southeast-1/2/3/4/5/7, eu-central-1, eu-north-1, eu-south-1/2, eu-west-1/3 and il-central-1; requests there fail. Kept only for other Regions or private access. Bedrock sells 5-minute cache writes only; a 1-hour write bills at the 5-minute write SKU.",
 	},
 	"claude-sonnet-4-5": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -154,7 +182,7 @@ var awsClaudeModelPricing = map[string]adaptor.ModelConfig{
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		MaxReasoningTokens: 60000,
-		Description:        "Claude Sonnet 4.5 (alias) on AWS Bedrock.",
+		Description:        "Claude Sonnet 4.5 (alias) on AWS Bedrock. Bedrock Legacy since 2026-10-08 with end-of-life scheduled 2027-04-08 in every listed Region; migrate before then.",
 	},
 	"claude-sonnet-4-5-20250929": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -163,7 +191,7 @@ var awsClaudeModelPricing = map[string]adaptor.ModelConfig{
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		MaxReasoningTokens: 60000,
-		Description:        "Claude Sonnet 4.5 (September 2025 release) on AWS Bedrock.",
+		Description:        "Claude Sonnet 4.5 (September 2025 release) on AWS Bedrock. Bedrock Legacy since 2026-10-08 with end-of-life scheduled 2027-04-08 in every listed Region; migrate before then.",
 	},
 	"claude-sonnet-4-6": {
 		Ratio: 3 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
@@ -184,47 +212,46 @@ var awsClaudeModelPricing = map[string]adaptor.ModelConfig{
 	},
 	"claude-3-opus-20240229": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 30 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 4096,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesNoReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
-		Description: "Claude 3 Opus on AWS Bedrock (premium multimodal model).",
+		Description: "Claude 3 Opus on AWS Bedrock (premium multimodal model). No Bedrock prompt-cache SKU, so cache tokens bill as input.",
 	},
 	"claude-opus-4-0": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 30 * ratio.MilliTokensUsd,
+		CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 18.75 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 32000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		MaxReasoningTokens: 30000,
-		Description:        "Claude Opus 4 (alias) on AWS Bedrock.",
+		Description:        "Claude Opus 4 (alias) on AWS Bedrock. Bedrock sells 5-minute cache writes only; a 1-hour write bills at the 5-minute write SKU.",
 	},
 	"claude-opus-4-20250514": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 30 * ratio.MilliTokensUsd,
+		CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 18.75 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 32000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		MaxReasoningTokens: 30000,
-		Description:        "Claude Opus 4 (May 2025 release) on AWS Bedrock.",
+		Description:        "Claude Opus 4 (May 2025 release) on AWS Bedrock. Bedrock sells 5-minute cache writes only; a 1-hour write bills at the 5-minute write SKU.",
 	},
 	"claude-opus-4-1": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 5.0,
-		CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 30 * ratio.MilliTokensUsd,
+		CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 18.75 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 32000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		MaxReasoningTokens: 30000,
-		Description:        "Claude Opus 4.1 (alias) on AWS Bedrock.",
+		Description:        "Claude Opus 4.1 (alias) on AWS Bedrock. AWS Bedrock model entered Legacy state on 2026-07-08 with EOL scheduled 2027-01-08. Bedrock sells 5-minute cache writes only; a 1-hour write bills at the 5-minute write SKU.",
 	},
 	"claude-opus-4-1-20250805": {
 		Ratio: 15 * ratio.MilliTokensUsd, CompletionRatio: 75.0 / 15,
-		CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 30 * ratio.MilliTokensUsd,
+		CachedInputRatio: 1.5 * ratio.MilliTokensUsd, CacheWrite5mRatio: 18.75 * ratio.MilliTokensUsd, CacheWrite1hRatio: 18.75 * ratio.MilliTokensUsd,
 		ContextLength: 200000, MaxOutputTokens: 32000,
 		InputModalities: awsClaudeVisionInputs, OutputModalities: awsTextOutputs,
 		SupportedFeatures: awsClaudeFeaturesWithReasoning, SupportedSamplingParameters: awsClaudeSamplingParams,
 		MaxReasoningTokens: 30000,
-		Description:        "Claude Opus 4.1 (August 2025 release) on AWS Bedrock with extended thinking. AWS Bedrock model entered Legacy state on 2026-07-08 with EOL scheduled 2027-01-08.",
+		Description:        "Claude Opus 4.1 (August 2025 release) on AWS Bedrock with extended thinking. AWS Bedrock model entered Legacy state on 2026-07-08 with EOL scheduled 2027-01-08. Bedrock sells 5-minute cache writes only; a 1-hour write bills at the 5-minute write SKU.",
 	},
 	"claude-opus-4-5": {
 		Ratio: 5 * ratio.MilliTokensUsd, CompletionRatio: 25.0 / 5,

@@ -60,7 +60,11 @@ func isModelSupportedReasoning(modelName string) bool {
 		}
 	}
 
-	if strings.HasPrefix(lower, "o") {
+	// OpenAI o-series IDs are "o" followed by a version digit (o1, o3-mini,
+	// o4-mini-deep-research). A bare "o" prefix also matched provider-prefixed
+	// aggregator IDs such as "openai/gpt-4o-mini", whose system prompt and
+	// sampling controls were then silently stripped as if they were o1.
+	if isOpenAIOSeriesModel(lower) {
 		return true
 	}
 
@@ -69,6 +73,13 @@ func isModelSupportedReasoning(modelName string) bool {
 	}
 
 	return false
+}
+
+// isOpenAIOSeriesModel reports whether lower is an OpenAI o-series reasoning
+// ID: "o" immediately followed by a version digit. Parameters: lower is a
+// trimmed, lowercased model ID. Returns: true for o1/o3/o4-style IDs only.
+func isOpenAIOSeriesModel(lower string) bool {
+	return len(lower) >= 2 && lower[0] == 'o' && lower[1] >= '0' && lower[1] <= '9'
 }
 
 // isWebSearchModel returns true when the upstream OpenAI model uses the web search surface.
@@ -97,7 +108,7 @@ func isMediumOnlyReasoningModel(modelName string) bool {
 		return strings.EqualFold(cfg.SupportedReasoningEfforts[0], "medium")
 	}
 
-	if strings.HasPrefix(lower, "o") {
+	if isOpenAIOSeriesModel(lower) {
 		return true
 	}
 

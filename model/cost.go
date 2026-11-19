@@ -44,7 +44,7 @@ func NewUserRequestCost(userID int, quotaID string, quota int64) *UserRequestCos
 }
 
 func (docu *UserRequestCost) Insert() error {
-	go removeOldRequestCost()
+	scheduleOldRequestCostCleanup(DB)
 
 	if docu.UserUUID == nil && docu.UserID > 0 {
 		userUUID, err := lookupUserUUIDIfAvailable(docu.UserID)
@@ -65,7 +65,7 @@ func UpdateUserRequestCostQuotaByRequestID(userID int, requestID string, quota i
 		return errors.New("request id is empty")
 	}
 
-	go removeOldRequestCost()
+	scheduleOldRequestCostCleanup(DB)
 
 	userUUID, err := lookupUserUUIDIfAvailable(userID)
 	if err != nil {
@@ -151,19 +151,32 @@ func GetCostByRequestId(reqid string) (*UserRequestCost, error) {
 
 var muRemoveOldRequestCost sync.Mutex
 
-// removeOldRequestCost remove old request cost data,
-// this function will be executed every 1/1000 times.
-func removeOldRequestCost() {
-	if rand.Float32() > 0.001 {
+// scheduleOldRequestCostCleanup starts the sampled (1 in 1000) background
+// removal of request-cost rows older than seven days. The database handle is
+// captured when the write happens: the goroutine used to read the global DB
+// later, which raced a handle swap (tests restoring DB to nil crashed the test
+// binary). Parameter db is the handle the caller writes through and may be
+// nil, in which case nothing is scheduled. It returns nothing.
+func scheduleOldRequestCostCleanup(db *gorm.DB) {
+	if db == nil || rand.Float32() > 0.001 {
 		return
 	}
+	go removeOldRequestCost(db)
+}
 
+// removeOldRequestCost removes request-cost rows older than seven days, at
+// most one run at a time. Parameter db is the database handle to clean; a nil
+// handle is a no-op. It returns nothing and logs a failure.
+func removeOldRequestCost(db *gorm.DB) {
+	if db == nil {
+		return
+	}
 	if ok := muRemoveOldRequestCost.TryLock(); !ok {
 		return
 	}
 	defer muRemoveOldRequestCost.Unlock()
 
-	err := DB.
+	err := db.
 		Where("created_time < ?", helper.GetTimestamp()-3600*24*7).
 		Delete(&UserRequestCost{}).Error
 	if err != nil {

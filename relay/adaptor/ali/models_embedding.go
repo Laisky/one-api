@@ -10,10 +10,10 @@ import (
 func embeddingModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"text-embedding-async-v1": {
-			Ratio:           nativeRate(0.7000000000000001),
+			Ratio:           nativeRate(0.7),
 			CompletionRatio: 1,
 			Embedding: &adaptor.EmbeddingPricingConfig{
-				TextTokenRatio: nativeRate(0.7000000000000001),
+				TextTokenRatio: nativeRate(0.7),
 			},
 			ContextLength:    8192,
 			InputModalities:  []string{"text"},
@@ -21,10 +21,10 @@ func embeddingModels() map[string]adaptor.ModelConfig {
 			Description:      "DashScope text-embedding-async-v1: batched asynchronous embedding endpoint.",
 		},
 		"text-embedding-async-v2": {
-			Ratio:           nativeRate(0.7000000000000001),
+			Ratio:           nativeRate(0.7),
 			CompletionRatio: 1,
 			Embedding: &adaptor.EmbeddingPricingConfig{
-				TextTokenRatio: nativeRate(0.7000000000000001),
+				TextTokenRatio: nativeRate(0.7),
 			},
 			ContextLength:    8192,
 			InputModalities:  []string{"text"},
@@ -32,10 +32,10 @@ func embeddingModels() map[string]adaptor.ModelConfig {
 			Description:      "DashScope text-embedding-async-v2: batched asynchronous multilingual embedding endpoint.",
 		},
 		"text-embedding-v1": {
-			Ratio:           nativeRate(0.7000000000000001),
+			Ratio:           nativeRate(0.7),
 			CompletionRatio: 1,
 			Embedding: &adaptor.EmbeddingPricingConfig{
-				TextTokenRatio: nativeRate(0.7000000000000001),
+				TextTokenRatio: nativeRate(0.7),
 			},
 			ContextLength:    8192,
 			InputModalities:  []string{"text"},
@@ -43,10 +43,10 @@ func embeddingModels() map[string]adaptor.ModelConfig {
 			Description:      "DashScope text-embedding-v1: legacy embedding endpoint, 8192-token input.",
 		},
 		"text-embedding-v2": {
-			Ratio:           nativeRate(0.7000000000000001),
+			Ratio:           nativeRate(0.7),
 			CompletionRatio: 1,
 			Embedding: &adaptor.EmbeddingPricingConfig{
-				TextTokenRatio: nativeRate(0.7000000000000001),
+				TextTokenRatio: nativeRate(0.7),
 			},
 			ContextLength:    8192,
 			InputModalities:  []string{"text"},

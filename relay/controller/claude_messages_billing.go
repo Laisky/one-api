@@ -77,10 +77,6 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 			}
 			payload = json.RawMessage(sanitized)
 		}
-		write5m, write1h, cacheErr := tierAdmissionCacheWrites(payload)
-		if cacheErr != nil {
-			return 0, openai.ErrorWrapper(cacheErr, "invalid_claude_quota_quote", http.StatusBadRequest)
-		}
 		promptUsage := &relaymodel.Usage{PromptTokens: promptTokens}
 		if isNativeGoogleChannel(meta) {
 			if raw, exists := c.Get(nativeGoogleMediaUsageKey); exists {
@@ -88,6 +84,13 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 					promptUsage = measured
 				}
 			}
+		}
+		write5m, write1h, cacheErr := tierAdmissionCacheWritesForDispatch(c, meta, request.Model, payload, promptUsage.PromptTokens, channelModelConfigs, provider)
+		if cacheErr != nil {
+			if apiErr, ok := unbillableRequestControlError(cacheErr); ok {
+				return 0, apiErr
+			}
+			return 0, openai.ErrorWrapper(cacheErr, "invalid_claude_quota_quote", http.StatusBadRequest)
 		}
 		tierQuote, applies, quoteErr := quotautil.EstimateTierAdmission(quotautil.ComputeInput{
 			Usage: promptUsage, ModelName: request.Model,
@@ -156,7 +159,7 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 		quota = max(quota, preConsumedQuota+incrementalCharged)
 	}
 
-	metadata := billingEstimateMetadata(model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens), usage.BillingEstimateReason)
+	metadata := reportedCostFloorMetadata(billingEstimateMetadata(model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens), usage.BillingEstimateReason), usage, computeResult)
 
 	// Use centralized detailed billing function with explicit trace ID
 	quotaDelta := quota - preConsumedQuota - incrementalCharged
@@ -206,7 +209,7 @@ func postConsumeClaudeMessagesQuotaWithTraceID(ctx context.Context, requestId st
 		RequestId:          requestId,
 		TraceId:            traceId,
 		ProvisionalLogId:   provisionalLogId,
-		UserAPIFormat:      resolveUserAPIFormat(meta.Mode),
+		UserAPIFormat:      resolveMetaUserAPIFormat(meta),
 		UpstreamAPIFormat:  apitype.String(meta.APIType),
 		UpstreamEndpoint:   meta.UpstreamRequestURL,
 	})

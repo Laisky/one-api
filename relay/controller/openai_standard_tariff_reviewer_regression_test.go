@@ -69,7 +69,7 @@ func TestGPT61TerraReviewerProviderIsolation(t *testing.T) {
 	for _, channel := range []int{channeltype.Azure, channeltype.OpenAICompatible, channeltype.Groq} {
 		var root map[string]json.RawMessage
 		require.NoError(t, json.Unmarshal(raw, &root))
-		changed, err := normalizeOpenAITerraStandardPricing(root, "gpt-6.1-terra", channel)
+		changed, err := normalizeNativeOpenAIStandardTier(root, "gpt-6.1-terra", channel)
 		require.NoError(t, err)
 		require.False(t, changed)
 	}

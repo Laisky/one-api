@@ -28,6 +28,9 @@ type ComputeInput struct {
 // ComputeResult captures the outcome of a quota calculation, including
 // normalized ratios used and cached token details.
 type ComputeResult struct {
+	// ReportedCostFloor reports that the provider-reported cost exceeded the
+	// catalog price and set TotalQuota (see adaptor.ReportedCostBillingPolicy).
+	ReportedCostFloor bool
 	// UnpricedUsage distinguishes a partial price from an authoritative zero.
 	// Realtime and generation contracts set it when their tariff is unresolved.
 	UnpricedUsage bool
@@ -136,6 +139,11 @@ func Compute(input ComputeInput) ComputeResult {
 	} else if eff.CacheWrite5mRatio > 0 {
 		write5mPrice = eff.CacheWrite5mRatio * input.GroupRatio
 	}
+	// A write in a tier without a published write price stays an unpriced
+	// estimate, but never below the publisher's documented generic write rule.
+	if multiplier, unpriced := unpricedCacheWriteInputMultiplier(input, resolvedModelCfg); unpriced {
+		write5mPrice = max(write5mPrice, normalInputPrice*multiplier)
+	}
 
 	write1hPrice := normalInputPrice
 	if eff.CacheWrite1hRatio < 0 {
@@ -160,8 +168,13 @@ func Compute(input ComputeInput) ComputeResult {
 	if (usedModelRatio*input.GroupRatio) != 0 && totalQuota <= 0 {
 		totalQuota = 1
 	}
+	reportedCostFloor := false
+	if floor, ok := reportedCostFloorQuota(input); ok && floor > totalQuota {
+		totalQuota, reportedCostFloor = floor, true
+	}
 
 	return ComputeResult{
+		ReportedCostFloor: reportedCostFloor,
 		// Preserve unsupported provider-priced usage as an auditable estimate.
 		// Native HTTP forbids 12h retention and unpriced service tiers at admission,
 		// but an unexpected provider receipt must not be settled as Standard.

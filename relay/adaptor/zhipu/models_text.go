@@ -9,6 +9,12 @@ import (
 // Pricing comes from https://bigmodel.cn/pricing; metadata derives from
 // https://docs.bigmodel.cn/cn/guide/start/model-overview and per-model spec pages.
 // Last updated: 2026-08-26.
+//
+// Tier boundaries (re-verified 2026-11-18 on https://docs.bigmodel.cn/cn/guide/start/pricing):
+// BigModel labels rows 输入长度 [0, 32K) / ≥32K (or [32K, 200K)) and 输出 [0, 0.2K) / ≥0.2K,
+// so each surcharge applies FROM the boundary and the threshold is N itself, not N+1.
+// The page does not define K; 32_000 and 200 use K=1000, the smaller reading, so a
+// prompt between the 1000- and 1024-based readings is never under-billed.
 var flagshipTextModels = map[string]adaptor.ModelConfig{
 	// GLM-5.3: same base model as GLM-5.2 with post-training improvements.
 	// Metadata audited 2026-10-12; see docs/zhipu-model-catalog.md.

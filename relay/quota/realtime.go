@@ -138,6 +138,18 @@ func resolveRealtimeRecordRates(input ComputeInput, record realtime.Record) (rea
 	} else if record.Tokens.Audio > 0 || record.Tokens.OutputAudio > 0 {
 		missing = append(missing, "audio")
 	}
+	// Vertex lists "Output: video (avatar)" separately. The operator prices it
+	// with video.output_token_ratio, relative to the effective text input rate
+	// like the audio and image prompt ratios. Without that field those tokens
+	// keep their unallocated-output charge, so the receipt is never cheaper
+	// than before, but it is flagged unpriced instead of settling as exact.
+	if record.Tokens.OutputVideo > 0 {
+		if videoRatio, ok := pricing.ResolveRealtimeVideoOutputRatio(modelName, input.ChannelModelConfigs, input.PricingAdaptor, input.RequestTime); ok {
+			rates.OutputVideo = rates.Text * videoRatio
+		} else {
+			missing = append(missing, "video output")
+		}
+	}
 	if usesGeminiRealtimePricing(input.PricingAdaptor) || realtime.IsGeminiLiveModel(modelName) {
 		return resolveGeminiLiveVisualRates(input, record, modelName, rates, resolved, missing)
 	}

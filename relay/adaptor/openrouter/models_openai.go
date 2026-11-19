@@ -31,7 +31,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 		},
 		"openai/gpt-3.5-turbo-16k": {
 			Ratio:                       nativeRate(3),
-			CompletionRatio:             1.3333333333333333,
+			CompletionRatio:             4.0 / 3.0,
 			ContextLength:               16385,
 			MaxOutputTokens:             4096,
 			InputModalities:             []string{"text"},
@@ -42,7 +42,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 		},
 		"openai/gpt-3.5-turbo-instruct": {
 			Ratio:                       nativeRate(1.5),
-			CompletionRatio:             1.3333333333333333,
+			CompletionRatio:             2.0 / 1.5,
 			ContextLength:               4095,
 			MaxOutputTokens:             3685,
 			InputModalities:             []string{"text"},
@@ -52,7 +52,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "openai/gpt-3.5-turbo-instruct on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"openai/gpt-4": {
-			Ratio:                       nativeRate(3e+01),
+			Ratio:                       nativeRate(30),
 			CompletionRatio:             2,
 			ContextLength:               8191,
 			MaxOutputTokens:             4096,
@@ -63,7 +63,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "openai/gpt-4 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"openai/gpt-4-0314": {
-			Ratio:                       nativeRate(3e+01),
+			Ratio:                       nativeRate(30),
 			CompletionRatio:             2,
 			ContextLength:               8191,
 			MaxOutputTokens:             4096,
@@ -74,7 +74,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "GPT-4-0314 is the first version of GPT-4 released, with a context length of 8,192 tokens, and was supported until June 14. Training data: up to Sep 2021. [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
 		},
 		"openai/gpt-4-1106-preview": {
-			Ratio:                       nativeRate(1e+01),
+			Ratio:                       nativeRate(10),
 			CompletionRatio:             3,
 			ContextLength:               128000,
 			MaxOutputTokens:             4096,
@@ -85,7 +85,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "The latest GPT-4 Turbo model with vision capabilities. Vision requests can now use JSON mode and function calling.\n\nTraining data: up to April 2023. [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
 		},
 		"openai/gpt-4-turbo": {
-			Ratio:                       nativeRate(1e+01),
+			Ratio:                       nativeRate(10),
 			CompletionRatio:             3,
 			ContextLength:               128000,
 			MaxOutputTokens:             4096,
@@ -96,7 +96,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "openai/gpt-4-turbo on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"openai/gpt-4-turbo-preview": {
-			Ratio:                       nativeRate(1e+01),
+			Ratio:                       nativeRate(10),
 			CompletionRatio:             3,
 			ContextLength:               128000,
 			MaxOutputTokens:             4096,
@@ -119,9 +119,9 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "openai/gpt-4.1 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"openai/gpt-4.1-mini": {
-			Ratio:                       nativeRate(0.39999999999999997),
+			Ratio:                       nativeRate(0.4),
 			CompletionRatio:             4,
-			CachedInputRatio:            nativeRate(0.09999999999999999),
+			CachedInputRatio:            nativeRate(0.1),
 			ContextLength:               1047576,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"image", "text", "file"},
@@ -131,7 +131,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "openai/gpt-4.1-mini on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"openai/gpt-4.1-nano": {
-			Ratio:                       nativeRate(0.09999999999999999),
+			Ratio:                       nativeRate(0.1),
 			CompletionRatio:             4,
 			CachedInputRatio:            nativeRate(0.03),
 			ContextLength:               1047576,
@@ -308,9 +308,9 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "gpt-oss-120b is an open-weight, 117B-parameter Mixture-of-Experts (MoE) language model from OpenAI designed for high-reasoning, agentic, and general-purpose production use cases. It activates 5.1B parameters per forward pass and is optimized...",
 		},
 		"openai/gpt-oss-20b": {
-			Ratio:                       nativeRate(0.075),
-			CompletionRatio:             4,
-			CachedInputRatio:            nativeRate(0.0375),
+			Ratio:                       nativeRate(0.018),
+			CompletionRatio:             0.09 / 0.018,
+			CachedInputRatio:            nativeRate(0.009),
 			ContextLength:               131072,
 			MaxOutputTokens:             65536,
 			InputModalities:             []string{"text"},
@@ -320,7 +320,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"high", "medium", "low"},
 			DefaultReasoningEffort:      "medium",
 			HuggingFaceID:               "openai/gpt-oss-20b",
-			Description:                 "openai/gpt-oss-20b on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "openai/gpt-oss-20b on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"openai/gpt-oss-20b:free": {
 			Ratio:                       0,

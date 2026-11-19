@@ -57,8 +57,9 @@ func RelayVoiceCloneHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	preConsumedQuota, bizErr := preConsumeVoiceCloneQuota(c, totalQuota, meta)
 	if bizErr != nil {
-		lg.Warn("preConsumeVoiceCloneQuota failed",
-			zap.Error(bizErr.RawError),
+		// The returned error is logged once by the relay outcome at its
+		// status-derived level; this DEBUG line only adds admission context.
+		lg.Debug("preConsumeVoiceCloneQuota failed",
 			zap.Int("status_code", bizErr.StatusCode),
 			zap.String("err_msg", bizErr.Message))
 		return bizErr
@@ -121,6 +122,7 @@ func RelayVoiceCloneHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	if isErrorHappened(meta, resp) {
+		recordUpstreamClientRejection(c, resp.StatusCode)
 		scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		if requestId != "" {
 			if err := model.UpdateUserRequestCostQuotaByRequestID(quotaId, requestId, 0); err != nil {

@@ -21,7 +21,7 @@ func sao10kModels() map[string]adaptor.ModelConfig {
 		},
 		"sao10k/l3-lunaris-8b": {
 			Ratio:                       nativeRate(0.04),
-			CompletionRatio:             1.2499999999999998,
+			CompletionRatio:             1.25,
 			ContextLength:               8192,
 			MaxOutputTokens:             7372,
 			InputModalities:             []string{"text"},
@@ -55,7 +55,7 @@ func sao10kModels() map[string]adaptor.ModelConfig {
 		},
 		"sao10k/l3.3-euryale-70b": {
 			Ratio:                       nativeRate(0.65),
-			CompletionRatio:             1.1538461538461537,
+			CompletionRatio:             0.75 / 0.65,
 			ContextLength:               131072,
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text"},

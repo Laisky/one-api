@@ -13,7 +13,7 @@ import (
 // catalogFromFamilies assembles complete family tables before aliases and lifecycle.
 // It takes no parameters and returns a fresh map without changing global maps.
 func catalogFromFamilies() map[string]adaptor.ModelConfig {
-	return mergeModelRatios(
+	return adaptor.JoinModelCatalogs(
 		gpt35ModelRatios, gpt4ModelRatios, gpt4oModelRatios, realtimeModelRatios,
 		gpt45ModelRatios, gpt41ModelRatios, gpt5ModelRatios, gpt56ModelRatios, gpt6ModelRatios,
 		oSeriesModelRatios, specializedModelRatios, embeddingModelRatios,

@@ -67,6 +67,9 @@ type SlimTextResponse struct {
 	Choices     []TextResponseChoice `json:"choices"`
 	model.Usage `json:"usage"`
 	Error       *model.Error `json:"error,omitempty"`
+	// ChatCompletionIdentity keeps the provider's root identity fields when the
+	// handler re-renders this struct for the client.
+	model.ChatCompletionIdentity
 }
 
 type TextResponseChoice struct {

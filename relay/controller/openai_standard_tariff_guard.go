@@ -7,147 +7,77 @@ import (
 
 	"github.com/Laisky/errors/v2"
 
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/channeltype"
 )
 
-const (
-	openAICacheScanMaxDepth = 64
-	openAICacheScanMaxNodes = 100_000
-)
-
-// normalizeOpenAITerraStandardPricing enforces the common unpriced-cache
-// boundary for published native GPT-5.6/6 models and additionally pins Terra/Cyber
-// to the Standard service tier. It checks raw controls before root filtering.
-func normalizeOpenAITerraStandardPricing(root map[string]json.RawMessage, model string, channel int) (bool, error) {
-	if channel != channeltype.OpenAI {
-		return false, nil
-	}
+// normalizeNativeOpenAIStandardTier enforces native OpenAI billing policies on
+// a raw Responses body before root filtering. For GPT-5.6+ models whose 30m
+// cache writes are metered it validates the prompt-cache controls (rejecting
+// unmetered lifetimes such as 12h) and forwards a sanitized
+// prompt_cache_options, so a client's explicit-only cache mode is honored;
+// every other channel or model keeps the historical behavior of never
+// forwarding prompt_cache_options. It pins models whose policy restricts
+// service tiers to the policy's supported tier. Parameters are the decoded
+// root object (mutated in place), the mapped model ID and the relay channel
+// type. It returns whether root changed, or an admission error.
+func normalizeNativeOpenAIStandardTier(root map[string]json.RawMessage, model string, channel int) (bool, error) {
 	modelName := strings.ToLower(strings.TrimSpace(model))
-	if requiresNativeOpenAICacheWriteTariff(modelName) {
-		if err := rejectUnpricedNativeOpenAICacheLifetime(root); err != nil {
-			return false, err
+	changed := false
+	if !openai.ImplicitPromptCacheWrites(channel, modelName) {
+		if _, present := root[promptCacheOptionsRootKey]; present {
+			delete(root, promptCacheOptionsRootKey)
+			changed = true
+		}
+		if channel != channeltype.OpenAI {
+			return changed, nil
+		}
+	} else {
+		if _, err := openai.InspectPromptCacheWriteIntentRoot(root); err != nil {
+			return false, errors.Wrap(err, "validate native OpenAI prompt-cache controls")
+		}
+		if raw, present := root[promptCacheOptionsRootKey]; present {
+			sanitized, keep, err := openai.SanitizePromptCacheOptions(raw)
+			if err != nil {
+				return false, errors.Wrap(err, "sanitize native OpenAI prompt_cache_options")
+			}
+			switch {
+			case !keep:
+				delete(root, promptCacheOptionsRootKey)
+				changed = true
+			case !bytes.Equal(bytes.TrimSpace(raw), sanitized):
+				root[promptCacheOptionsRootKey] = sanitized
+				changed = true
+			}
 		}
 	}
-	if modelName != "gpt-6.1-terra" && modelName != "gpt-6-cyber" {
-		return false, nil
+	policy, declared := openai.NativeModelBillingPolicy(channel, modelName)
+	if !declared || !policy.RestrictsServiceTier() {
+		return changed, nil
 	}
 
-	const standard = `"default"`
+	pinned, encodeErr := json.Marshal(policy.PinnedServiceTier())
+	if encodeErr != nil {
+		return false, errors.Wrap(encodeErr, "encode OpenAI pinned service_tier")
+	}
 	if current, ok := root["service_tier"]; ok && !bytes.Equal(bytes.TrimSpace(current), []byte("null")) {
 		var requested string
 		if err := json.Unmarshal(current, &requested); err != nil {
 			return false, errors.Wrap(err, "decode OpenAI Standard service_tier")
 		}
-		if !strings.EqualFold(strings.TrimSpace(requested), "default") {
-			return false, errors.Errorf("%s Standard pricing does not support service_tier %q", modelName, requested)
+		if !policy.SupportsServiceTier(requested) {
+			return false, adaptor.UnbillableRequestControl(errors.Errorf("%s Standard pricing does not support service_tier %q", modelName, requested))
 		}
 	}
-	if bytes.Equal(bytes.TrimSpace(root["service_tier"]), []byte(standard)) {
-		return false, nil
+	if bytes.Equal(bytes.TrimSpace(root["service_tier"]), pinned) {
+		return changed, nil
 	}
-	root["service_tier"] = json.RawMessage(standard)
+	root["service_tier"] = json.RawMessage(pinned)
 	return true, nil
 }
 
-// requiresNativeOpenAICacheWriteTariff selects published GPT-5.6+ models
-// whose 12h cache-write tariff is not yet represented in the quota meter.
-func requiresNativeOpenAICacheWriteTariff(name string) bool {
-	if !strings.HasPrefix(name, "gpt-5.6") && !strings.HasPrefix(name, "gpt-6") {
-		return false
-	}
-	config, known := openai.ModelRatios[name]
-	return known && config.CacheWrite5mRatio > 0
-}
-
-// rejectUnpricedNativeOpenAICacheLifetime accepts only default or 30m cache
-// writes on native OpenAI models with separate unmetered 12h prices.
-func rejectUnpricedNativeOpenAICacheLifetime(root map[string]json.RawMessage) error {
-	if raw, ok := root["prompt_cache_options"]; ok && len(raw) > 0 {
-		// Preserve field presence: decoding JSON null into a Go string would
-		// otherwise silently accept a malformed (and unaudited) cache TTL.
-		var options struct {
-			TTL json.RawMessage `json:"ttl"`
-		}
-		if err := json.Unmarshal(raw, &options); err != nil {
-			return errors.Wrap(err, "decode OpenAI prompt_cache_options")
-		}
-		if len(options.TTL) > 0 {
-			if bytes.Equal(bytes.TrimSpace(options.TTL), []byte("null")) {
-				return errors.New("OpenAI cache-write TTL must be a string")
-			}
-			var ttl string
-			if err := json.Unmarshal(options.TTL, &ttl); err != nil {
-				return errors.Wrap(err, "decode OpenAI cache-write TTL as string")
-			}
-			if ttl = strings.TrimSpace(ttl); ttl != "" && !strings.EqualFold(ttl, "30m") {
-				return errors.Errorf("OpenAI cache-write TTL %q requires a separately metered tariff", ttl)
-			}
-		}
-	}
-
-	for _, key := range []string{"input", "tools", "prompt"} {
-		raw := root[key]
-		if len(raw) == 0 {
-			continue
-		}
-		var node any
-		if err := json.Unmarshal(raw, &node); err != nil {
-			return errors.Wrapf(err, "decode Terra %s cache breakpoints", key)
-		}
-		nodes := 0
-		if err := inspectOpenAICacheBreakpoint(node, 0, &nodes); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// inspectOpenAICacheBreakpoint walks provider-owned input/tool structures,
-// never user text or JSON schemas. Traversal is bounded against deep inputs.
-func inspectOpenAICacheBreakpoint(value any, depth int, nodes *int) error {
-	if depth > openAICacheScanMaxDepth {
-		return errors.New("OpenAI cache breakpoint structure exceeds nesting limit")
-	}
-	*nodes++
-	if *nodes > openAICacheScanMaxNodes {
-		return errors.New("OpenAI cache breakpoint structure exceeds traversal limit")
-	}
-	switch item := value.(type) {
-	case []any:
-		for _, child := range item {
-			if err := inspectOpenAICacheBreakpoint(child, depth+1, nodes); err != nil {
-				return err
-			}
-		}
-	case map[string]any:
-		if raw, present := item["prompt_cache_breakpoint"]; present && raw != nil {
-			point, ok := raw.(map[string]any)
-			if !ok {
-				return errors.New("OpenAI prompt_cache_breakpoint must be an object")
-			}
-			if rawTTL, present := point["ttl"]; present {
-				ttl, ok := rawTTL.(string)
-				if !ok {
-					return errors.New("OpenAI cache breakpoint TTL must be a string")
-				}
-				if ttl = strings.TrimSpace(ttl); ttl != "" && !strings.EqualFold(ttl, "30m") {
-					return errors.Errorf("OpenAI cache breakpoint TTL %q requires a separately metered tariff", ttl)
-				}
-			}
-		}
-		for key, child := range item {
-			switch key {
-			// Tool parameter schemas and prompt-template variables are caller
-			// data, not provider cache controls. Scanning them previously
-			// rejected valid requests whose data contained a TTL-like key.
-			case "prompt_cache_breakpoint", "metadata", "arguments", "input_schema", "schema", "parameters", "variables", "data", "output", "extra_body":
-				continue
-			}
-			if err := inspectOpenAICacheBreakpoint(child, depth+1, nodes); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
+// promptCacheOptionsRootKey is OpenAI's root prompt-cache control. The native
+// Responses root allow-list admits it because normalizeNativeOpenAIStandardTier
+// removes it from every request whose cache writes this gateway cannot meter.
+const promptCacheOptionsRootKey = "prompt_cache_options"

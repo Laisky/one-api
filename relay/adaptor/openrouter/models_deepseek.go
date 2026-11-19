@@ -47,7 +47,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		},
 		"deepseek/deepseek-r1": {
 			Ratio:                       nativeRate(0.7),
-			CompletionRatio:             3.5714285714285716,
+			CompletionRatio:             2.5 / 0.7,
 			ContextLength:               64000,
 			MaxOutputTokens:             16000,
 			InputModalities:             []string{"text"},
@@ -58,9 +58,12 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			Description:                 "deepseek/deepseek-r1 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"deepseek/deepseek-r1-0528": {
-			Ratio:                       nativeRate(0.5),
-			CompletionRatio:             4.300000000000001,
-			CachedInputRatio:            nativeRate(0.35),
+			Ratio:           nativeRate(0.571),
+			CompletionRatio: 2.286 / 0.571,
+			// The 2026-11-18 listing (top provider StreamLake) publishes no
+			// input_cache_read price. The former $0.35 cache-read discount belonged to
+			// another endpoint, so cached prompt tokens bill at the input rate instead
+			// of at a discount the listing does not publish.
 			ContextLength:               163840,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text"},
@@ -68,10 +71,10 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "deepseek-ai/DeepSeek-R1-0528",
-			Description:                 "deepseek/deepseek-r1-0528 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "deepseek/deepseek-r1-0528 on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"deepseek/deepseek-r1-distill-llama-70b": {
-			Ratio:                       nativeRate(0.7999999999999999),
+			Ratio:                       nativeRate(0.8),
 			CompletionRatio:             1,
 			ContextLength:               8192,
 			MaxOutputTokens:             7372,
@@ -95,9 +98,11 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			Description:                 "DeepSeek R1 Distill Qwen 32B is a distilled large language model based on [Qwen 2.5 32B](https://huggingface.co/Qwen/Qwen2.5-32B), using outputs from [DeepSeek R1](/deepseek/deepseek-r1). It outperforms OpenAI's o1-mini across various benchmarks, achieving new... [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
 		},
 		"deepseek/deepseek-v3.1-terminus": {
-			Ratio:                       nativeRate(0.27),
-			CompletionRatio:             3.7037037037037033,
-			CachedInputRatio:            nativeRate(0.135),
+			Ratio:           nativeRate(0.27),
+			CompletionRatio: 1.0 / 0.27,
+			// The 2026-11-18 listing (sole endpoint SiliconFlow) publishes no
+			// input_cache_read price, so cached prompt tokens bill at the input rate
+			// instead of the former unpublished $0.135 discount.
 			ContextLength:               163840,
 			MaxOutputTokens:             147456,
 			InputModalities:             []string{"text"},
@@ -105,7 +110,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "reasoning", "response_format", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_p"},
 			HuggingFaceID:               "deepseek-ai/DeepSeek-V3.1-Terminus",
-			Description:                 "deepseek/deepseek-v3.1-terminus on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "deepseek/deepseek-v3.1-terminus on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"deepseek/deepseek-v3.2": {
 			Ratio:                       nativeRate(0.26),
@@ -122,7 +127,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		},
 		"deepseek/deepseek-v3.2-exp": {
 			Ratio:                       nativeRate(0.27),
-			CompletionRatio:             1.5185185185185184,
+			CompletionRatio:             0.41 / 0.27,
 			ContextLength:               163840,
 			MaxOutputTokens:             147456,
 			InputModalities:             []string{"text"},
@@ -134,7 +139,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		},
 		"deepseek/deepseek-v3.2-speciale": {
 			Ratio:                       nativeRate(0.287),
-			CompletionRatio:             1.5017421602787457,
+			CompletionRatio:             0.431 / 0.287,
 			CachedInputRatio:            nativeRate(0.058),
 			ContextLength:               163840,
 			MaxOutputTokens:             163840,
@@ -233,9 +238,11 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			Description:                 "deepseek/deepseek-v4-pro-0813 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"deepseek/deepseek-v4.1-flash": {
-			Ratio:                       nativeRate(0.14),
-			CompletionRatio:             3,
-			CachedInputRatio:            nativeRate(0.0042),
+			// The 2026-11-18 listing quotes the Baidu fp8 endpoint, which carries an
+			// 83.1% promotional discount; most other providers charge $0.09-$0.12 input.
+			Ratio:                       nativeRate(0.0507),
+			CompletionRatio:             0.2028 / 0.0507,
+			CachedInputRatio:            nativeRate(0.001014),
 			ContextLength:               1048576,
 			MaxOutputTokens:             393216,
 			InputModalities:             []string{"text", "image"},
@@ -245,110 +252,15 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"max", "high", "low", "none"},
 			DefaultReasoningEffort:      "high",
 			HuggingFaceID:               "deepseek-ai/DeepSeek-V4.1-Flash",
-			Description:                 "deepseek/deepseek-v4.1-flash on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "deepseek/deepseek-v4.1-flash on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"deepseek/deepseek-v4.1-flash-1017": {
-			Ratio:            nativeRate(0.15),
-			CompletionRatio:  4,
-			CachedInputRatio: nativeRate(0.003),
-			TimeWindows: []adaptor.TimeWindow{
-				{
-					Name:     "openrouter-1",
-					TimeZone: "UTC",
-					Ranges: []adaptor.ClockRange{
-						{
-							Start: "00:00",
-							End:   "00:00",
-						},
-					},
-					Overlay: adaptor.ModelConfig{
-						Ratio:            nativeRate(0.15),
-						CompletionRatio:  4,
-						CachedInputRatio: nativeRate(0.003),
-					},
-					DaysOfWeek: []int{6, 0},
-				},
-				{
-					Name:     "openrouter-2",
-					TimeZone: "UTC",
-					Ranges: []adaptor.ClockRange{
-						{
-							Start: "00:00",
-							End:   "01:00",
-						},
-					},
-					Overlay: adaptor.ModelConfig{
-						Ratio:            nativeRate(0.15),
-						CompletionRatio:  4,
-						CachedInputRatio: nativeRate(0.003),
-					},
-					DaysOfWeek: []int{1, 2, 3, 4, 5},
-				},
-				{
-					Name:     "openrouter-3",
-					TimeZone: "UTC",
-					Ranges: []adaptor.ClockRange{
-						{
-							Start: "01:00",
-							End:   "04:00",
-						},
-					},
-					Overlay: adaptor.ModelConfig{
-						Ratio:            nativeRate(0.3),
-						CompletionRatio:  4,
-						CachedInputRatio: nativeRate(0.006),
-					},
-					DaysOfWeek: []int{1, 2, 3, 4, 5},
-				},
-				{
-					Name:     "openrouter-4",
-					TimeZone: "UTC",
-					Ranges: []adaptor.ClockRange{
-						{
-							Start: "04:00",
-							End:   "06:00",
-						},
-					},
-					Overlay: adaptor.ModelConfig{
-						Ratio:            nativeRate(0.15),
-						CompletionRatio:  4,
-						CachedInputRatio: nativeRate(0.003),
-					},
-					DaysOfWeek: []int{1, 2, 3, 4, 5},
-				},
-				{
-					Name:     "openrouter-5",
-					TimeZone: "UTC",
-					Ranges: []adaptor.ClockRange{
-						{
-							Start: "06:00",
-							End:   "10:00",
-						},
-					},
-					Overlay: adaptor.ModelConfig{
-						Ratio:            nativeRate(0.3),
-						CompletionRatio:  4,
-						CachedInputRatio: nativeRate(0.006),
-					},
-					DaysOfWeek: []int{1, 2, 3, 4, 5},
-				},
-				{
-					Name:     "openrouter-6",
-					TimeZone: "UTC",
-					Ranges: []adaptor.ClockRange{
-						{
-							Start: "10:00",
-							End:   "00:00",
-						},
-					},
-					Overlay: adaptor.ModelConfig{
-						Ratio:            nativeRate(0.15),
-						CompletionRatio:  4,
-						CachedInputRatio: nativeRate(0.003),
-					},
-					DaysOfWeek: []int{1, 2, 3, 4, 5},
-				},
-			},
+			// The 2026-11-18 listing quotes a flat tariff (top provider Wafer US) and
+			// no longer publishes the UTC time-of-day overrides captured on 2026-11-16,
+			// so the former peak/off-peak windows are retired.
+			Ratio:                       nativeRate(0.036),
+			CompletionRatio:             0.5 / 0.036,
+			CachedInputRatio:            nativeRate(0.01),
 			ContextLength:               1048576,
 			MaxOutputTokens:             393216,
 			InputModalities:             []string{"text", "image"},
@@ -358,7 +270,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"max", "high", "low", "none"},
 			DefaultReasoningEffort:      "high",
 			HuggingFaceID:               "deepseek-ai/DeepSeek-V4.1-Flash-1017",
-			Description:                 "deepseek/deepseek-v4.1-flash-1017 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "deepseek/deepseek-v4.1-flash-1017 on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"~deepseek/deepseek-flash-latest": {
 			Ratio:                       nativeRate(0.036),
@@ -390,7 +302,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		},
 		"~deepseek/deepseek-v4-flash-latest": {
 			Ratio:                       nativeRate(0.0434),
-			CompletionRatio:             6.91244239631336,
+			CompletionRatio:             0.3 / 0.0434,
 			CachedInputRatio:            nativeRate(0.035),
 			ContextLength:               1048576,
 			MaxOutputTokens:             943718,

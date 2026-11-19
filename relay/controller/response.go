@@ -12,7 +12,6 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
@@ -177,10 +176,7 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	if len(tierConfig.Tiers) > 0 {
 		preparedBody, err = prepareResponseTierBody(c, meta, responseAPIRequest, requestAdaptor)
 		if err != nil {
-			if errors.Is(err, common.ErrAmbiguousJSONKey) {
-				return openai.ErrorWrapper(err, "invalid_request_error", http.StatusBadRequest)
-			}
-			return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
+			return wrapConvertRequestError(err)
 		}
 	}
 
@@ -189,8 +185,9 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	meta.PromptTokens = promptTokens
 	preConsumedQuota, bizErr := preConsumeResponseAPIQuota(c, responseAPIRequest, promptTokens, ratio, outputRatio, backgroundEnabled, meta, preparedBody)
 	if bizErr != nil {
-		lg.Warn("preConsumeResponseAPIQuota failed",
-			zap.Error(bizErr.RawError),
+		// The returned error is logged once by the relay outcome at its
+		// status-derived level; this DEBUG line only adds admission context.
+		lg.Debug("preConsumeResponseAPIQuota failed",
 			zap.String("err_msg", bizErr.Message),
 			zap.Int("status_code", bizErr.StatusCode))
 		return bizErr
@@ -213,10 +210,7 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	} else {
 		requestBody, err = getResponseAPIRequestBody(c, meta, responseAPIRequest, requestAdaptor)
 		if err != nil {
-			if errors.Is(err, common.ErrAmbiguousJSONKey) {
-				return openai.ErrorWrapper(err, "invalid_request_error", http.StatusBadRequest)
-			}
-			return openai.ErrorWrapper(err, "convert_request_failed", http.StatusInternalServerError)
+			return wrapConvertRequestError(err)
 		}
 	}
 
@@ -240,7 +234,7 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		// Refund pre-consumed quota since the upstream request failed before any tokens were consumed
 		if !(c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) &&
 			retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "transport_uncertain")) {
-			scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "do_request_failed")
+			scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), doRequestRefundReason(err))
 		}
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
@@ -269,13 +263,19 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 	}
 
-	// Check for HTTP errors
+	// Check for HTTP errors. A provider error carrying a usage receipt is paid
+	// work: settle it below instead of refunding or replaying the attempt.
+	var paidErrorUsage *relaymodel.Usage
 	if resp.StatusCode != http.StatusOK {
+		paidErrorUsage = paidUpstreamErrorUsage(c, meta, requestAdaptor, resp)
+	}
+	if paidErrorUsage == nil && resp.StatusCode != http.StatusOK {
 		// A provider may have executed paid Search/Fetch before returning an
 		// error without final usage. Retain the funded floor and audit it.
 		if retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "upstream_http_error") {
 			return RelayErrorHandlerWithContext(c, resp)
 		}
+		recordUpstreamClientRejection(c, resp.StatusCode)
 		scheduleConservativeRefund(c, preConsumedQuota, c.GetInt(ctxkey.TokenId), "upstream_http_error")
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)
@@ -290,7 +290,9 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	c.Set(ctxkey.SkipAdaptorResponseBodyLog, true)
 	var usage *relaymodel.Usage
 	var respErr *relaymodel.ErrorWithStatusCode
-	if supportsDeepSeekNativeResponseAPI(meta) {
+	if paidErrorUsage != nil {
+		usage, respErr = paidErrorUsage, RelayErrorHandlerWithContext(c, resp)
+	} else if supportsDeepSeekNativeResponseAPI(meta) {
 		// The dedicated DeepSeek adaptor handles Chat Completions responses. V4
 		// Flash's native Responses endpoint must retain its SSE/JSON wire format,
 		// especially plaintext reasoning items replayed after tool calls.

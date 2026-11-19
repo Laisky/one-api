@@ -15,6 +15,7 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
@@ -225,7 +226,23 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 	return adaptor.DoRequestHelper(a, c, meta, requestBody)
 }
 
-func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+// DoResponse renders the provider answer for the client and returns the
+// billing usage. When the client called the Claude Messages API, the chat
+// output of doChatResponse is rendered as Claude Messages through the shared
+// bridge, keeping the usage unchanged. Parameters: c is the request context,
+// resp the upstream response, and meta the request meta. Returns: the billing
+// usage and any error.
+func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (*model.Usage, *model.ErrorWithStatusCode) {
+	return openai_compatible.RenderChatHandlerAsClaude(c, meta, func() (*model.Usage, *model.ErrorWithStatusCode) {
+		return a.doChatResponse(c, resp, meta)
+	})
+}
+
+// doChatResponse renders the provider answer as OpenAI chat output (or the
+// mode-specific output) on c.Writer. Parameters: c is the request context,
+// resp the upstream response, and meta the request meta. Returns: the billing
+// usage and any error.
+func (a *Adaptor) doChatResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	if meta.IsStream {
 		var responseText string
 		err, responseText = StreamHandler(c, resp)

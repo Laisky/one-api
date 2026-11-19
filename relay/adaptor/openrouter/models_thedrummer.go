@@ -9,7 +9,7 @@ func thedrummerModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"thedrummer/cydonia-24b-v4.1": {
 			Ratio:                       nativeRate(0.3),
-			CompletionRatio:             1.6666666666666667,
+			CompletionRatio:             0.5 / 0.3,
 			CachedInputRatio:            nativeRate(0.15),
 			ContextLength:               131072,
 			MaxOutputTokens:             117964,
@@ -34,7 +34,7 @@ func thedrummerModels() map[string]adaptor.ModelConfig {
 		},
 		"thedrummer/skyfall-36b-v2": {
 			Ratio:                       nativeRate(0.55),
-			CompletionRatio:             1.4545454545454544,
+			CompletionRatio:             0.8 / 0.55,
 			CachedInputRatio:            nativeRate(0.25),
 			ContextLength:               32768,
 			MaxOutputTokens:             29491,
@@ -46,7 +46,7 @@ func thedrummerModels() map[string]adaptor.ModelConfig {
 			Description:                 "thedrummer/skyfall-36b-v2 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"thedrummer/unslopnemo-12b": {
-			Ratio:                       nativeRate(0.39999999999999997),
+			Ratio:                       nativeRate(0.4),
 			CompletionRatio:             1,
 			ContextLength:               1024000,
 			MaxOutputTokens:             819200,

@@ -25,6 +25,19 @@ var gpt6AstraLongContextTier = adaptor.ModelRatioTier{
 	InputTokenThreshold: 272_001,
 }
 
+// gpt6CyberLongContextTier is GPT-6 Cyber's full-request tier above 272K input
+// tokens. OpenAI publishes its input, output and cache-read prices but no
+// long-context cache-write price, so the field is deliberately omitted and
+// modelBillingPolicies marks such cache writes unpriced instead of letting the
+// tier resolver settle the inherited short-context rate.
+// https://developers.openai.com/api/docs/pricing.md
+var gpt6CyberLongContextTier = adaptor.ModelRatioTier{
+	Ratio:               40 * ratio.MilliTokensUsd,
+	CompletionRatio:     150.0 / 40.0,
+	CachedInputRatio:    4 * ratio.MilliTokensUsd,
+	InputTokenThreshold: 272_001,
+}
+
 // gpt6ModelRatios captures Standard pricing and metadata for the GPT-6 family.
 // Sol and Luna were released on 2026-09-22; Terra was released 2026-10-26.
 // Only published model IDs are listed;
@@ -149,21 +162,14 @@ var gpt6ModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:   100.0 / 20.0,
 		CachedInputRatio:  2 * ratio.MilliTokensUsd,
 		CacheWrite5mRatio: 25 * ratio.MilliTokensUsd, // Legacy field name; OpenAI uses 30m.
-		Tiers: []adaptor.ModelRatioTier{{
-			Ratio:               40 * ratio.MilliTokensUsd,
-			CompletionRatio:     150.0 / 40.0,
-			CachedInputRatio:    4 * ratio.MilliTokensUsd,
-			InputTokenThreshold: 272_001,
-			// Long-context cache-write rates are not published. Quota marks
-			// such receipts unpriced rather than settling the inherited rate.
-		}},
-		ContextLength:    1_050_000,
-		MaxOutputTokens:  128_000,
-		InputModalities:  []string{"text", "image"},
-		OutputModalities: []string{"text"},
+		Tiers:             []adaptor.ModelRatioTier{gpt6CyberLongContextTier},
+		ContextLength:     1_050_000,
+		MaxOutputTokens:   128_000,
+		InputModalities:   []string{"text", "image"},
+		OutputModalities:  []string{"text"},
 		SupportedFeatures: []string{
 			"reasoning", "streaming", "tools", "structured_outputs", "web_search", "prompt_caching",
 		},
-		Description: "GPT-6 Cyber: reasoning for authorized security research; requires upstream Daybreak Red approval. Standard pricing; inputs over 272K use the long-context tier. Long-context cache writes and 12h cache retention require separately qualified billing.",
+		Description: "GPT-6 Cyber: reasoning for authorized security research; requires upstream Daybreak Red approval. Standard pricing; inputs over 272K use the long-context tier, where OpenAI publishes no cache-write price, so implicit prompt caching is disabled there unless the channel configures a long-context cache-write tier. 12h cache retention is not supported.",
 	},
 }

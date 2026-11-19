@@ -133,8 +133,8 @@ func computeGptImageTokenQuota(modelName string, usage *relaymodel.Usage, groupR
 	if !ok {
 		return 0
 	}
-	if isGPTImage25Model(modelName) {
-		return computeGPTImage25TokenQuota(usage, pricing, groupRatio)
+	if usesStrictGPTImageTokenBilling(modelName) {
+		return computeStrictGPTImageTokenQuote(usage, pricing, groupRatio).quota
 	}
 
 	var textIn, imageIn, cachedIn int
@@ -179,6 +179,18 @@ func computeGptImageTokenQuota(modelName string, usage *relaymodel.Usage, groupR
 	return quota
 }
 
+// strictGPTImageCatalogQuote prices a strict GPT Image receipt at the model's
+// published bucket prices. Parameters: modelName selects the bucket table,
+// usage is the provider receipt, and groupRatio scales quota. Returns: the
+// strict quote, or a zero quote for unknown models or missing usage.
+func strictGPTImageCatalogQuote(modelName string, usage *relaymodel.Usage, groupRatio float64) strictGPTImageQuote {
+	prices, ok := gptImageTokenBucketPrices[modelName]
+	if !ok || usage == nil {
+		return strictGPTImageQuote{}
+	}
+	return computeStrictGPTImageTokenQuote(usage, prices, groupRatio)
+}
+
 // computeImageUsageQuota routes to the correct usage-based cost function per model.
 // Returns 0 when usage is missing or the model has no token pricing rule.
 func computeImageUsageQuota(modelName string, usage *relaymodel.Usage, groupRatio float64) float64 {
@@ -200,6 +212,9 @@ type imageQuotaSummary struct {
 	TokenQuota      int64
 	TokenQuotaFloat float64
 	TotalQuota      int64
+	// EstimateReason is non-empty when TotalQuota is not an exact provider
+	// price: a strict GPT Image upper bound or its configured fallback.
+	EstimateReason string
 }
 
 // calculateImageBaseQuota derives the upfront quota reservation for an image request.
@@ -236,14 +251,29 @@ func finalizeImageQuota(baseQuota int64, perImageBilling bool, imageModel string
 		BaseQuota:  baseQuota,
 		TotalQuota: baseQuota,
 	}
+	strict := usesStrictGPTImageTokenBilling(imageModel)
 	// A trusted zero group multiplier makes all usage dimensions free.
-	if usage == nil || groupRatio == 0 {
+	if groupRatio == 0 {
+		return summary
+	}
+	if usage == nil {
+		if strict {
+			summary.EstimateReason = strictImageConfiguredFallbackReason
+		}
 		return summary
 	}
 
-	tokenQuotaFloat := computeImageUsageQuota(imageModel, usage, groupRatio)
-	if isGPTImage25Model(imageModel) && len(configs) > 0 {
-		tokenQuotaFloat = computeGPTImage25ConfiguredQuota(usage, configs[0], groupRatio)
+	var tokenQuotaFloat float64
+	upperBound := false
+	switch {
+	case strict && len(configs) > 0:
+		quote := computeStrictGPTImageConfiguredQuote(usage, configs[0], groupRatio)
+		tokenQuotaFloat, upperBound = quote.quota, quote.upperBound
+	case strict:
+		quote := strictGPTImageCatalogQuote(imageModel, usage, groupRatio)
+		tokenQuotaFloat, upperBound = quote.quota, quote.upperBound
+	default:
+		tokenQuotaFloat = computeImageUsageQuota(imageModel, usage, groupRatio)
 	}
 	if tokenQuotaFloat < 0 {
 		tokenQuotaFloat = 0
@@ -255,14 +285,27 @@ func finalizeImageQuota(baseQuota int64, perImageBilling bool, imageModel string
 	summary.TokenQuotaFloat = tokenQuotaFloat
 	summary.TokenQuota = tokenQuota
 
-	if isGPTImage25Model(imageModel) {
-		// A successful render needs output usage. Missing/partial/ambiguous
-		// usage keeps the explicit operator fallback, never a one-token charge.
-		if usage.CompletionTokens > 0 && tokenQuota > 0 {
+	if strict {
+		// A complete receipt (input and output counted, buckets consistent)
+		// settles its bucket price, flagged when the modality/cache split was
+		// only bounded. Anything less settles the larger of the operator
+		// fallback and the receipt's own ceiling, so an incomplete or
+		// inconsistent receipt never charges less than the tokens it reports.
+		if usage.CompletionTokens > 0 && tokenQuota > 0 && strictGPTImageInputTokens(usage) > 0 {
 			summary.TotalQuota = tokenQuota
-		} else {
-			summary.TokenQuota = 0
-			summary.TokenQuotaFloat = 0
+			if upperBound {
+				summary.EstimateReason = strictImageModalityUpperBoundReason
+			}
+			return summary
+		}
+		summary.TokenQuota, summary.TokenQuotaFloat = 0, 0
+		summary.EstimateReason = strictImageConfiguredFallbackReason
+		if prices, ok := strictGPTImagePrices(imageModel, usage, configs); ok {
+			ceiling := strictGPTImageReceiptCeiling(usage, prices, groupRatio)
+			if ceilingQuota := int64(math.Ceil(ceiling)); ceilingQuota > baseQuota {
+				summary.TokenQuota, summary.TokenQuotaFloat, summary.TotalQuota = ceilingQuota, ceiling, ceilingQuota
+				summary.EstimateReason = strictImageIncompleteReceiptReason
+			}
 		}
 		return summary
 	}

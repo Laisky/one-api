@@ -7,12 +7,26 @@ import "github.com/Laisky/one-api/relay/adaptor"
 // Source: https://api.deepinfra.com/models/list
 func googleModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
+		// DeepInfra deprecates this model at 2026-11-23T17:09:54Z and then
+		// forwards requests to google/embeddinggemma-2, published at $0.02 per 1M
+		// input tokens (model API, checked 2026-11-18). From that UTC date the
+		// higher tariff applies, so a forwarded request is never under-billed.
 		"google/embeddinggemma-300m": {
 			Ratio:           nativeRate(0.002),
 			CompletionRatio: 0,
 			Embedding: &adaptor.EmbeddingPricingConfig{
 				TextTokenRatio: nativeRate(0.002),
 			},
+			TimeWindows: []adaptor.TimeWindow{{
+				Name:     "forwarded-to-embeddinggemma-2",
+				TimeZone: "UTC",
+				Ranges:   []adaptor.ClockRange{{Start: "00:00", End: "00:00"}},
+				DateFrom: "2026-11-23",
+				Overlay: adaptor.ModelConfig{
+					Ratio:     nativeRate(0.02),
+					Embedding: &adaptor.EmbeddingPricingConfig{TextTokenRatio: nativeRate(0.02)},
+				},
+			}},
 			ContextLength:    2048,
 			InputModalities:  []string{"text"},
 			OutputModalities: []string{"embedding"},
@@ -20,7 +34,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 		},
 		"google/gemini-2.5-flash": {
 			Ratio:                       nativeRate(0.3),
-			CompletionRatio:             8.333333333333334,
+			CompletionRatio:             2.5 / 0.3,
 			ContextLength:               1000000,
 			InputModalities:             []string{"text", "image", "audio"},
 			OutputModalities:            []string{"text"},
@@ -80,7 +94,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 		},
 		"google/gemma-3-12b-it": {
 			Ratio:                       nativeRate(0.05),
-			CompletionRatio:             2.9999999999999996,
+			CompletionRatio:             3,
 			ContextLength:               131072,
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
@@ -112,8 +126,8 @@ func googleModels() map[string]adaptor.ModelConfig {
 			Quantization:                "bf16",
 		},
 		"google/gemma-4-26B-A4B-it": {
-			Ratio:                       nativeRate(0.06999999999999999),
-			CompletionRatio:             4.857142857142858,
+			Ratio:                       nativeRate(0.07),
+			CompletionRatio:             0.34 / 0.07,
 			ContextLength:               262144,
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
@@ -134,26 +148,28 @@ func googleModels() map[string]adaptor.ModelConfig {
 			Quantization:                "fp8",
 		},
 		"google/gemma-4-31B-it-Ultra": {
-			Ratio:                       nativeRate(0.26999999999999996),
-			CompletionRatio:             2.8148148148148153,
+			Ratio:                       nativeRate(0.27),
+			CompletionRatio:             0.76 / 0.27,
 			ContextLength:               131072,
+			MaxOutputTokens:             8192,
 			InputModalities:             []string{"text", "image", "video"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "google/gemma-4-31B-it-Ultra on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Description:                 "google/gemma-4-31B-it-Ultra on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Published output limit checked 2026-11-18; reasoning controls remain unspecified.",
 			Quantization:                "fp8",
 		},
 		"google/gemma-4-31B-it-turbo": {
 			Ratio:                       nativeRate(0.09),
-			CompletionRatio:             3.777777777777778,
-			CachedInputRatio:            nativeRate(0.050000000399999994),
+			CompletionRatio:             0.34 / 0.09,
+			CachedInputRatio:            nativeRate(0.05),
 			ContextLength:               262144,
+			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text", "image", "video"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "google/gemma-4-31B-it-turbo on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Unpublished output limits and reasoning controls remain unspecified.",
+			Description:                 "google/gemma-4-31B-it-turbo on DeepInfra; Standard host token tariff and capability tags checked 2026-11-16. Published output limit checked 2026-11-18; reasoning controls remain unspecified.",
 			Quantization:                "fp4",
 		},
 		"google/gemma-4-E4B-it": {

@@ -8,8 +8,8 @@ import "github.com/Laisky/one-api/relay/adaptor"
 func minimaxModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"minimax/minimax-01": {
-			Ratio:                       nativeRate(0.19999999999999998),
-			CompletionRatio:             5.500000000000001,
+			Ratio:                       nativeRate(0.2),
+			CompletionRatio:             5.5,
 			ContextLength:               1000192,
 			MaxOutputTokens:             900172,
 			InputModalities:             []string{"text", "image"},
@@ -69,7 +69,7 @@ func minimaxModels() map[string]adaptor.ModelConfig {
 		},
 		"minimax/minimax-m2.5": {
 			Ratio:                       nativeRate(0.295),
-			CompletionRatio:             4.06779661016949,
+			CompletionRatio:             1.2 / 0.295,
 			CachedInputRatio:            nativeRate(0.06),
 			ContextLength:               198000,
 			MaxOutputTokens:             176947,
@@ -119,9 +119,13 @@ func minimaxModels() map[string]adaptor.ModelConfig {
 			Description:                 "minimax/minimax-m3 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"minimax/minimax-m3.1-flash": {
-			Ratio:            nativeRate(0.075),
-			CompletionRatio:  4,
-			CachedInputRatio: nativeRate(0.0075),
+			// OpenRouter's top-level price is whichever UTC override is active when the
+			// listing is read; the two windows below cover the whole day. The base
+			// keeps the higher 01:00-15:00 quote (as tencent/hy3 does) so any path that
+			// reads the base without a window never prices below a published rate.
+			Ratio:            nativeRate(0.15),
+			CompletionRatio:  0.6 / 0.15,
+			CachedInputRatio: nativeRate(0.015),
 			TimeWindows: []adaptor.TimeWindow{
 				{
 					Name:     "openrouter-1",
@@ -163,7 +167,7 @@ func minimaxModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"max", "xhigh", "high", "medium", "low"},
 			DefaultReasoningEffort:      "max",
 			HuggingFaceID:               "MiniMaxAI/MiniMax-M3.1-Flash",
-			Description:                 "minimax/minimax-m3.1-flash on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "minimax/minimax-m3.1-flash on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 	}
 }

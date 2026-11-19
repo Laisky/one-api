@@ -10,7 +10,7 @@ import (
 func qwenVisionModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"qvq-72b-preview": {
-			Ratio:                       nativeRate(12.370000000000001),
+			Ratio:                       nativeRate(12.37),
 			CompletionRatio:             3,
 			ContextLength:               32768,
 			MaxOutputTokens:             16384,
@@ -140,7 +140,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen-VL v1: legacy closed-weight multimodal base model.",
 		},
 		"qwen2-vl-2b-instruct": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -166,7 +166,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen2-VL 7B Instruct: open-weight previous-generation vision-language model.",
 		},
 		"qwen2.5-vl-0.5b-instruct": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -178,7 +178,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen2.5-VL 0.5B Instruct: open-weight micro vision-language model (HF card not published).",
 		},
 		"qwen2.5-vl-1b-instruct": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -190,7 +190,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen2.5-VL 1B Instruct: open-weight micro vision-language model (HF card not published).",
 		},
 		"qwen2.5-vl-2b-instruct": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -203,7 +203,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen2.5-VL 2B Instruct: open-weight compact vision-language model.",
 		},
 		"qwen2.5-vl-3b-instruct": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -352,7 +352,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 		"qwen3-vl-flash": {
 			Ratio:            nativeRate(0.15),
 			CompletionRatio:  10,
-			CachedInputRatio: nativeRate(0.030000000000000002),
+			CachedInputRatio: nativeRate(0.03),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.3),
 				CompletionRatio:     10,

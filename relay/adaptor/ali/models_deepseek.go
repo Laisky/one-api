@@ -217,7 +217,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		"deepseek-v4-pro": {
 			Ratio:                       nativeRate(12),
 			CompletionRatio:             2,
-			CachedInputRatio:            0.17142857142857143,
+			CachedInputRatio:            nativeRate(2.4),
 			ContextLength:               1000000,
 			MaxOutputTokens:             393216,
 			InputModalities:             []string{"text"},

@@ -311,8 +311,8 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 	// Prepare client for SSE
 	common.SetEventStreamHeaders(c)
 
-	observer := relaymodel.NewResponseUsageAccumulator(true)
-	lineReader := commonsse.NewLineReader(&claudeUsageReader{reader: resp.Body, observer: observer}, commonsse.DefaultLineBufferSize)
+	usageReader := &claudeUsageReader{reader: resp.Body, observer: relaymodel.NewResponseUsageAccumulator(true)}
+	lineReader := commonsse.NewLineReader(usageReader, commonsse.DefaultLineBufferSize)
 
 	// Wrap the reader with heartbeats to prevent reverse-proxy timeouts (e.g. Cloudflare 524).
 	hbr := render.NewHeartbeatLineReader(c, lineReader, render.DefaultHeartbeatInterval)
@@ -370,10 +370,8 @@ func ConvertOpenAIStreamToClaudeSSE(c *gin.Context, resp *http.Response, promptT
 	// receipt is the completion signal, as on the native Responses relay.
 	// Without either, the stream was interrupted and output is estimated
 	// conservatively from what was observed.
-	if !upstreamDone && !tr.settledByReceipt() {
-		observer.MarkIncomplete()
-	}
-	usage := observer.Finish(promptTokens, func(text string) int { return CountTokenText(text, modelName) })
+	usage := usageReader.finish(!upstreamDone && !tr.settledByReceipt(), promptTokens,
+		func(text string) int { return CountTokenText(text, modelName) })
 
 	switch {
 	case em.Failed():

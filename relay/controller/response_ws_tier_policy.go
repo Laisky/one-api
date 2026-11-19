@@ -215,7 +215,9 @@ func (s *responseWSTierFunding) additionalQuote(ctx context.Context, frame []byt
 	if request.MaxOutputTokens != nil {
 		maxOutput = *request.MaxOutputTokens
 	}
-	write5m, write1h, err := tierAdmissionCacheWrites(json.RawMessage(frame))
+	// WebSocket frames are forwarded unchanged, so a required explicit-mode pin
+	// cannot be applied and the frame is refused instead (nil request context).
+	write5m, write1h, err := tierAdmissionCacheWritesForDispatch(nil, &s.meta, request.Model, json.RawMessage(frame), prompt, s.configs, s.provider)
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "inspect WebSocket tiered cache controls")
 	}

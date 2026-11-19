@@ -101,7 +101,7 @@ func GetMCPServers(c *gin.Context) {
 func GetMCPServer(c *gin.Context) {
 	id, err := resolveMCPServerRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 
@@ -166,7 +166,7 @@ func UpdateMCPServer(c *gin.Context) {
 	logger := gmw.GetLogger(c)
 	id, err := resolveMCPServerRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 
@@ -276,7 +276,7 @@ func bindMCPServerPayload(c *gin.Context) (MCPServerUpsertRequest, map[string]bo
 func DeleteMCPServer(c *gin.Context) {
 	id, err := resolveMCPServerRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 
@@ -295,7 +295,7 @@ func DeleteMCPServer(c *gin.Context) {
 func SyncMCPServer(c *gin.Context) {
 	id, err := resolveMCPServerRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	server, err := model.GetMCPServerByID(id)
@@ -331,7 +331,7 @@ func SyncMCPServer(c *gin.Context) {
 func TestMCPServer(c *gin.Context) {
 	id, err := resolveMCPServerRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	server, err := model.GetMCPServerByID(id)
@@ -369,7 +369,7 @@ func ListMCPServerTools(c *gin.Context) {
 	logger := gmw.GetLogger(c)
 	id, err := resolveMCPServerRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 

@@ -27,8 +27,8 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 				DateTo:   "2026-10-08",
 				Overlay: adaptor.ModelConfig{
 					Ratio:            nativeRate(5.4),
-					CompletionRatio:  2.9999999999999996,
-					CachedInputRatio: nativeRate(0.18000000000000002),
+					CompletionRatio:  3,
+					CachedInputRatio: nativeRate(0.18),
 				},
 			},
 				{
@@ -43,8 +43,8 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 					DateTo:   "2026-10-08",
 					Overlay: adaptor.ModelConfig{
 						Ratio:            nativeRate(2.7),
-						CompletionRatio:  2.9999999999999996,
-						CachedInputRatio: nativeRate(0.09000000000000001),
+						CompletionRatio:  3,
+						CachedInputRatio: nativeRate(0.09),
 					},
 				},
 				{
@@ -176,11 +176,16 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 			Ratio:            nativeRate(2),
 			CompletionRatio:  1.5,
 			CachedInputRatio: nativeRate(0.4),
+			// Qianfan published 输入Token数：[0,32k] at 2/0.4/3 and (32k,128k] at
+			// 4/0.4/6 CNY per 1M (https://cloud.baidu.com/doc/qianfan/s/wmh4sv6ya,
+			// archived 2026-06-11 through 2026-09-15). The surcharge starts above
+			// 32k; k is normalized to 1000 like the sibling ERNIE tiers, which is
+			// the smaller reading and therefore never under-bills.
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4),
 				CompletionRatio:     1.5,
 				CachedInputRatio:    nativeRate(0.4),
-				InputTokenThreshold: 32768,
+				InputTokenThreshold: 32001,
 			},
 			},
 			ContextLength:               131072,

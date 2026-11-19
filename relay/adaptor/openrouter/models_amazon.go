@@ -9,7 +9,7 @@ func amazonModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"amazon/nova-2-lite-v1": {
 			Ratio:                       nativeRate(0.3),
-			CompletionRatio:             8.333333333333334,
+			CompletionRatio:             2.5 / 0.3,
 			ContextLength:               1000000,
 			MaxOutputTokens:             65535,
 			InputModalities:             []string{"text", "image", "video", "file"},
@@ -53,7 +53,7 @@ func amazonModels() map[string]adaptor.ModelConfig {
 			Description:                 "amazon/nova-premier-v1 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"amazon/nova-pro-v1": {
-			Ratio:                       nativeRate(0.7999999999999999),
+			Ratio:                       nativeRate(0.8),
 			CompletionRatio:             4,
 			ContextLength:               300000,
 			MaxOutputTokens:             5120,

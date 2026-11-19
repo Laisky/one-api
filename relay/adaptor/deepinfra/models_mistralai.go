@@ -20,7 +20,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 		},
 		"mistralai/Mistral-Small-24B-Instruct-2501": {
 			Ratio:                       nativeRate(0.05),
-			CompletionRatio:             1.5999999999999999,
+			CompletionRatio:             1.6,
 			ContextLength:               32768,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
@@ -31,7 +31,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 		},
 		"mistralai/Mistral-Small-3.2-24B-Instruct-2506": {
 			Ratio:                       nativeRate(0.075),
-			CompletionRatio:             2.666666666666667,
+			CompletionRatio:             0.2 / 0.075,
 			ContextLength:               128000,
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
@@ -56,7 +56,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			CompletionRatio: 1,
 			Audio: &adaptor.AudioPricingConfig{
 				PromptTokensPerSecond: 10,
-				UsdPerSecond:          5e-05,
+				UsdPerSecond:          0.00005,
 			},
 			InputModalities:  []string{"audio"},
 			OutputModalities: []string{"text"},

@@ -5,14 +5,15 @@ import (
 )
 
 // ModelRatios contains all supported OpenAI models and their pricing/configuration metadata.
-// The map is assembled from family-specific submaps (models_<family>.go) so the
+// The map is assembled from family-specific submaps (models_<family>.go) with
+// adaptor.JoinModelCatalogs, which panics on a model ID defined by two families, so the
 // per-family files stay focused and readable. Model list is derived from the keys of
 // this map, eliminating redundancy.
 //
 // Pricing sources verified 2026-09-03; GPT Image 2.5 additions verified 2026-09-09:
 //   - https://developers.openai.com/api/docs/pricing
 //   - https://developers.openai.com/api/docs/models
-var ModelRatios = completeOpenAIModelCatalog(mergeModelRatios(
+var ModelRatios = completeOpenAIModelCatalog(adaptor.JoinModelCatalogs(
 	gpt35ModelRatios,
 	gpt4ModelRatios,
 	gpt4oModelRatios,
@@ -32,26 +33,6 @@ var ModelRatios = completeOpenAIModelCatalog(mergeModelRatios(
 
 // ModelList derived from ModelRatios for backward compatibility.
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
-
-// mergeModelRatios concatenates per-family pricing maps into a single ModelRatios map.
-// It returns a fresh map and panics if duplicate keys are detected so misconfiguration
-// surfaces at process start rather than silently overwriting entries.
-func mergeModelRatios(maps ...map[string]adaptor.ModelConfig) map[string]adaptor.ModelConfig {
-	total := 0
-	for _, m := range maps {
-		total += len(m)
-	}
-	out := make(map[string]adaptor.ModelConfig, total)
-	for _, m := range maps {
-		for name, cfg := range m {
-			if _, dup := out[name]; dup {
-				panic("openai.mergeModelRatios: duplicate model entry: " + name)
-			}
-			out[name] = cfg
-		}
-	}
-	return out
-}
 
 // standardSamplingParameters returns a fresh slice of OpenAI-compatible sampling
 // parameters supported by standard (non-reasoning) chat-completions models.

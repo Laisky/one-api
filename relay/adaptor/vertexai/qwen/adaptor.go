@@ -53,7 +53,12 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 // DoResponse handles the response from Qwen API and converts it to a standard format.
 // Since Qwen models are fully OpenAI-compatible, it uses the standard OpenAI-compatible response handlers.
 // For streaming responses, it uses the StreamHandler, otherwise the standard Handler.
+// A Claude Messages client receives the Qwen answer converted to Claude
+// Messages, as on every other OpenAI-compatible adaptor.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	if openai_compatible.ClaudeChatBridgeActive(c, meta) {
+		return openai_compatible.HandleClaudeMessagesResponse(c, resp, meta, openai_compatible.Handler)
+	}
 	// Use standard OpenAI-compatible response handling since Qwen is OpenAI-compatible
 	if meta.IsStream {
 		// TODO: This may need to return "openai_compatible.StreamHandlerWithThinking".

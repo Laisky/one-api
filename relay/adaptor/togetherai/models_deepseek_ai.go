@@ -9,7 +9,7 @@ func deepseekAiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"deepseek-ai/DeepSeek-R1": {
 			Ratio:                       nativeRate(3),
-			CompletionRatio:             2.3333333333333335,
+			CompletionRatio:             7.0 / 3.0,
 			ContextLength:               128000,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text"},
@@ -22,7 +22,7 @@ func deepseekAiModels() map[string]adaptor.ModelConfig {
 		},
 		"deepseek-ai/DeepSeek-V3.1": {
 			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             2.8333333333333335,
+			CompletionRatio:             1.7 / 0.6,
 			ContextLength:               128000,
 			MaxOutputTokens:             8192,
 			InputModalities:             []string{"text"},

@@ -9,7 +9,7 @@ func inclusionaiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"inclusionai/ling-2.6-1t": {
 			Ratio:                       nativeRate(0.3),
-			CompletionRatio:             8.333333333333334,
+			CompletionRatio:             2.5 / 0.3,
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text"},
@@ -69,7 +69,7 @@ func inclusionaiModels() map[string]adaptor.ModelConfig {
 		},
 		"inclusionai/ling-3.0-flash-vl": {
 			Ratio:             nativeRate(0.075),
-			CompletionRatio:   2.9333333333333336,
+			CompletionRatio:   0.22 / 0.075,
 			CachedInputRatio:  nativeRate(0.015),
 			ContextLength:     262144,
 			MaxOutputTokens:   32768,
@@ -91,7 +91,7 @@ func inclusionaiModels() map[string]adaptor.ModelConfig {
 		},
 		"inclusionai/ring-2.6-1t": {
 			Ratio:                       nativeRate(0.3),
-			CompletionRatio:             8.333333333333334,
+			CompletionRatio:             2.5 / 0.3,
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text"},

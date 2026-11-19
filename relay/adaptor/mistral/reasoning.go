@@ -11,6 +11,7 @@ import (
 	"github.com/Laisky/errors/v2"
 
 	commonsse "github.com/Laisky/one-api/common/sse"
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -28,12 +29,9 @@ func reasoningRequest(request *model.GeneralOpenAIRequest) (any, error) {
 		out.ReasoningEffort = out.Reasoning.Effort
 	}
 	out.Reasoning = nil
-	// Keep the previous omission behavior for models without advertised effort
-	// support. Use catalog metadata rather than a fixed list of hybrid aliases;
-	// supported models retain caller values for upstream validation.
-	if cfg, ok := ModelRatios[out.Model]; !ok || len(cfg.SupportedReasoningEfforts) == 0 {
-		out.ReasoningEffort = nil
-	}
+	// Shared catalog policy: keep only a listed (normalized) effort; otherwise
+	// omit it so Mistral applies its documented default.
+	out.ReasoningEffort = adaptor.SupportedReasoningEffort(ModelRatios, out.Model, out.ReasoningEffort)
 	if out.MaxTokens == 0 && out.MaxCompletionTokens != nil {
 		out.MaxTokens = *out.MaxCompletionTokens
 	}

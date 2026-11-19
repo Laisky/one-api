@@ -16,7 +16,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 		"qvq-max": {
 			Ratio:                       nativeRate(8),
 			CompletionRatio:             4,
-			CachedInputRatio:            nativeRate(1.6480000000000001),
+			CachedInputRatio:            nativeRate(1.648),
 			ContextLength:               131072,
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text", "image"},
@@ -111,7 +111,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 		"qwen3-vl-30b-a3b-instruct": {
 			Ratio:                       nativeRate(0.75),
 			CompletionRatio:             4,
-			CachedInputRatio:            0.010714285714285714,
+			CachedInputRatio:            nativeRate(0.15),
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text", "image"},
@@ -125,7 +125,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 		"qwen3-vl-30b-a3b-thinking": {
 			Ratio:                       nativeRate(0.75),
 			CompletionRatio:             10,
-			CachedInputRatio:            0.010714285714285714,
+			CachedInputRatio:            nativeRate(0.15),
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text", "image"},
@@ -198,7 +198,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 		"qwen3-vl-flash": {
 			Ratio:            nativeRate(0.15),
 			CompletionRatio:  10,
-			CachedInputRatio: nativeRate(0.030000000000000002),
+			CachedInputRatio: nativeRate(0.03),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.3),
 				CompletionRatio:     10,

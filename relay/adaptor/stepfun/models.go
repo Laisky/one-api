@@ -84,11 +84,19 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "StepFun Step-2 second-generation closed-weight chat model with 16k context. Officially retired 2026-07-08; migrate to step-3.7-flash (or step-1o-turbo-vision for vision / step-2x-large for image-gen).",
 	},
 
-	// Step-3 reasoning family. Context-dependent pricing; we encode the
-	// base tier (lowest context) and rely on Tiers for upper context bands.
+	// Step-3 reasoning family. StepFun retired step-3 on 2026-07-08
+	// (https://platform.stepfun.com/docs/zh/guides/models/deprecations, fetched
+	// 2026-11-18; recommended replacement step-3.7-flash). The ID stays for
+	// channels that still name it, priced at the last tariff StepFun published
+	// for it (pricing page Wayback snapshot 2026-03-16), so a stale route can
+	// never bill below it: input <=4k and output <=4k ¥1.5 in / ¥0.3 cache hit /
+	// ¥4 out; input <=4k and output >4k ¥1.5 / ¥0.3 / ¥8; 4k < input <=64k
+	// ¥4 / ¥0.8 / ¥10 per 1M tokens. "4k" is read as 4,000 (thresholds 4,001),
+	// so the ambiguous 4,001-4,096 band bills the higher tier, never the lower.
 	"step-3": {
 		Ratio:                       1.5 * ratio.MilliTokensRmb,
 		CompletionRatio:             4.0 / 1.5,
+		CachedInputRatio:            0.3 * ratio.MilliTokensRmb,
 		ContextLength:               65536,
 		MaxOutputTokens:             8192,
 		InputModalities:             stepfunVisionInputs,
@@ -97,12 +105,19 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		SupportedSamplingParameters: stepfunSamplingParams,
 		Tiers: []adaptor.ModelRatioTier{
 			{
+				Ratio:                1.5 * ratio.MilliTokensRmb,
+				CompletionRatio:      8.0 / 1.5,
+				CachedInputRatio:     0.3 * ratio.MilliTokensRmb,
+				OutputTokenThreshold: 4001,
+			},
+			{
 				Ratio:               4.0 * ratio.MilliTokensRmb,
 				CompletionRatio:     10.0 / 4.0,
-				InputTokenThreshold: 32000,
+				CachedInputRatio:    0.8 * ratio.MilliTokensRmb,
+				InputTokenThreshold: 4001,
 			},
 		},
-		Description: "StepFun Step-3 multimodal reasoning model with tiered pricing (¥1.5-¥4 input / ¥4-¥10 output per 1M tokens). Officially retired 2026-07-08; migrate to step-3.7-flash (or step-1o-turbo-vision for vision / step-2x-large for image-gen).",
+		Description: "Deprecated: StepFun Step-3 multimodal reasoning model, officially retired 2026-07-08; migrate to step-3.7-flash. Kept for configured channels at its last published tiered tariff (input <=4k: ¥1.5 in / ¥0.3 cache hit / ¥4 out, ¥8 out above 4k output; 4k-64k input: ¥4 / ¥0.8 / ¥10 per 1M tokens).",
 	},
 	"step-3.5-flash": {
 		Ratio:            0.7 * ratio.MilliTokensRmb,

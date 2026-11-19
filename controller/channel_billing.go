@@ -382,7 +382,7 @@ func updateChannelBalance(channel *model.Channel) (float64, error) {
 func UpdateChannelBalance(c *gin.Context) {
 	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	channel, err := model.GetChannelById(id, true)

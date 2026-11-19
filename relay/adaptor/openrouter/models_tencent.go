@@ -9,7 +9,7 @@ func tencentModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"tencent/hunyuan-a13b-instruct": {
 			Ratio:                       nativeRate(0.14),
-			CompletionRatio:             4.071428571428571,
+			CompletionRatio:             0.57 / 0.14,
 			ContextLength:               131072,
 			MaxOutputTokens:             117964,
 			InputModalities:             []string{"text"},
@@ -21,7 +21,7 @@ func tencentModels() map[string]adaptor.ModelConfig {
 		},
 		"tencent/hy-mt2-1.8b": {
 			Ratio:                       nativeRate(0.044),
-			CompletionRatio:             4.022727272727273,
+			CompletionRatio:             0.177 / 0.044,
 			ContextLength:               8192,
 			MaxOutputTokens:             4096,
 			InputModalities:             []string{"text"},
@@ -33,7 +33,7 @@ func tencentModels() map[string]adaptor.ModelConfig {
 		},
 		"tencent/hy-mt2-30b-a3b": {
 			Ratio:                       nativeRate(0.074),
-			CompletionRatio:             3.9864864864864864,
+			CompletionRatio:             0.295 / 0.074,
 			ContextLength:               8192,
 			MaxOutputTokens:             4096,
 			InputModalities:             []string{"text"},
@@ -45,7 +45,7 @@ func tencentModels() map[string]adaptor.ModelConfig {
 		},
 		"tencent/hy-mt2-7b": {
 			Ratio:                       nativeRate(0.074),
-			CompletionRatio:             3.9864864864864864,
+			CompletionRatio:             0.295 / 0.074,
 			ContextLength:               8192,
 			MaxOutputTokens:             4096,
 			InputModalities:             []string{"text"},
@@ -94,7 +94,7 @@ func tencentModels() map[string]adaptor.ModelConfig {
 		},
 		"tencent/hy3-preview": {
 			Ratio:                       nativeRate(0.18),
-			CompletionRatio:             3.3333333333333335,
+			CompletionRatio:             0.6 / 0.18,
 			CachedInputRatio:            nativeRate(0.06),
 			ContextLength:               262144,
 			MaxOutputTokens:             235929,
@@ -123,16 +123,17 @@ func tencentModels() map[string]adaptor.ModelConfig {
 			Description:                 "tencent/hy4 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"tencent/hy4-flash": {
-			Ratio:                       nativeRate(0.04375),
-			CompletionRatio:             4.01428571428571,
-			CachedInputRatio:            nativeRate(0.001875),
+			// The 2026-11-18 listing (sole endpoint Tencent fp8) carries a 50% discount.
+			Ratio:                       nativeRate(0.035),
+			CompletionRatio:             0.1405 / 0.035,
+			CachedInputRatio:            nativeRate(0.0015),
 			ContextLength:               1048576,
 			MaxOutputTokens:             65536,
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
 			SupportedSamplingParameters: []string{"include_reasoning", "max_completion_tokens", "max_tokens", "reasoning", "response_format", "stop", "structured_outputs", "temperature", "tool_choice", "tools"},
-			Description:                 "tencent/hy4-flash on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "tencent/hy4-flash on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"tencent/hy4-preview": {
 			Ratio:            nativeRate(0.834),

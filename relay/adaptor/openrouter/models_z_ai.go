@@ -19,7 +19,7 @@ func zAiModels() map[string]adaptor.ModelConfig {
 		},
 		"z-ai/glm-4.5": {
 			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             3.666666666666667,
+			CompletionRatio:             2.2 / 0.6,
 			CachedInputRatio:            nativeRate(0.11),
 			ContextLength:               131072,
 			MaxOutputTokens:             98304,
@@ -32,8 +32,8 @@ func zAiModels() map[string]adaptor.ModelConfig {
 		},
 		"z-ai/glm-4.5-air": {
 			Ratio:                       nativeRate(0.13),
-			CompletionRatio:             6.538461538461538,
-			CachedInputRatio:            nativeRate(0.024999999999999998),
+			CompletionRatio:             0.85 / 0.13,
+			CachedInputRatio:            nativeRate(0.025),
 			ContextLength:               131072,
 			MaxOutputTokens:             98304,
 			InputModalities:             []string{"text"},
@@ -84,7 +84,7 @@ func zAiModels() map[string]adaptor.ModelConfig {
 		"z-ai/glm-4.6v": {
 			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             3,
-			CachedInputRatio:            nativeRate(0.055),
+			CachedInputRatio:            nativeRate(0.05),
 			ContextLength:               131072,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"image", "text", "video"},
@@ -92,7 +92,7 @@ func zAiModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "max_tokens", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "temperature", "tool_choice", "tools", "top_k", "top_p"},
 			HuggingFaceID:               "zai-org/GLM-4.6V",
-			Description:                 "z-ai/glm-4.6v on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "z-ai/glm-4.6v on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"z-ai/glm-4.7": {
 			Ratio:                       nativeRate(0.4),
@@ -108,9 +108,11 @@ func zAiModels() map[string]adaptor.ModelConfig {
 			Description:                 "z-ai/glm-4.7 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"z-ai/glm-4.7-flash": {
-			Ratio:                       nativeRate(0.060500000000000005),
-			CompletionRatio:             6.611570247933884,
-			CachedInputRatio:            nativeRate(0.01),
+			Ratio:           nativeRate(0.0605),
+			CompletionRatio: 0.4 / 0.0605,
+			// The 2026-11-18 listing (top provider Cloudflare) publishes no
+			// input_cache_read price, so cached prompt tokens bill at the input rate
+			// instead of the former unpublished $0.01 discount.
 			ContextLength:               200000,
 			MaxOutputTokens:             117964,
 			InputModalities:             []string{"text"},
@@ -118,7 +120,7 @@ func zAiModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "zai-org/GLM-4.7-Flash",
-			Description:                 "z-ai/glm-4.7-flash on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "z-ai/glm-4.7-flash on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"z-ai/glm-5": {
 			Ratio:                       nativeRate(1),
@@ -135,7 +137,7 @@ func zAiModels() map[string]adaptor.ModelConfig {
 		},
 		"z-ai/glm-5-turbo": {
 			Ratio:                       nativeRate(1.2),
-			CompletionRatio:             3.3333333333333335,
+			CompletionRatio:             4.0 / 1.2,
 			CachedInputRatio:            nativeRate(0.24),
 			ContextLength:               202752,
 			MaxOutputTokens:             131072,
@@ -147,7 +149,7 @@ func zAiModels() map[string]adaptor.ModelConfig {
 		},
 		"z-ai/glm-5.1": {
 			Ratio:                       nativeRate(1.4),
-			CompletionRatio:             3.142857142857143,
+			CompletionRatio:             4.4 / 1.4,
 			CachedInputRatio:            nativeRate(0.26),
 			ContextLength:               204800,
 			MaxOutputTokens:             182476,
@@ -203,8 +205,8 @@ func zAiModels() map[string]adaptor.ModelConfig {
 			Description:                 "z-ai/glm-5.3 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"z-ai/glm-5.3-flash": {
-			Ratio:                       nativeRate(0.0399),
-			CompletionRatio:             1.96491228070175,
+			Ratio:                       nativeRate(0.15),
+			CompletionRatio:             0.5 / 0.15,
 			CachedInputRatio:            nativeRate(0.03),
 			ContextLength:               1048576,
 			MaxOutputTokens:             131072,
@@ -215,11 +217,11 @@ func zAiModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"max", "high", "low"},
 			DefaultReasoningEffort:      "max",
 			HuggingFaceID:               "zai-org/GLM-5.3-Flash",
-			Description:                 "z-ai/glm-5.3-flash on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "z-ai/glm-5.3-flash on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"z-ai/glm-5.3-flashx": {
 			Ratio:                       nativeRate(0.37),
-			CompletionRatio:             3.3783783783783785,
+			CompletionRatio:             1.25 / 0.37,
 			CachedInputRatio:            nativeRate(0.075),
 			ContextLength:               1048576,
 			MaxOutputTokens:             131072,
@@ -233,7 +235,7 @@ func zAiModels() map[string]adaptor.ModelConfig {
 		},
 		"z-ai/glm-5.3-flashx-legal": {
 			Ratio:                       nativeRate(0.37),
-			CompletionRatio:             3.37837837837838,
+			CompletionRatio:             1.25 / 0.37,
 			CachedInputRatio:            nativeRate(0.075),
 			ContextLength:               1048576,
 			MaxOutputTokens:             131072,
@@ -246,9 +248,9 @@ func zAiModels() map[string]adaptor.ModelConfig {
 			Description:                 "z-ai/glm-5.3-flashx-legal on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"z-ai/glm-5.3-prime": {
-			Ratio:                       nativeRate(2.8),
-			CompletionRatio:             3.1428571428571432,
-			CachedInputRatio:            nativeRate(0.56),
+			Ratio:                       nativeRate(1.68),
+			CompletionRatio:             5.28 / 1.68,
+			CachedInputRatio:            nativeRate(0.336),
 			ContextLength:               1000000,
 			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text"},
@@ -257,11 +259,11 @@ func zAiModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logprobs", "max_tokens", "presence_penalty", "reasoning", "reasoning_effort", "response_format", "seed", "stop", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			SupportedReasoningEfforts:   []string{"max", "high", "low"},
 			DefaultReasoningEffort:      "max",
-			Description:                 "z-ai/glm-5.3-prime on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "z-ai/glm-5.3-prime on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"z-ai/glm-5v-turbo": {
 			Ratio:                       nativeRate(1.2),
-			CompletionRatio:             3.3333333333333335,
+			CompletionRatio:             4.0 / 1.2,
 			CachedInputRatio:            nativeRate(0.24),
 			ContextLength:               202752,
 			MaxOutputTokens:             131072,
@@ -272,8 +274,14 @@ func zAiModels() map[string]adaptor.ModelConfig {
 			Description:                 "z-ai/glm-5v-turbo on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"~z-ai/glm-flash-latest": {
-			Ratio:                       nativeRate(0.0399),
-			CompletionRatio:             1.96491228070175,
+			// The alias redirects to z-ai/glm-5.3-flash. On 2026-11-18 the alias entry
+			// still quoted the Relace fp4 endpoint ($0.0399 input, $0.0784 output),
+			// while the target's own entry moved to the $0.15/$0.50 tier that most of
+			// its providers, including Z.ai, charge. Both quotes describe the same
+			// routed model, so the alias bills like its target (the funded quote)
+			// rather than at the cheaper alias quote.
+			Ratio:                       nativeRate(0.15),
+			CompletionRatio:             0.5 / 0.15,
 			CachedInputRatio:            nativeRate(0.03),
 			ContextLength:               1048576,
 			MaxOutputTokens:             131072,
@@ -283,7 +291,7 @@ func zAiModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "parallel_tool_calls", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			SupportedReasoningEfforts:   []string{"max", "high", "low"},
 			DefaultReasoningEffort:      "max",
-			Description:                 "~z-ai/glm-flash-latest on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "~z-ai/glm-flash-latest on OpenRouter; billed like its z-ai/glm-5.3-flash target per the public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"~z-ai/glm-latest": {
 			Ratio:                       nativeRate(0.0699),

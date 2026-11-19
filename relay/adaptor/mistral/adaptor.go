@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/relay/adaptor"
@@ -81,7 +83,12 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 	return nil
 }
 
+// ConvertRequest converts a Chat (or Responses fallback) request into Mistral's
+// native chat payload. Parameters: c supplies the request-scoped logger and may
+// be nil in unit tests, relayMode is unused, and request is never mutated.
+// Returns: the wire payload, or an error when the request cannot be encoded.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
+	logUnsupportedReasoningEffort(c, request)
 	return reasoningRequest(request)
 }
 
@@ -98,6 +105,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 	if !ok {
 		return nil, errors.New("unexpected Mistral Claude conversion type")
 	}
+	logUnsupportedReasoningEffort(c, general)
 	return reasoningRequest(general)
 }
 
@@ -125,4 +133,35 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 		}
 		return openai_compatible.Handler(c, resp, promptTokens, modelName)
 	})
+}
+
+// maxLoggedReasoningEffort bounds the caller-controlled effort echoed in DEBUG logs.
+const maxLoggedReasoningEffort = 32
+
+// logUnsupportedReasoningEffort records at DEBUG level that a caller-supplied
+// reasoning effort will not be forwarded because the target model does not
+// advertise it. Parameters: c supplies the request-scoped logger (nil skips
+// logging) and request is the request about to be converted; it is not mutated.
+// It returns nothing and never logs prompt content or credentials.
+func logUnsupportedReasoningEffort(c *gin.Context, request *model.GeneralOpenAIRequest) {
+	if c == nil || request == nil {
+		return
+	}
+	requested := request.ReasoningEffort
+	if requested == nil && request.Reasoning != nil {
+		requested = request.Reasoning.Effort
+	}
+	if requested == nil || adaptor.SupportedReasoningEffort(ModelRatios, request.Model, requested) != nil {
+		return
+	}
+	value := *requested
+	if len(value) > maxLoggedReasoningEffort {
+		value = value[:maxLoggedReasoningEffort]
+	}
+	lg := gmw.GetLogger(c)
+	lg.Debug("dropped unsupported Mistral reasoning_effort; provider default applies",
+		zap.String("model", request.Model),
+		zap.String("requested_effort", value),
+		zap.Strings("supported_efforts", ModelRatios[request.Model].SupportedReasoningEfforts),
+	)
 }

@@ -47,7 +47,11 @@ table explicitly leaves **long-context Cyber cache-write prices blank**. This
 audit does not extrapolate a price. Short 30m writes use the existing legacy
 `CacheWrite5mRatio` field; 12h writes are not mislabeled as Anthropic 1h writes.
 An unexpected long-context write receipt is marked unpriced unless an explicit
-applicable operator tier supplies its write rate. This preserves the reservation
+applicable operator tier supplies its write rate. (Correction, 2026-11-18: the
+prompt caching guide states caching is enabled by default with one implicit
+breakpoint, so long-context writes are expected, not unexpected. The gateway now
+disables implicit caching for that tier; see "Native OpenAI Prompt-Cache
+Admission" in `docs/arch/billing.md`.) This preserves the reservation
 through the existing unpriced settlement path. Published long input/output/cache
 read prices remain usable when the receipt has no cache writes.
 

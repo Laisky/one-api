@@ -9,7 +9,7 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"moonshotai/kimi-k2-0905": {
 			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             4.166666666666667,
+			CompletionRatio:             2.5 / 0.6,
 			ContextLength:               262144,
 			MaxOutputTokens:             98304,
 			InputModalities:             []string{"text"},
@@ -22,7 +22,7 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 		},
 		"moonshotai/kimi-k2-instruct": {
 			Ratio:                       nativeRate(0.57),
-			CompletionRatio:             4.035087719298246,
+			CompletionRatio:             2.3 / 0.57,
 			ContextLength:               131072,
 			MaxOutputTokens:             98304,
 			InputModalities:             []string{"text"},
@@ -35,7 +35,7 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 		},
 		"moonshotai/kimi-k2-thinking": {
 			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             4.166666666666667,
+			CompletionRatio:             2.5 / 0.6,
 			CachedInputRatio:            nativeRate(0.15),
 			ContextLength:               262144,
 			MaxOutputTokens:             98304,
@@ -77,7 +77,7 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 		},
 		"moonshotai/kimi-k2.7-code": {
 			Ratio:                       nativeRate(0.95),
-			CompletionRatio:             4.2105263157894735,
+			CompletionRatio:             4.0 / 0.95,
 			CachedInputRatio:            nativeRate(0.19),
 			ContextLength:               262144,
 			MaxOutputTokens:             262144,

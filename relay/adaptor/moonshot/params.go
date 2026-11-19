@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -90,12 +91,14 @@ func normalizeReasoningEffort(request *model.GeneralOpenAIRequest) {
 		return
 	}
 
-	effort := strings.ToLower(strings.TrimSpace(*request.ReasoningEffort))
-	if slices.Contains(cfg.SupportedReasoningEfforts, effort) {
-		request.ReasoningEffort = &effort
+	// Membership uses the shared catalog policy; only values outside the
+	// model's vocabulary fall through to the OpenAI-to-Moonshot mapping.
+	if listed := adaptor.SupportedReasoningEffort(ModelRatios, request.Model, request.ReasoningEffort); listed != nil {
+		request.ReasoningEffort = listed
 		return
 	}
 
+	effort := strings.ToLower(strings.TrimSpace(*request.ReasoningEffort))
 	mapped, ok := openAIToMoonshotEffort[effort]
 	if !ok || !slices.Contains(cfg.SupportedReasoningEfforts, mapped) {
 		// Unknown tier: drop it and let the upstream apply its own default

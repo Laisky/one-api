@@ -10,16 +10,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNovemberOpenRouterTerraTier verifies OpenRouter's inclusive 272,000-token
-// minimum independently of the native OpenAI threshold and preserves all buckets.
+// TestNovemberOpenRouterTerraTier verifies OpenRouter's strict min_prompt_tokens
+// 272,000 bound (stored as 272,001) and preserves all buckets.
 func TestNovemberOpenRouterTerraTier(t *testing.T) {
 	t.Parallel()
 	for _, id := range []string{"openai/gpt-6.1-terra", "openai/gpt-6.1-terra-pro", "~openai/gpt-terra-latest"} {
 		for _, tokens := range []int{271999, 272000, 272001, 1000000} {
 			got := pricing.ResolveEffectivePricingForUsage(id, tokens, 1, &openrouter.Adaptor{})
 			input, cached, output, write, threshold := 1.0, .05, 5.0, 1.25, 0
-			if tokens >= 272000 {
-				input, cached, output, write, threshold = 2, .1, 7.5, 2.5, 272000
+			if tokens > 272000 {
+				input, cached, output, write, threshold = 2, .1, 7.5, 2.5, 272001
 			}
 			require.Equal(t, threshold, got.AppliedTierThreshold, id)
 			require.InDelta(t, input, got.InputRatio/ratio.MilliTokensUsd, 1e-12, id)
@@ -34,22 +34,24 @@ func TestNovemberOpenRouterTerraTier(t *testing.T) {
 
 // TestNovemberOpenRouterClockBoundaries checks weekday, weekend, and midnight
 // transitions in the exact host schedules rather than importing native tariffs.
+// deepseek/deepseek-v4.1-flash-1017 stays flat across its former boundaries
+// because its 2026-11-18 listing no longer publishes time-of-day overrides.
 func TestNovemberOpenRouterClockBoundaries(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		id, at                string
 		input, cached, output float64
 	}{
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T00:59:59Z", .15, .003, .6},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T01:00:00Z", .3, .006, 1.2},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T03:59:59Z", .3, .006, 1.2},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T04:00:00Z", .15, .003, .6},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T05:59:59Z", .15, .003, .6},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T06:00:00Z", .3, .006, 1.2},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T09:59:59Z", .3, .006, 1.2},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T10:00:00Z", .15, .003, .6},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-21T01:00:00Z", .15, .003, .6},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-22T06:00:00Z", .15, .003, .6},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T00:59:59Z", .036, .01, .5},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T01:00:00Z", .036, .01, .5},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T03:59:59Z", .036, .01, .5},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T04:00:00Z", .036, .01, .5},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T05:59:59Z", .036, .01, .5},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T06:00:00Z", .036, .01, .5},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T09:59:59Z", .036, .01, .5},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T10:00:00Z", .036, .01, .5},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-21T01:00:00Z", .036, .01, .5},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-22T06:00:00Z", .036, .01, .5},
 		{"minimax/minimax-m3.1-flash", "2026-11-16T00:59:59Z", .075, .0075, .3},
 		{"minimax/minimax-m3.1-flash", "2026-11-16T01:00:00Z", .15, .015, .6},
 		{"minimax/minimax-m3.1-flash", "2026-11-16T14:59:59Z", .15, .015, .6},

@@ -11,38 +11,44 @@ import (
 
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
-	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
 )
 
-// cyberResponseReceipt observes the original response before presentation
+// rawUsageReceipt observes the original response before presentation
 // converters discard envelope pricing dimensions or failed-response usage.
 // Its bounded accumulator is protected from a stream reader finishing late.
-type cyberResponseReceipt struct {
+type rawUsageReceipt struct {
 	io.ReadCloser
 	mu          sync.Mutex
 	accumulator *model.ResponseUsageAccumulator
 	stream      bool
 }
 
-// observeCyberResponseReceipt wraps resp for the native Cyber model selected by
-// info and returns its bounded observer. Other models and hosts return nil.
-func observeCyberResponseReceipt(resp *http.Response, info *meta.Meta) *cyberResponseReceipt {
-	if info == nil || info.ChannelType != channeltype.OpenAI ||
-		!strings.EqualFold(strings.TrimSpace(info.ActualModelName), "gpt-6-cyber") || resp == nil || resp.Body == nil {
+// observeRawUsageReceipt wraps resp when the native model's billing policy
+// requires settlement to see the raw upstream receipt (CaptureRawUsageReceipt,
+// currently gpt-6-cyber) and returns its bounded observer. Other models and
+// hosts return nil. Parameters: resp is the provider response and info the
+// attempt metadata. Returns: the installed observer, or nil.
+func observeRawUsageReceipt(resp *http.Response, info *meta.Meta) *rawUsageReceipt {
+	if info == nil || !CapturesRawUsageReceipt(info.ChannelType, info.ActualModelName) || resp == nil || resp.Body == nil {
 		return nil
 	}
 	eventStream := strings.Contains(resp.Header.Get("Content-Type"), "text/event-stream")
-	observer := &cyberResponseReceipt{ReadCloser: resp.Body, stream: eventStream || info.IsStream,
+	observer := &rawUsageReceipt{ReadCloser: resp.Body, stream: eventStream || info.IsStream,
 		accumulator: model.NewResponseUsageAccumulator(eventStream)}
 	resp.Body = observer
 	return observer
 }
 
+// Unwrap exposes the delegated provider body so transport cancellation
+// provenance (adaptor.ResponseTransportOwnsCancellation) sees through this
+// transparent observer. It takes no parameters and returns the wrapped body.
+func (r *rawUsageReceipt) Unwrap() io.ReadCloser { return r.ReadCloser }
+
 // Read copies upstream bytes into p, observes the same bytes for billing, and
 // returns the original read result without changing the client-visible body.
-func (r *cyberResponseReceipt) Read(p []byte) (int, error) {
+func (r *rawUsageReceipt) Read(p []byte) (int, error) {
 	n, err := r.ReadCloser.Read(p)
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -62,7 +68,7 @@ func (r *cyberResponseReceipt) Read(p []byte) (int, error) {
 // and convertedBody keeps the controller's deferred body-rendering contract.
 // Returns: the canonical settlement usage, or nil for an unrendered Claude body
 // or an error response without any usage evidence.
-func (r *cyberResponseReceipt) finish(c *gin.Context, usage *model.Usage, convertedBody bool) *model.Usage {
+func (r *rawUsageReceipt) finish(c *gin.Context, usage *model.Usage, convertedBody bool) *model.Usage {
 	r.mu.Lock()
 	observed := r.accumulator.Finish(0, nil)
 	r.mu.Unlock()

@@ -26,8 +26,8 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 			Description:     "zai-org/GLM-4.5V on siliconflow; official catalog snapshot 2026-09-24. SiliconFlow announced retirement on 2026-11-16; the historical ID and tariff remain for administrator configurations. Source: https://docs.siliconflow.cn/docs/release-notes/overview",
 		},
 		"zai-org/GLM-4.6": {
-			Ratio:                       nativeRate(2.7300000000000004),
-			CompletionRatio:             4.871794871794871,
+			Ratio:                       nativeRate(2.73),
+			CompletionRatio:             13.3 / 2.73,
 			ContextLength:               204800,
 			MaxOutputTokens:             204800,
 			InputModalities:             []string{"text"},
@@ -40,7 +40,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/GLM-4.7": {
 			Ratio:                       nativeRate(2.94),
-			CompletionRatio:             5.238095238095238,
+			CompletionRatio:             15.4 / 2.94,
 			CachedInputRatio:            nativeRate(0.77),
 			ContextLength:               204800,
 			MaxOutputTokens:             204800,
@@ -54,8 +54,8 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/GLM-5": {
 			Ratio:                       nativeRate(6.65),
-			CompletionRatio:             2.6842105263157894,
-			CachedInputRatio:            nativeRate(1.4000000000000001),
+			CompletionRatio:             17.85 / 6.65,
+			CachedInputRatio:            nativeRate(1.4),
 			ContextLength:               204800,
 			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text"},
@@ -70,7 +70,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/GLM-5.1": {
 			Ratio:                       nativeRate(8.33),
-			CompletionRatio:             3.142857142857143,
+			CompletionRatio:             26.18 / 8.33,
 			CachedInputRatio:            nativeRate(4.2),
 			ContextLength:               204800,
 			MaxOutputTokens:             131072,
@@ -116,7 +116,7 @@ func zai_orgModels() map[string]adaptor.ModelConfig {
 		},
 		"zai-org/GLM-5V-Turbo": {
 			Ratio:                       nativeRate(8.4),
-			CompletionRatio:             3.3333333333333335,
+			CompletionRatio:             28.0 / 8.4,
 			CachedInputRatio:            nativeRate(1.68),
 			ContextLength:               204800,
 			MaxOutputTokens:             131072,

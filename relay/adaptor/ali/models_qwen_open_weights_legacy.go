@@ -10,7 +10,7 @@ import (
 func qwenOpenWeightsLegacyModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"qwen-1.8b-chat": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               8192,
 			MaxOutputTokens:             2048,
@@ -21,7 +21,7 @@ func qwenOpenWeightsLegacyModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen 1.8B Chat (Qwen 1 generation, hosted only).",
 		},
 		"qwen-1.8b-longcontext-chat": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             2048,
@@ -65,7 +65,7 @@ func qwenOpenWeightsLegacyModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen 7B Chat (Qwen 1 generation, hosted only).",
 		},
 		"qwen1.5-0.5b-chat": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -78,7 +78,7 @@ func qwenOpenWeightsLegacyModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen1.5 0.5B Chat: open-weight legacy micro chat model.",
 		},
 		"qwen1.5-1.8b-chat": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -156,7 +156,7 @@ func qwenOpenWeightsLegacyModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen1.5 7B Chat: open-weight legacy chat model.",
 		},
 		"qwen2-0.5b-instruct": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -169,7 +169,7 @@ func qwenOpenWeightsLegacyModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen2 0.5B Instruct: open-weight micro instruct model.",
 		},
 		"qwen2-1.5b-instruct": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -273,7 +273,7 @@ func qwenOpenWeightsLegacyModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen2.5 32B Instruct: open-weight mid-tier instruct model with 128K context.",
 		},
 		"qwen2.5-3b-instruct": {
-			Ratio:                       0.04285714285714286,
+			Ratio:                       nativeRate(0.6),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,

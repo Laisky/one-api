@@ -22,7 +22,7 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 			Ratio:           0,
 			CompletionRatio: 1,
 			Audio: &adaptor.AudioPricingConfig{
-				UsdPerSecond: 2.5e-05,
+				UsdPerSecond: 0.000025,
 			},
 		},
 		"nvidia/nemotron-3-ultra-550b-a55b": {
@@ -42,14 +42,14 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 			Ratio:           0,
 			CompletionRatio: 1,
 			Audio: &adaptor.AudioPricingConfig{
-				UsdPerSecond: 2.5e-05,
+				UsdPerSecond: 0.000025,
 			},
 		},
 		"nvidia/parakeet-tdt-0.6b-v3": {
 			Ratio:           0,
 			CompletionRatio: 1,
 			Audio: &adaptor.AudioPricingConfig{
-				UsdPerSecond: 2.5e-05,
+				UsdPerSecond: 0.000025,
 			},
 		},
 	}

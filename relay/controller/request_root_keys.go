@@ -31,7 +31,8 @@ func isExtraBodyKey(key string) bool {
 // key. Raw bytes are only equivalent to the typed request when every typed
 // parameter is spelled canonically and once and no spelling of extra_body is
 // present; otherwise a case-sensitive upstream could act on values the
-// gateway never admitted, billed or filtered.
+// gateway never admitted, billed or filtered. A body carrying prompt_cache_key
+// always takes the typed path, which scopes or withholds the key.
 // Parameters: body is the raw request payload. Returns: true when raw
 // forwarding is equivalent to the typed request view.
 func chatRawPassthroughSafe(body []byte) bool {
@@ -51,6 +52,12 @@ func chatRawPassthroughSafe(body []byte) bool {
 			continue
 		}
 		if key != canonical {
+			return false
+		}
+		if canonical == promptCacheKeyRootKey {
+			// The gateway rewrites prompt_cache_key per destination (tenant
+			// scoped for native OpenAI, withheld elsewhere); raw bytes would
+			// forward the client's unscoped value.
 			return false
 		}
 		if _, duplicate := seen[canonical]; duplicate {

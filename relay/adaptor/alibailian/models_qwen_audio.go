@@ -25,7 +25,7 @@ func qwenAudioModels() map[string]adaptor.ModelConfig {
 		"qwen3-omni-flash": {
 			Ratio:                       nativeRate(1.8),
 			CompletionRatio:             3.8333,
-			CachedInputRatio:            0.025714285714285714,
+			CachedInputRatio:            nativeRate(0.36),
 			ContextLength:               262144,
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text", "image"},

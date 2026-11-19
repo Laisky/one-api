@@ -75,7 +75,8 @@ func TestPasskeyStrictOutResponses(t *testing.T) {
 	legacyRecorder := httptest.NewRecorder()
 	legacyRequest := httptest.NewRequest(http.MethodDelete, "/api/user/passkey/2", nil)
 	router.ServeHTTP(legacyRecorder, legacyRequest)
-	require.Equal(t, http.StatusOK, legacyRecorder.Code)
+	// A legacy integer id is a malformed resource reference: a client error.
+	require.Equal(t, http.StatusBadRequest, legacyRecorder.Code)
 	var legacyPayload map[string]any
 	require.NoError(t, json.Unmarshal(legacyRecorder.Body.Bytes(), &legacyPayload))
 	require.Equal(t, false, legacyPayload["success"])

@@ -33,6 +33,12 @@ type Tokens struct {
 	OutputAudio       int64 `json:"output_audio_tokens"`
 	// OutputUnallocated is the output-side counterpart of Unallocated.
 	OutputUnallocated int64 `json:"output_unallocated_tokens,omitempty"`
+	// OutputVideo is the subset of OutputUnallocated that the provider
+	// explicitly attributed to VIDEO output (a Gemini Live avatar). Cost charges
+	// it at Rates.OutputVideo when the tariff sets video.output_token_ratio;
+	// otherwise it stays unallocated output and pricing flags the receipt as
+	// unpriced instead of exact.
+	OutputVideo int64 `json:"output_video_tokens,omitempty"`
 }
 
 // Record describes one final response or one independent input transcription.
@@ -47,20 +53,25 @@ type Record struct {
 
 // Rates contains final, ungrouped quota-per-token rates, plus quota per second.
 // All modality rates are absolute, not completion or cache multipliers.
+// OutputVideo zero means video output is unpriced, never free.
 type Rates struct {
 	Video, CachedVideo                   float64
 	Text, Audio, Image                   float64
 	CachedText, CachedAudio, CachedImage float64
 	OutputText, OutputAudio, Second      float64
+	OutputVideo                          float64
 }
 
 // Cost returns the unrounded cost of record using rates. For unallocated cache
 // it returns the minimum cost consistent with the reported totals, not a guessed
 // exact split. The original record stays unchanged for reconciliation. Invalid
 // prices and overflowing results are rejected, never converted to negative debits.
+// Explicit VIDEO output uses rates.OutputVideo when priced; otherwise it is
+// charged with the rest of the unallocated output, exactly as before that rate.
 func Cost(record Record, rates Rates) (float64, error) {
 	values := []float64{rates.Text, rates.Audio, rates.Image, rates.CachedText,
-		rates.CachedAudio, rates.CachedImage, rates.OutputText, rates.OutputAudio, rates.Second, rates.Video, rates.CachedVideo}
+		rates.CachedAudio, rates.CachedImage, rates.OutputText, rates.OutputAudio, rates.Second, rates.Video, rates.CachedVideo,
+		rates.OutputVideo}
 	for _, value := range values {
 		if value < 0 || math.IsNaN(value) || math.IsInf(value, 0) {
 			return 0, errors.WithStack(ErrInvalidPrice)
@@ -78,13 +89,20 @@ func Cost(record Record, rates Rates) (float64, error) {
 			return 0, err
 		}
 		t = minimumCostCacheAllocation(t, rates)
+		// Video output is never a candidate for the unattributed remainder:
+		// only tokens the provider explicitly attributed to VIDEO get its rate.
+		var outputVideo int64
+		if rates.OutputVideo > 0 {
+			outputVideo = t.OutputVideo
+		}
 		cost = float64(t.Text-t.CachedText)*rates.Text + float64(t.CachedText)*rates.CachedText +
 			float64(t.Audio-t.CachedAudio)*rates.Audio + float64(t.CachedAudio)*rates.CachedAudio +
 			float64(t.Image-t.CachedImage)*rates.Image + float64(t.CachedImage)*rates.CachedImage +
 			float64(t.Video-t.CachedVideo)*rates.Video + float64(t.CachedVideo)*rates.CachedVideo +
 			float64(t.OutputText)*rates.OutputText + float64(t.OutputAudio)*rates.OutputAudio +
+			float64(outputVideo)*rates.OutputVideo +
 			float64(t.Unallocated)*cheapestRate(rates.Text, rates.Audio, rates.Image, rates.Video) +
-			float64(t.OutputUnallocated)*cheapestRate(rates.OutputText, rates.OutputAudio)
+			float64(t.OutputUnallocated-outputVideo)*cheapestRate(rates.OutputText, rates.OutputAudio)
 	}
 	if math.IsNaN(cost) || math.IsInf(cost, 0) || cost >= float64(math.MaxInt64) {
 		return 0, errors.Wrap(ErrQuotaOverflow, "realtime cost exceeds quota range")
@@ -139,7 +157,7 @@ func minimumCostCacheAllocation(t Tokens, rates Rates) Tokens {
 func (t Tokens) Validate() error {
 	values := []int64{t.Input, t.Output, t.Text, t.Audio, t.Image, t.CachedText,
 		t.CachedAudio, t.CachedImage, t.CachedUnallocated, t.OutputText, t.OutputAudio, t.Video, t.CachedVideo,
-		t.ReasoningTokens, t.Unallocated, t.OutputUnallocated}
+		t.ReasoningTokens, t.Unallocated, t.OutputUnallocated, t.OutputVideo}
 	for _, value := range values {
 		if value < 0 {
 			return errors.Wrap(ErrInvalidUsage, "negative realtime token count")
@@ -150,7 +168,8 @@ func (t Tokens) Validate() error {
 		return errors.Wrap(ErrInvalidUsage, "inconsistent realtime input modalities")
 	}
 	if t.ReasoningTokens > t.OutputText || t.OutputText > t.Output ||
-		t.OutputUnallocated > t.Output-t.OutputText || t.OutputAudio != t.Output-t.OutputText-t.OutputUnallocated {
+		t.OutputUnallocated > t.Output-t.OutputText || t.OutputAudio != t.Output-t.OutputText-t.OutputUnallocated ||
+		t.OutputVideo > t.OutputUnallocated {
 		return errors.Wrap(ErrInvalidUsage, "inconsistent realtime output modalities")
 	}
 	// Unallocated input has no modality, so a cached subset can never be assigned

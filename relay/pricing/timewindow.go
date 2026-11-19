@@ -221,6 +221,9 @@ func mergeScalarPricing(base *adaptor.ModelConfig, overlay adaptor.ModelConfig) 
 	}
 }
 
+// mergeVideoPricing deep-merges a sparse time-window video overlay onto base.
+// Parameters: base is the inherited block and overlay the window's block.
+// Returns: a clone in which every non-zero overlay field replaces its base value.
 func mergeVideoPricing(base *adaptor.VideoPricingConfig, overlay *adaptor.VideoPricingConfig) *adaptor.VideoPricingConfig {
 	if overlay == nil {
 		return base
@@ -243,6 +246,9 @@ func mergeVideoPricing(base *adaptor.VideoPricingConfig, overlay *adaptor.VideoP
 	}
 	if overlay.BaseResolution != "" {
 		merged.BaseResolution = overlay.BaseResolution
+	}
+	if overlay.OutputTokenRatio != 0 {
+		merged.OutputTokenRatio = overlay.OutputTokenRatio
 	}
 	merged.ResolutionMultipliers = mergeFloatMap(merged.ResolutionMultipliers, overlay.ResolutionMultipliers)
 	return merged

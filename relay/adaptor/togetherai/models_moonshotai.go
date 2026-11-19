@@ -36,7 +36,7 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 		},
 		"moonshotai/Kimi-K2.7-Code": {
 			Ratio:                       nativeRate(0.95),
-			CompletionRatio:             4.2105263157894735,
+			CompletionRatio:             4.0 / 0.95,
 			CachedInputRatio:            nativeRate(0.19),
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,

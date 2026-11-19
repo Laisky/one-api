@@ -8,7 +8,6 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
-	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/model"
 )
 
@@ -46,7 +45,7 @@ func ResetChannelModels(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	channel, err := model.ResetChannelModelsToDefaults(gmw.Ctx(c), id, defaultChannelResetCatalog)

@@ -15,14 +15,15 @@ type nativeOpenAIPricingProvider interface {
 }
 
 // hasUnpricedOpenAIReceipt reports whether input includes usage outside its
-// verified OpenAI tariff. The resolved cfg may supply an explicit operator
-// long-context cache-write tier; scalar overrides alone do not qualify it.
+// verified catalog tariff, as declared by the model's billing policy. The
+// resolved cfg may supply an explicit operator long-context cache-write tier;
+// scalar overrides alone do not qualify it.
 func hasUnpricedOpenAIReceipt(input ComputeInput, cfg adaptor.ModelConfig) bool {
-	name := strings.ToLower(strings.TrimSpace(input.ModelName))
-	if name != "gpt-6.1-terra" && name != "gpt-6-cyber" {
+	policy, declared := adaptor.LookupModelBillingPolicy(input.ModelName)
+	if !declared {
 		return false
 	}
-	if name == "gpt-6-cyber" && input.PricingAdaptor != nil {
+	if policy.NativeTariffOnly && input.PricingAdaptor != nil {
 		// Model names alone do not identify a hosted provider's tariff. Keep
 		// the conservative fallback when provider identity is unavailable.
 		provider, native := input.PricingAdaptor.(nativeOpenAIPricingProvider)
@@ -30,20 +31,41 @@ func hasUnpricedOpenAIReceipt(input ComputeInput, cfg adaptor.ModelConfig) bool 
 			return false
 		}
 	}
-	if tier := strings.TrimSpace(input.Usage.ServiceTier); tier != "" && !strings.EqualFold(tier, "default") {
+	if tier := strings.TrimSpace(input.Usage.ServiceTier); tier != "" && !policy.SupportsServiceTier(tier) {
 		return true
 	}
-	if name != "gpt-6-cyber" || input.Usage.PromptTokens <= 272_000 || input.Usage.CacheWrite5mTokens <= 0 {
+	if input.Usage.CacheWrite5mTokens <= 0 {
 		return false
 	}
-	// OpenAI publishes Cyber long input/output/cache-read prices, but no long
-	// cache-write price. Do not settle the base short-context write rate that
-	// the generic tier resolver otherwise inherits for an omitted tier field.
-	// https://developers.openai.com/api/docs/pricing.md
-	for _, tier := range cfg.Tiers {
-		if pricing.TierApplies(input.Usage.PromptTokens, input.Usage.CompletionTokens, tier) && tier.CacheWrite5mRatio != 0 {
-			return false
+	// The publisher prices no cache write in the reached catalog tier. Do not
+	// settle the base short-context write rate that the generic tier resolver
+	// otherwise inherits for an omitted tier field. Admission applies the same
+	// rule before dispatch (relay/controller native prompt-cache admission).
+	return pricing.CacheWriteUnpriced(policy, cfg, input.Usage.PromptTokens, input.Usage.CompletionTokens)
+}
+
+// unpricedCacheWriteInputMultiplier returns the policy's generic write
+// multiplier when the receipt's 30m cache writes fall in a catalog tier with no
+// published write price, so settlement can price that estimate no lower than
+// the publisher's documented generic rule. Parameters: input is the settlement
+// input and cfg the resolved effective model config. It returns the multiplier
+// and true only for such an unpriced write under a declared multiplier.
+func unpricedCacheWriteInputMultiplier(input ComputeInput, cfg adaptor.ModelConfig) (float64, bool) {
+	if input.Usage == nil || input.Usage.CacheWrite5mTokens <= 0 {
+		return 0, false
+	}
+	policy, declared := adaptor.LookupModelBillingPolicy(input.ModelName)
+	if !declared || policy.UnpricedCacheWriteInputMultiplier <= 0 {
+		return 0, false
+	}
+	if policy.NativeTariffOnly && input.PricingAdaptor != nil {
+		provider, native := input.PricingAdaptor.(nativeOpenAIPricingProvider)
+		if !native || !provider.UsesNativeOpenAIPricing() {
+			return 0, false
 		}
 	}
-	return true
+	if !pricing.CacheWriteUnpriced(policy, cfg, input.Usage.PromptTokens, input.Usage.CompletionTokens) {
+		return 0, false
+	}
+	return policy.UnpricedCacheWriteInputMultiplier, true
 }

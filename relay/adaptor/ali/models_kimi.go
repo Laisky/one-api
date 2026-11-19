@@ -30,16 +30,16 @@ func kimiModels() map[string]adaptor.ModelConfig {
 		},
 		"kimi-k2.6": {
 			Ratio:           nativeRate(6.5),
-			CompletionRatio: 4.153846153846154,
+			CompletionRatio: 27.0 / 6.5,
 			Description:     "kimi-k2.6 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"kimi-k2.7-code": {
 			Ratio:           nativeRate(6.5),
-			CompletionRatio: 4.153846153846154,
+			CompletionRatio: 27.0 / 6.5,
 			Description:     "kimi-k2.7-code on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"kimi-k3": {
-			Ratio:           nativeRate(2e+01),
+			Ratio:           nativeRate(20),
 			CompletionRatio: 5,
 			Description:     "kimi-k3 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
@@ -57,21 +57,21 @@ func kimiModels() map[string]adaptor.ModelConfig {
 		},
 		"kimi/kimi-k2.6": {
 			Ratio:           nativeRate(6.5),
-			CompletionRatio: 4.153846153846154,
+			CompletionRatio: 27.0 / 6.5,
 			Description:     "kimi/kimi-k2.6 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"kimi/kimi-k2.7-code": {
 			Ratio:           nativeRate(6.5),
-			CompletionRatio: 4.153846153846154,
+			CompletionRatio: 27.0 / 6.5,
 			Description:     "kimi/kimi-k2.7-code on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"kimi/kimi-k2.7-code-highspeed": {
 			Ratio:           nativeRate(13),
-			CompletionRatio: 4.153846153846154,
+			CompletionRatio: 54.0 / 13.0,
 			Description:     "kimi/kimi-k2.7-code-highspeed on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"kimi/kimi-k3": {
-			Ratio:           nativeRate(2e+01),
+			Ratio:           nativeRate(20),
 			CompletionRatio: 5,
 			Description:     "kimi/kimi-k3 on ali; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},

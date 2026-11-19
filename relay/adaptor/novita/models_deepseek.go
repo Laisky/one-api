@@ -57,7 +57,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		},
 		"deepseek/deepseek-r1-0528": {
 			Ratio:                       nativeRate(0.7),
-			CompletionRatio:             3.5714285714285716,
+			CompletionRatio:             2.5 / 0.7,
 			CachedInputRatio:            nativeRate(0.35),
 			ContextLength:               163840,
 			MaxOutputTokens:             32768,
@@ -97,7 +97,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		},
 		"deepseek/deepseek-r1-turbo": {
 			Ratio:                       nativeRate(0.7),
-			CompletionRatio:             3.5714285714285716,
+			CompletionRatio:             2.5 / 0.7,
 			ContextLength:               64000,
 			MaxOutputTokens:             16000,
 			InputModalities:             []string{"text"},
@@ -147,7 +147,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		},
 		"deepseek/deepseek-v3.1": {
 			Ratio:                       nativeRate(0.27),
-			CompletionRatio:             3.7037037037037033,
+			CompletionRatio:             1.0 / 0.27,
 			CachedInputRatio:            nativeRate(0.135),
 			ContextLength:               131072,
 			MaxOutputTokens:             32768,
@@ -161,7 +161,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		},
 		"deepseek/deepseek-v3.1-terminus": {
 			Ratio:                       nativeRate(0.27),
-			CompletionRatio:             3.7037037037037033,
+			CompletionRatio:             1.0 / 0.27,
 			CachedInputRatio:            nativeRate(0.135),
 			ContextLength:               131072,
 			MaxOutputTokens:             32768,
@@ -175,7 +175,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		},
 		"deepseek/deepseek-v3.2": {
 			Ratio:                       nativeRate(0.269),
-			CompletionRatio:             1.486988847583643,
+			CompletionRatio:             0.4 / 0.269,
 			CachedInputRatio:            nativeRate(0.1345),
 			ContextLength:               163840,
 			MaxOutputTokens:             65536,
@@ -189,7 +189,7 @@ func deepseekModels() map[string]adaptor.ModelConfig {
 		},
 		"deepseek/deepseek-v3.2-exp": {
 			Ratio:                       nativeRate(0.27),
-			CompletionRatio:             1.5185185185185184,
+			CompletionRatio:             0.41 / 0.27,
 			ContextLength:               163840,
 			MaxOutputTokens:             65536,
 			InputModalities:             []string{"text"},

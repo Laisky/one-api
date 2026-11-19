@@ -20,20 +20,20 @@ The server frequently returns **HTTP 200 with `"success": false`** for validatio
 
 | HTTP | Typical cause                                          |
 |------|--------------------------------------------------------|
-| 200  | Everything — check `.success` in the body              |
-| 400  | Malformed JSON body (`invalidParameterMessage`)        |
+| 200  | Everything else — check `.success` in the body (including an unknown resource UUID: `resource reference not found`) |
+| 400  | Missing or malformed resource UUID reference (`resource uuid is required`, `invalid resource reference`; see [Resource references](#resource-references-every-resource)), a few explicit validation errors (e.g. `Invalid channel status`), and malformed JSON on `PUT /api/option/`. Most other handlers answer a malformed JSON body with HTTP 200 `invalid parameter`. |
 | 401  | Auth header missing / invalid access token             |
 | 403  | User disabled or banned, root-only endpoint hit by admin, or a session-cookie mutation without a trusted `Origin` (see [auth.md](auth.md)) |
 | 405  | Legacy `GET` on a `POST`-only action route (`Allow: POST`) |
 | 5xx  | Database / panic — capture `.message` and report       |
 
-The golden rule: **always parse the body and branch on `.success`** before declaring success. HTTP 200 alone proves nothing.
+The golden rule: **always parse the body and branch on `.success`** before declaring success. HTTP 200 alone proves nothing. Non-2xx management responses usually carry the same `{"success": false, "message": ...}` body, so read `.message` from them too.
 
 ## Pattern: robust curl + jq
 
 ```bash
-resp=$(curl -fsS -H "Authorization: $ONEAPI_ADMIN_TOKEN" "$URL") \
-  || { echo "HTTP error (network / 4xx / 5xx)"; exit 1; }
+resp=$(curl -sS --fail-with-body -H "Authorization: $ONEAPI_ADMIN_TOKEN" "$URL") \
+  || { echo "HTTP error (network / 4xx / 5xx): ${resp:-no body}" >&2; exit 1; }
 
 if ! jq -e '.success' <<<"$resp" >/dev/null; then
   echo "App error: $(jq -r '.message // "unknown"' <<<"$resp")" >&2
@@ -43,9 +43,23 @@ fi
 echo "$resp" | jq '.data'
 ```
 
-`curl -fsS` kicks out on non-2xx. `jq -e` exits non-zero on `false`/`null`. This is the shape every helper in [scripts/lib.sh](../scripts/lib.sh) uses.
+`curl --fail-with-body` (curl >= 7.76) kicks out on non-2xx but keeps the body, so the `.message` of a `400` reference error stays visible; plain `curl -f` discards it. `oneapi_request` in [scripts/lib.sh](../scripts/lib.sh) gets the same effect by capturing the status separately and printing the body for any HTTP >= 400. `jq -e` exits non-zero on `false`/`null`.
 
 ## Common `.message` strings and what to do
+
+### Resource references (every resource)
+
+Users, tokens, channels, redemptions, MCP servers, logs, and passkeys are addressed by UUID (path `:uuid`, body `uuid`/`user_uuid`, or filters such as `channel`, `user_id`, `server_id`). Integer ids are rejected. Source: [controller/id_refs.go](../../../../controller/id_refs.go) `respondResourceRefError`.
+
+| Message                                                            | HTTP | Cause                                              |
+|--------------------------------------------------------------------|------|----------------------------------------------------|
+| `resource uuid is required`                                         | 400  | `PUT` update or `POST /api/topup` body lacks `uuid`/`user_uuid` (e.g. sending only the integer `id`/`user_id`) — `preferUUIDRef` |
+| `invalid resource reference`                                        | 400  | The reference is not a UUID (e.g. a legacy integer id) |
+| `resource reference not found`                                      | 200  | Well-formed UUID with no matching row              |
+| `Invalid user ID` / `invalid credential id` / `Invalid user_id parameter` | 400 or 200 | Same classification on the admin TOTP, passkey, and `GET /api/user/dashboard` (`user_id`) endpoints, with an endpoint-specific message that a database failure also answers |
+| `invalid token id: invalid resource reference`                     | 400  | Malformed `:id` on `GET /api/admin/tokens/:id`; an unknown UUID there answers `resource reference not found` |
+
+A 400 here is a caller bug: fix the reference, do not retry. A database failure during resolution is a server error: HTTP 200 `success:false`, logged at ERROR on the server.
 
 ### Auth
 
@@ -71,8 +85,8 @@ echo "$resp" | jq '.data'
 | Message                                                            | Cause                                              |
 |--------------------------------------------------------------------|----------------------------------------------------|
 | `invalid parameters` / `invalid input`                              | JSON body failed struct validation                 |
-| `resource uuid is required`                                         | `PUT` body lacks `uuid` (sending integer `id` instead) — [controller/id_refs.go](../../../../controller/id_refs.go) `preferUUIDRef` |
-| `channel not found`                                                 | `:uuid` doesn't exist or is not a uuid             |
+| `resource uuid is required` (HTTP 400)                              | `PUT` body lacks `uuid` (sending integer `id` instead) — see [Resource references](#resource-references-every-resource) |
+| `invalid resource reference` (HTTP 400) / `resource reference not found` (HTTP 200) | `:uuid` is not a UUID / doesn't exist; this includes the `/api/debug/channel/:uuid/*` routes |
 | upstream error strings (`auth`, `rate limit`, `model not found`)    | `POST /test/:id` — issue is on upstream side       |
 
 ### Tokens

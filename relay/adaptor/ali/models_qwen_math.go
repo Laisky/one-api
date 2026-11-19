@@ -54,7 +54,7 @@ func qwenMathModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen-Math Turbo (latest snapshot alias).",
 		},
 		"qwen2-math-1.5b-instruct": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               4096,
 			MaxOutputTokens:             3072,

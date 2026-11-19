@@ -9,7 +9,7 @@ func nexAgiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"nex-agi/deepseek-v3.1-nex-n1": {
 			Ratio:                       nativeRate(0.135),
-			CompletionRatio:             3.7037037037037033,
+			CompletionRatio:             0.5 / 0.135,
 			ContextLength:               131072,
 			MaxOutputTokens:             163840,
 			InputModalities:             []string{"text"},
@@ -43,7 +43,7 @@ func nexAgiModels() map[string]adaptor.ModelConfig {
 			Description:       "[Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
 		},
 		"nex-agi/nex-n2.5-mini": {
-			Ratio:                       nativeRate(0.024999999999999998),
+			Ratio:                       nativeRate(0.025),
 			CompletionRatio:             4,
 			CachedInputRatio:            nativeRate(0.0025),
 			ContextLength:               262144,
@@ -73,7 +73,7 @@ func nexAgiModels() map[string]adaptor.ModelConfig {
 		},
 		"nex-agi/nex-n2.5-pro": {
 			Ratio:                       nativeRate(0.075),
-			CompletionRatio:             3.3333333333333335,
+			CompletionRatio:             0.25 / 0.075,
 			CachedInputRatio:            nativeRate(0.015),
 			ContextLength:               262144,
 			MaxOutputTokens:             235929,

@@ -8,7 +8,11 @@ import (
 
 // responseWSGuardedKeys are the response.create root keys whose values the
 // WebSocket guards authorize, pin, or strip before forwarding a frame.
-var responseWSGuardedKeys = []string{"type", "model", "previous_response_id", "conversation"}
+var responseWSGuardedKeys = []string{"type", "model", "previous_response_id", "conversation", responseWSPromptCacheKey}
+
+// responseWSPromptCacheKey is the response.create root key the WebSocket
+// ownership guard rewrites to a tenant-scoped value before forwarding.
+const responseWSPromptCacheKey = "prompt_cache_key"
 
 // realtimeWSGuardedRootKeys are the realtime client-event root keys the
 // session-update model guard dispatches on or inspects.

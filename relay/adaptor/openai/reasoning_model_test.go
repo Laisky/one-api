@@ -35,6 +35,12 @@ func TestIsModelSupportedReasoning(t *testing.T) {
 		{"claude-3", false, "claude-3 should not be a reasoning model"},
 		{"", false, "empty model should not be a reasoning model"},
 		{"unknown-model", false, "unknown model should not be a reasoning model"},
+		{"openai/gpt-4o-mini", false, "provider-prefixed IDs are not o-series models"},
+		{"openai/gpt-oss-120b", false, "provider-prefixed IDs are not o-series models"},
+		{"omni-moderation-latest", false, "moderation is not an o-series reasoning model"},
+		{"ollama-llama3", false, "an o-initial name is not an o-series model"},
+		{"o3-pro", true, "o3-pro is an o-series reasoning model"},
+		{"O4-Mini-Deep-Research", true, "o-series detection ignores case"},
 	}
 
 	for _, tc := range testCases {

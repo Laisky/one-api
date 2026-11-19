@@ -9,7 +9,7 @@ func baiduModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"baidu/cobuddy": {
 			Ratio:                       nativeRate(0.28),
-			CompletionRatio:             4.035714285714285,
+			CompletionRatio:             1.13 / 0.28,
 			CachedInputRatio:            nativeRate(0.07),
 			ContextLength:               131072,
 			MaxOutputTokens:             65536,
@@ -87,7 +87,7 @@ func baiduModels() map[string]adaptor.ModelConfig {
 		},
 		"baidu/ernie-4.5-vl-424b-a47b": {
 			Ratio:                       nativeRate(0.42),
-			CompletionRatio:             2.9761904761904763,
+			CompletionRatio:             1.25 / 0.42,
 			ContextLength:               123000,
 			MaxOutputTokens:             16000,
 			InputModalities:             []string{"text", "image"},

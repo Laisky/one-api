@@ -9,7 +9,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"qwen/qwen-2.5-72b-instruct": {
 			Ratio:                       nativeRate(0.38),
-			CompletionRatio:             1.0526315789473684,
+			CompletionRatio:             0.4 / 0.38,
 			ContextLength:               32000,
 			MaxOutputTokens:             8192,
 			InputModalities:             []string{"text"},
@@ -72,7 +72,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen/qwen3-235b-a22b-instruct-2507": {
 			Ratio:                       nativeRate(0.09),
-			CompletionRatio:             6.444444444444445,
+			CompletionRatio:             0.58 / 0.09,
 			ContextLength:               131072,
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text"},
@@ -137,7 +137,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen/qwen3-coder-30b-a3b-instruct": {
 			Ratio:                       nativeRate(0.07),
-			CompletionRatio:             3.857142857142857,
+			CompletionRatio:             0.27 / 0.07,
 			ContextLength:               160000,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text"},
@@ -150,7 +150,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen/qwen3-coder-480b-a35b-instruct": {
 			Ratio:                       nativeRate(0.38),
-			CompletionRatio:             4.078947368421053,
+			CompletionRatio:             1.55 / 0.38,
 			ContextLength:               262144,
 			MaxOutputTokens:             65536,
 			InputModalities:             []string{"text"},
@@ -172,17 +172,23 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "max_tokens", "stop", "presence_penalty", "frequency_penalty", "repetition_penalty", "seed", "n", "logit_bias", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice"},
 			Description:                 "qwen/qwen3-coder-next on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
+		// Tier bounds were recorded from Novita's tiered_billing_configs on
+		// 2026-07-13 (commit 4e6115d8). The model is no longer listed (the API
+		// returns MODEL_NOT_FOUND on 2026-11-18), so they cannot be re-read. Novita's
+		// current format repeats each boundary as the next tier's inclusive
+		// min_tokens (see minimax/minimax-m3), so the thresholds stay at
+		// 32768/131072, the dearer and never under-billing side of that boundary.
 		"qwen/qwen3-max": {
 			Ratio:           nativeRate(0.845),
 			CompletionRatio: 4,
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1.4),
-				CompletionRatio:     4.0285714285714285,
+				CompletionRatio:     5.64 / 1.4,
 				InputTokenThreshold: 32768,
 			},
 				{
 					Ratio:               nativeRate(2.11),
-					CompletionRatio:     4.004739336492891,
+					CompletionRatio:     8.45 / 2.11,
 					InputTokenThreshold: 131072,
 				},
 			},
@@ -261,7 +267,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen/qwen3-vl-235b-a22b-thinking": {
 			Ratio:                       nativeRate(0.98),
-			CompletionRatio:             4.030612244897959,
+			CompletionRatio:             3.95 / 0.98,
 			ContextLength:               131072,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text", "image", "video"},
@@ -274,7 +280,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen/qwen3-vl-30b-a3b-instruct": {
 			Ratio:                       nativeRate(0.2),
-			CompletionRatio:             3.4999999999999996,
+			CompletionRatio:             3.5,
 			ContextLength:               131072,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text", "video", "image"},
@@ -378,7 +384,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen/qwen3.6-35b-a3b": {
 			Ratio:                       nativeRate(0.248),
-			CompletionRatio:             5.987903225806452,
+			CompletionRatio:             1.485 / 0.248,
 			ContextLength:               262144,
 			MaxOutputTokens:             65536,
 			InputModalities:             []string{"text", "image", "video"},
@@ -414,7 +420,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen/qwen3.8-27b": {
 			Ratio:             nativeRate(0.42),
-			CompletionRatio:   7.142857142857143,
+			CompletionRatio:   3.0 / 0.42,
 			CachedInputRatio:  nativeRate(0.085),
 			ContextLength:     1000000,
 			MaxOutputTokens:   131072,
@@ -425,7 +431,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen/qwen3.8-flash": {
 			Ratio:             nativeRate(0.15),
-			CompletionRatio:   3.1333333333333333,
+			CompletionRatio:   0.47 / 0.15,
 			CachedInputRatio:  nativeRate(0.016),
 			ContextLength:     1000000,
 			MaxOutputTokens:   131072,
@@ -449,7 +455,7 @@ func qwenModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen/qwen4-max": {
 			Ratio:             nativeRate(1.413),
-			CompletionRatio:   3.00070771408351,
+			CompletionRatio:   4.24 / 1.413,
 			CachedInputRatio:  nativeRate(0.071),
 			CacheWrite5mRatio: nativeRate(1.767),
 			CacheWrite1hRatio: nativeRate(2.827),

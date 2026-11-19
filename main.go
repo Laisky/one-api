@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"embed"
-	"encoding/base64"
 	"net"
 	"net/http"
 	nhpprof "net/http/pprof"
@@ -19,7 +18,6 @@ import (
 	glog "github.com/Laisky/go-utils/v6/log"
 	"github.com/Laisky/zap"
 	"github.com/gin-contrib/sessions"
-	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -233,14 +231,7 @@ func main() {
 	// middleware.SetUpLogger(server)
 
 	// Initialize session store
-	sessionSecret, err := base64.StdEncoding.DecodeString(config.SessionSecret)
-	var sessionStore cookie.Store
-	if err != nil {
-		logger.Logger.Info("session secret is not base64 encoded, using raw value instead")
-		sessionStore = cookie.NewStore([]byte(config.SessionSecret))
-	} else {
-		sessionStore = cookie.NewStore(sessionSecret, sessionSecret)
-	}
+	sessionStore := newSessionStore(config.SessionSecret)
 
 	// Defaults to Secure=true (production-safe). Local HTTP development must
 	// explicitly set ENABLE_COOKIE_SECURE=false.

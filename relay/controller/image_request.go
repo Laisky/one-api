@@ -12,6 +12,7 @@ import (
 	relayadaptor "github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	billingratio "github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/relaymode"
@@ -57,19 +58,24 @@ func imageResponseRequiresFailureReconciliation(resp *http.Response) bool {
 
 // buildOpenAIImageRequest converts the shared image request into the OpenAI
 // generation schema and removes fields owned by other providers or models.
-// Parameters: req is the normalized request after model mapping and defaults.
-// Returns: an OpenAI-specific request that is safe to serialize upstream.
+// Parameters: req is the normalized request after model mapping, defaults, and
+// validateOpenAIImageControls. Returns: an OpenAI-specific request that is safe
+// to serialize upstream; safety_identifier is kept for every model, while
+// complexity and output_format are GPT Image-only fields.
 func buildOpenAIImageRequest(req *relaymodel.ImageRequest) openai.ImageRequest {
 	request := openai.ImageRequest{
-		Model:   req.Model,
-		Prompt:  req.Prompt,
-		N:       req.N,
-		Size:    req.Size,
-		Quality: req.Quality,
-		User:    req.User,
+		Model:            req.Model,
+		Prompt:           req.Prompt,
+		N:                req.N,
+		Size:             req.Size,
+		Quality:          req.Quality,
+		User:             req.User,
+		SafetyIdentifier: req.SafetyIdentifier,
 	}
 
 	if isOpenAIGPTImageModel(req.Model) {
+		request.OutputFormat = req.OutputFormat
+		request.Complexity = req.Complexity
 		return request
 	}
 	if req.ResponseFormat != nil {
@@ -77,6 +83,22 @@ func buildOpenAIImageRequest(req *relaymodel.ImageRequest) openai.ImageRequest {
 	}
 	if req.Model == "dall-e-3" {
 		request.Style = req.Style
+	}
+	return request
+}
+
+// buildOpenAIImageRequestForChannel builds the OpenAI generation schema for
+// the selected OpenAI-wire channel. Azure OpenAI documents only the legacy user
+// field for image requests, not safety_identifier or GPT Image 2.6 complexity;
+// before these fields were decoded they were always dropped, so they stay
+// dropped for Azure rather than turning working requests into "unrecognized
+// request argument" rejections. Parameters: req is the validated request and
+// channelType selects the wire contract. Returns: the request to serialize.
+func buildOpenAIImageRequestForChannel(req *relaymodel.ImageRequest, channelType int) openai.ImageRequest {
+	request := buildOpenAIImageRequest(req)
+	if channelType == channeltype.Azure {
+		request.SafetyIdentifier = ""
+		request.Complexity = ""
 	}
 	return request
 }
@@ -201,7 +223,7 @@ func isValidImageSize(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePrici
 // counts Unicode code points, while other models retain their legacy byte limit.
 func isValidImagePromptLength(req *relaymodel.ImageRequest, cfg *relayadaptor.ImagePricingConfig) bool {
 	length := len(req.Prompt)
-	if isGPTImage25Model(req.Model) {
+	if usesStrictGPTImageTokenBilling(req.Model) {
 		length = utf8.RuneCountInString(req.Prompt)
 	}
 	if cfg != nil && cfg.PromptTokenLimit > 0 {
@@ -300,13 +322,19 @@ func getImageSizeRatioFallback(model string, size string) float64 {
 	return 1
 }
 
-// validateImageRequest validates prompt, size, count, and quality constraints.
-// Parameters: imageRequest is normalized, meta is reserved, and cfg supplies
-// optional channel rules. Returns: a client-facing error or nil when valid.
-func validateImageRequest(imageRequest *relaymodel.ImageRequest, _ *metalib.Meta, cfg *relayadaptor.ImagePricingConfig) *relaymodel.ErrorWithStatusCode {
+// validateImageRequest validates prompt, upstream request controls, size,
+// count, and quality constraints. Parameters: imageRequest is normalized and
+// may have its OpenAI controls canonicalized, meta selects the upstream
+// contract and may be nil, and cfg supplies optional channel rules. Returns: a
+// client-facing error or nil when valid.
+func validateImageRequest(imageRequest *relaymodel.ImageRequest, meta *metalib.Meta, cfg *relayadaptor.ImagePricingConfig) *relaymodel.ErrorWithStatusCode {
 	// check prompt length
 	if imageRequest.Prompt == "" {
 		return openai.ErrorWrapper(errors.New("prompt is required"), "prompt_missing", http.StatusBadRequest)
+	}
+
+	if bizErr := validateOpenAIImageControls(imageRequest, meta); bizErr != nil {
+		return bizErr
 	}
 
 	// model validation

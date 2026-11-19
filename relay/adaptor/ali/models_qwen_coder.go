@@ -54,7 +54,7 @@ func qwenCoderModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen-Coder Turbo (latest snapshot alias).",
 		},
 		"qwen2.5-coder-0.5b-instruct": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -67,7 +67,7 @@ func qwenCoderModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen2.5-Coder 0.5B Instruct: open-weight micro coder model.",
 		},
 		"qwen2.5-coder-1.5b-instruct": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -106,7 +106,7 @@ func qwenCoderModels() map[string]adaptor.ModelConfig {
 			Description:                 "Qwen2.5-Coder 32B Instruct: open-weight coder flagship with 128K context.",
 		},
 		"qwen2.5-coder-3b-instruct": {
-			Ratio:                       0.02142857142857143,
+			Ratio:                       nativeRate(0.3),
 			CompletionRatio:             1,
 			ContextLength:               32768,
 			MaxOutputTokens:             8192,
@@ -262,12 +262,12 @@ func qwenCoderModels() map[string]adaptor.ModelConfig {
 				InputTokenThreshold: 32001,
 			},
 				{
-					Ratio:               nativeRate(1e+01),
+					Ratio:               nativeRate(10),
 					CompletionRatio:     4,
 					InputTokenThreshold: 128001,
 				},
 				{
-					Ratio:               nativeRate(2e+01),
+					Ratio:               nativeRate(20),
 					CompletionRatio:     10,
 					InputTokenThreshold: 256001,
 				},
@@ -289,12 +289,12 @@ func qwenCoderModels() map[string]adaptor.ModelConfig {
 				InputTokenThreshold: 32001,
 			},
 				{
-					Ratio:               nativeRate(1e+01),
+					Ratio:               nativeRate(10),
 					CompletionRatio:     4,
 					InputTokenThreshold: 128001,
 				},
 				{
-					Ratio:               nativeRate(2e+01),
+					Ratio:               nativeRate(20),
 					CompletionRatio:     10,
 					InputTokenThreshold: 256001,
 				},
@@ -310,12 +310,12 @@ func qwenCoderModels() map[string]adaptor.ModelConfig {
 				InputTokenThreshold: 32001,
 			},
 				{
-					Ratio:               nativeRate(1e+01),
+					Ratio:               nativeRate(10),
 					CompletionRatio:     4,
 					InputTokenThreshold: 128001,
 				},
 				{
-					Ratio:               nativeRate(2e+01),
+					Ratio:               nativeRate(20),
 					CompletionRatio:     10,
 					InputTokenThreshold: 256001,
 				},

@@ -23,8 +23,8 @@ func metaModels() map[string]adaptor.ModelConfig {
 			Description:                 "meta/muse-ember on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"meta/muse-glimmer-30b": {
-			Ratio:                       nativeRate(0.3),
-			CompletionRatio:             4,
+			Ratio:                       nativeRate(0.35),
+			CompletionRatio:             1.5 / 0.35,
 			CachedInputRatio:            nativeRate(0.04),
 			ContextLength:               131072,
 			MaxOutputTokens:             16384,
@@ -35,7 +35,7 @@ func metaModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"xhigh", "high", "medium", "low"},
 			DefaultReasoningEffort:      "medium",
 			HuggingFaceID:               "meta-models/Muse-Glimmer-30B",
-			Description:                 "meta/muse-glimmer-30b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "meta/muse-glimmer-30b on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"meta/muse-spark-1.1": {
 			Ratio:                       nativeRate(1.25),
@@ -66,7 +66,7 @@ func metaModels() map[string]adaptor.ModelConfig {
 			Description:                 "meta/muse-spark-1.2 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"meta/muse-spark-1.2-contributor": {
-			Ratio:                       nativeRate(0.09999999999999999),
+			Ratio:                       nativeRate(0.1),
 			CompletionRatio:             2,
 			CachedInputRatio:            nativeRate(0.002),
 			ContextLength:               1048576,
@@ -94,7 +94,7 @@ func metaModels() map[string]adaptor.ModelConfig {
 			Description:                 "meta/muse-spark-1.3 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"meta/muse-spark-1.3-contributor": {
-			Ratio:                       nativeRate(0.09999999999999999),
+			Ratio:                       nativeRate(0.1),
 			CompletionRatio:             2,
 			CachedInputRatio:            nativeRate(0.002),
 			ContextLength:               1048576,

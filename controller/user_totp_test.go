@@ -411,11 +411,11 @@ func TestAdminDisableUserTotp(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Empty(t, updatedUser.TotpSecret)
 
-	// Test with invalid user ID
+	// Test with invalid user ID: a malformed reference is a client error.
 	req, _ = http.NewRequest("POST", "/admin/totp/disable/invalid", nil)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, http.StatusBadRequest, w.Code)
 
 	err = json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)

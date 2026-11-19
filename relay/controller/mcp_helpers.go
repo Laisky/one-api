@@ -448,7 +448,7 @@ func quoteMCPTierRoundQuota(c *gin.Context, meta *metalib.Meta, modelName string
 	channelModelRatio, channelCompletionRatio := getChannelRatios(c)
 	configs := getChannelModelConfigs(c)
 	provider := resolvePricingAdaptor(meta)
-	write5m, write1h, err := tierAdmissionCacheWrites(json.RawMessage(payload))
+	write5m, write1h, err := tierAdmissionCacheWritesForDispatch(c, meta, modelName, json.RawMessage(payload), promptTokens, configs, provider)
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "inspect prepared MCP cache controls")
 	}
@@ -492,7 +492,7 @@ func quoteMCPTierRoundQuota(c *gin.Context, meta *metalib.Meta, modelName string
 			maxOutput = int(full.MaxTokens)
 		}
 		if maxOutput <= 0 {
-			full, _ = pricing.ResolveModelConfig(modelName, nil, provider, meta.StartTime)
+			full, _ = pricing.ResolveModelMetadata(modelName, provider, meta.StartTime)
 			maxOutput = int(full.MaxOutputTokens)
 		}
 	}

@@ -15,9 +15,12 @@ func TestGPTImage26Billing(t *testing.T) {
 	t.Parallel()
 	for _, name := range []string{"gpt-image-2.6-sunburst", "gpt-image-2.6-flare"} {
 		t.Run(name, func(t *testing.T) {
-			require.True(t, isGPTImage25Model(name))
-			require.Error(t, validateGPTImage25Billing(name, 0, 1, 1, 1))
-			require.NoError(t, validateGPTImage25Billing(name, 0.1, 1, 1, 1))
+			require.True(t, usesStrictGPTImageTokenBilling(name))
+			require.Error(t, validateStrictGPTImageBilling(name, 0, 1, 1, 1))
+			require.NoError(t, validateStrictGPTImageBilling(name, 0.1, 1, 1, 1))
+			require.NoError(t, validateStrictGPTImageBilling(name, 0.1, 1, 0, 1), "a free group is served free")
+			require.Error(t, validateStrictGPTImageBilling(name, 0, 1, 0, 1), "the operator fallback is still required")
+			require.Error(t, validateStrictGPTImageBilling(name, 0.1, 1, -1, 1))
 			require.Equal(t, int64(-75), imagePostConsumeDelta(name, 25, 100))
 
 			usage := &relaymodel.Usage{
@@ -35,11 +38,18 @@ func TestGPTImage26Billing(t *testing.T) {
 			}
 			want := (80*5.0 + 20*1.25 + 40*8.0 + 10*2.0 + 20*30.0) * billingratio.MilliTokensUsd
 			require.InDelta(t, want, computeGptImageTokenQuota(name, usage, 1), 1e-9)
+			require.False(t, strictGPTImageCatalogQuote(name, usage, 1).upperBound, "a fully split receipt is exact")
 			usage.PromptTokensDetails.CachedTokensDetails = nil
-			require.Zero(t, computeGptImageTokenQuota(name, usage, 1), "mixed cached input requires the operator fallback when the provider omits its split")
+			// Without the cache split the read is credited to the text bucket,
+			// whose discount is smallest: the largest consistent charge.
+			upper := (70*5.0 + 30*1.25 + 50*8.0 + 20*30.0) * billingratio.MilliTokensUsd
+			quote := strictGPTImageCatalogQuote(name, usage, 1)
+			require.InDelta(t, upper, quote.quota, 1e-9)
+			require.True(t, quote.upperBound, "an omitted cache split must be flagged as an upper bound")
+			require.GreaterOrEqual(t, upper, want, "the bound covers the actual split")
 		})
 	}
 	for _, name := range []string{"gpt-image-2.6", "gpt-image-2.6-flare-2026-11-04", "gpt-image-2.6-sunburst-extra"} {
-		require.False(t, isGPTImage25Model(name), "unpublished IDs must not inherit the exact-model billing policy")
+		require.False(t, usesStrictGPTImageTokenBilling(name), "unpublished IDs must not inherit the exact-model billing policy")
 	}
 }

@@ -22,7 +22,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Baichuan-M2 on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled. Native medical API documents max_tokens in [1,32000]. Sampling controls are temperature, top_p and top_k. Native file/evidence controls and search fees are separate from this text-token catalogue.",
 	},
 	"Baichuan-M2-Plus": {
-		Ratio:                       nativeRate(1e+01),
+		Ratio:                       nativeRate(10),
 		CompletionRatio:             3,
 		ContextLength:               32000,
 		MaxOutputTokens:             32000,
@@ -33,7 +33,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Baichuan-M2-Plus on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled. Native medical API documents max_tokens in [1,32000]. Sampling controls are temperature, top_p and top_k. Native file/evidence controls and search fees are separate from this text-token catalogue.",
 	},
 	"Baichuan-M3": {
-		Ratio:                       nativeRate(1e+01),
+		Ratio:                       nativeRate(10),
 		CompletionRatio:             3,
 		ContextLength:               32000,
 		MaxOutputTokens:             32000,
@@ -66,7 +66,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:      "Baichuan-Text-Embedding on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 	},
 	"Baichuan2-53B": {
-		Ratio:           nativeRate(2e+01),
+		Ratio:           nativeRate(20),
 		CompletionRatio: 1,
 		TimeWindows: []adaptor.TimeWindow{{
 			Name:     "baichuan-daypart",
@@ -77,7 +77,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 			},
 			},
 			Overlay: adaptor.ModelConfig{
-				Ratio:           nativeRate(1e+01),
+				Ratio:           nativeRate(10),
 				CompletionRatio: 1,
 			},
 		},
@@ -90,7 +90,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 				},
 				},
 				Overlay: adaptor.ModelConfig{
-					Ratio:           nativeRate(2e+01),
+					Ratio:           nativeRate(20),
 					CompletionRatio: 1,
 				},
 			},
@@ -134,7 +134,7 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		Description:                 "Baichuan3-Turbo-128k on baichuan; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 	},
 	"Baichuan4": {
-		Ratio:                       nativeRate(1e+02),
+		Ratio:                       nativeRate(100),
 		CompletionRatio:             1,
 		ContextLength:               32000,
 		MaxOutputTokens:             2048,

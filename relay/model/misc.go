@@ -67,6 +67,13 @@ type Usage struct {
 	// CacheWrite12hTokens is an observed paid OpenAI retention class, not a
 	// legacy 5m/30m or Anthropic 1h write. Pricing must explicitly handle it.
 	CacheWrite12hTokens int `json:"cache_write_12h_tokens,omitempty"`
+
+	// UpstreamCostUSD is the charge the provider reported for this request in
+	// USD (for example OpenRouter's usage.cost). It is a settlement input only:
+	// it is never serialized (the operator's provider cost must not reach
+	// clients), and settlement honors it only for adaptors that implement
+	// adaptor.ReportedCostBillingPolicy.
+	UpstreamCostUSD float64 `json:"-"`
 }
 
 // NormalizeCachedTokens promotes top-level and DeepSeek provider-specific cache-hit

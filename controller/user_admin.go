@@ -101,7 +101,7 @@ func SearchUsers(c *gin.Context) {
 func GetUser(c *gin.Context) {
 	id, err := resolveUserRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	user, err := model.GetUserById(id, false)
@@ -147,12 +147,12 @@ func UpdateUser(c *gin.Context) {
 
 	ref, err := preferUUIDRef(payload.UUID, payload.Id)
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	payload.Id, err = resolveUserRef(ref)
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	payload.UUID = ""
@@ -464,7 +464,7 @@ func UpdateUser(c *gin.Context) {
 func DeleteUser(c *gin.Context) {
 	id, err := resolveUserRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	originUser, err := model.GetUserById(id, false)
@@ -674,12 +674,12 @@ func AdminTopUp(c *gin.Context) {
 	}
 	ref, err := preferUUIDRef(req.UserUUID, req.UserId)
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	req.UserId, err = resolveUserRef(ref)
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	req.UserUUID = ""

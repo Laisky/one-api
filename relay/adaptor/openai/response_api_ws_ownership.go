@@ -8,10 +8,12 @@ import (
 	"sync/atomic"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/gorilla/websocket"
 
 	"github.com/Laisky/one-api/common"
 	rmeta "github.com/Laisky/one-api/relay/meta"
+	"github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/state"
 )
 
@@ -66,6 +68,10 @@ const responseWSConversationCloseReason = "conversation is not supported over we
 // frame that names a guarded key more than once or in non-canonical case.
 const responseWSAmbiguousKeyCloseReason = "ambiguous request parameter: duplicate or case-folded key"
 
+// responseWSPromptCacheKeyCloseReason is the client-visible close reason for a
+// frame whose prompt_cache_key is not a string of at most 64 characters.
+const responseWSPromptCacheKeyCloseReason = "invalid prompt_cache_key: must be a string of at most 64 characters"
+
 // responseWSAuthorizationCloseReason maps an authorize error to a close reason.
 // The parameter err is the authorization failure. It returns a specific reason
 // for client-correctable rejections and the generic non-disclosing reason for
@@ -76,6 +82,8 @@ func responseWSAuthorizationCloseReason(err error) string {
 		return responseWSConversationCloseReason
 	case errors.Is(err, common.ErrAmbiguousJSONKey):
 		return responseWSAmbiguousKeyCloseReason
+	case errors.Is(err, model.ErrInvalidPromptCacheKey):
+		return responseWSPromptCacheKeyCloseReason
 	default:
 		return "response authorization denied"
 	}
@@ -99,6 +107,34 @@ func stripEmptyResponseWSConversation(raw map[string]json.RawMessage) (bool, err
 		return false, errors.WithStack(ErrResponseWSConversationUnsupported)
 	}
 	delete(raw, "conversation")
+	return true, nil
+}
+
+// scopeResponseWSPromptCacheKey replaces a response.create frame's
+// prompt_cache_key with the tenant-scoped value (or removes it when the
+// destination may not receive it), so a verbatim-forwarded frame never carries
+// the client's raw key to the shared upstream organisation. Parameters: ctx
+// carries the request logger, meta describes the destination and raw is the
+// decoded frame (modified in place). It returns whether raw changed, or an
+// error wrapping model.ErrInvalidPromptCacheKey for a malformed key.
+func scopeResponseWSPromptCacheKey(ctx context.Context, meta *rmeta.Meta, raw map[string]json.RawMessage) (bool, error) {
+	value, ok := raw[responseWSPromptCacheKey]
+	if !ok {
+		return false, nil
+	}
+	var key model.PromptCacheKey
+	if err := json.Unmarshal(value, &key); err != nil {
+		return false, errors.Wrap(err, "invalid response websocket prompt_cache_key")
+	}
+	if !ScopePromptCacheKey(gmw.GetLogger(ctx), meta, &key, "responses_websocket") {
+		delete(raw, responseWSPromptCacheKey)
+		return true, nil
+	}
+	encoded, err := json.Marshal(key.Forwarded())
+	if err != nil {
+		return false, errors.Wrap(err, "encode scoped response websocket prompt_cache_key")
+	}
+	raw[responseWSPromptCacheKey] = encoded
 	return true, nil
 }
 
@@ -132,8 +168,12 @@ func (s *responseWSSessionOwnership) authorize(ctx context.Context, meta *rmeta.
 	if err != nil {
 		return nil, err
 	}
+	cacheKeyRewritten, err := scopeResponseWSPromptCacheKey(ctx, meta, raw)
+	if err != nil {
+		return nil, err
+	}
 	outbound := frame
-	if backgroundStripped || conversationStripped {
+	if backgroundStripped || conversationStripped || cacheKeyRewritten {
 		encoded, encodeErr := json.Marshal(raw)
 		if encodeErr != nil {
 			return nil, errors.Wrap(encodeErr, "encode response frame without stripped selectors")

@@ -194,8 +194,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 
 	promptUsage, bizErr := estimatePromptUsage(c, meta, chatRequest)
 	if bizErr != nil {
-		lg.Warn("estimatePromptUsage failed",
-			zap.Error(bizErr.RawError),
+		// The returned error is logged once by the relay outcome at its
+		// status-derived level; this DEBUG line only adds admission context.
+		lg.Debug("estimatePromptUsage failed",
 			zap.String("err_msg", bizErr.Message),
 			zap.Int("status_code", bizErr.StatusCode))
 		return bizErr
@@ -204,8 +205,9 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	meta.PromptTokens = promptTokens
 	preConsumedQuota, bizErr := preConsumeQuota(c, preparedChatQuotaRequest(c, chatRequest), promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
 	if bizErr != nil {
-		lg.Warn("preConsumeQuota failed",
-			zap.Error(bizErr.RawError),
+		// The returned error is logged once by the relay outcome at its
+		// status-derived level; this DEBUG line only adds admission context.
+		lg.Debug("preConsumeQuota failed",
 			zap.String("err_msg", bizErr.Message),
 			zap.Int("status_code", bizErr.StatusCode))
 		return bizErr
@@ -226,10 +228,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 			FlushInterval: time.Duration(config.StreamingBillingIntervalSec) * time.Second,
 		})
 		streaming.StoreTracker(c, tracker)
-		upstreamCtx, cancelUpstream := context.WithCancel(gmw.Ctx(c))
-		c.Request = c.Request.WithContext(upstreamCtx)
-		streaming.BindUpstreamCancellation(c, cancelUpstream)
-		defer cancelUpstream()
+		defer bindStreamingUpstreamContext(c)()
 
 	}
 	// After the reservation: the hold keeps its current basis and only the
@@ -390,7 +389,7 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 	if err != nil {
 		if !(c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) &&
 			retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "transport_uncertain")) {
-			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, "do_request_failed")
+			_ = returnPreConsumedQuotaConservative(ctx, c, preConsumedQuota, meta.TokenId, doRequestRefundReason(err))
 		}
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 	}
@@ -405,15 +404,33 @@ func relayResponseAPIThroughChat(c *gin.Context, meta *metalib.Meta, responseAPI
 		}
 	}
 
+	// A provider error carrying a usage receipt is paid work: settle it below
+	// like any errored response with usage instead of refunding or replaying it.
+	var paidErrorUsage *relaymodel.Usage
 	if isErrorHappened(meta, resp) {
+		paidErrorUsage = paidUpstreamErrorUsage(c, meta, requestAdaptor, resp)
+	}
+	if paidErrorUsage == nil && isErrorHappened(meta, resp) {
 		if retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "upstream_http_error") {
 			return RelayErrorHandlerWithContext(c, resp)
 		}
+		recordUpstreamClientRejection(c, resp.StatusCode)
 		scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "upstream_http_error")
+		// Reconcile the provisional request cost like the Chat, Responses and
+		// Claude Messages controllers; it previously kept the admission estimate.
+		if err := recordZeroCostAfterFailure(c, c.GetInt(ctxkey.Id), c.GetString(ctxkey.RequestId)); err != nil {
+			lg.Warn("update user request cost to zero failed", zap.Error(err))
+		}
 		return RelayErrorHandlerWithContext(c, resp)
 	}
 
-	usage, respErr := requestAdaptor.DoResponse(c, resp, meta)
+	var usage *relaymodel.Usage
+	var respErr *relaymodel.ErrorWithStatusCode
+	if paidErrorUsage != nil {
+		usage, respErr = paidErrorUsage, RelayErrorHandlerWithContext(c, resp)
+	} else {
+		usage, respErr = requestAdaptor.DoResponse(c, resp, meta)
+	}
 	applyNativeGoogleUsageEvidence(c, usage)
 	if upstreamCapture != nil {
 		logUpstreamResponseFromCapture(lg, resp, upstreamCapture, "response_api_fallback")

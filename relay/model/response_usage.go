@@ -15,7 +15,9 @@ const responseUsageTextLimit = 64 << 10
 // ResponseUsageAccumulator observes one response without retaining its entire
 // stream. It is request-local and must not be shared between goroutines.
 type ResponseUsageAccumulator struct {
-	incomplete                          bool
+	// interrupted records a transport failure; incomplete is decided at Finish
+	// because an authoritative terminal event may still be buffered.
+	interrupted, incomplete, terminal   bool
 	stream, decided, finished           bool
 	line, event, body                   []byte
 	droppingLine, afterCR               bool
@@ -109,6 +111,7 @@ func (a *ResponseUsageAccumulator) consumeLine() {
 	data = bytes.TrimPrefix(data, []byte(" "))
 	if bytes.Equal(bytes.TrimSpace(data), []byte("[DONE]")) {
 		a.consumeEvent()
+		a.terminal = true
 		return
 	}
 	if len(a.event) == 0 {
@@ -159,6 +162,9 @@ func (a *ResponseUsageAccumulator) Finish(promptTokens int, countText func(strin
 		}
 		a.finished = true
 		a.line, a.event, a.body = nil, nil, nil
+		// A transport failure after the provider's terminal receipt loses no
+		// billable work; only an interruption before it leaves output partial.
+		a.incomplete = a.interrupted && !a.terminal
 	}
 	usage := a.usage
 	usage.PromptTokens = a.input
@@ -229,9 +235,12 @@ func (a *ResponseUsageAccumulator) Finish(promptTokens int, countText func(strin
 }
 
 // MarkIncomplete records a transport interruption so partial cumulative output
-// cannot suppress the larger amount of completion text already observed.
+// cannot suppress the larger amount of completion text already observed. An
+// interruption after an observed terminal event ([DONE], a Responses
+// response.completed/failed/incomplete event, or Claude message_stop) does not
+// mark the receipt incomplete, because that event already closed the work.
 func (a *ResponseUsageAccumulator) MarkIncomplete() {
-	a.incomplete = true
+	a.interrupted = true
 }
 
 // ParseResponseUsage parses an already captured JSON or SSE response with the
@@ -259,6 +268,11 @@ func (a *ResponseUsageAccumulator) consumeJSON(data []byte) {
 		return
 	}
 	kind := responseUsageString(root["type"])
+	switch kind {
+	case "response.completed", "response.failed", "response.incomplete", "message_stop":
+		// Protocol terminal events close the provider's work for this stream.
+		a.terminal = true
+	}
 	claude := strings.HasPrefix(kind, "message_") || strings.HasPrefix(kind, "content_block_") || kind == "message"
 	a.consumeUsage(root["usage"], claude, kind == "message_start" || kind == "response.created" || kind == "response.in_progress")
 	for _, key := range []string{"message", "response"} {

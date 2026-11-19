@@ -14,7 +14,7 @@ func glmModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"ZHIPU/GLM-5": {
 			Ratio:           nativeRate(6),
-			CompletionRatio: 3.6666666666666665,
+			CompletionRatio: 22.0 / 6.0,
 			Description:     "ZHIPU/GLM-5 on alibailian; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"ZHIPU/GLM-5.1": {
@@ -34,7 +34,7 @@ func glmModels() map[string]adaptor.ModelConfig {
 		},
 		"ZHIPU/GLM-5.3-Flash": {
 			Ratio:           nativeRate(0.8),
-			CompletionRatio: 3.4999999999999996,
+			CompletionRatio: 3.5,
 			Description:     "ZHIPU/GLM-5.3-Flash on alibailian; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"ZHIPU/GLM-5.3-FlashX": {
@@ -44,7 +44,7 @@ func glmModels() map[string]adaptor.ModelConfig {
 		},
 		"glm-4.5": {
 			Ratio:           nativeRate(3),
-			CompletionRatio: 4.666666666666667,
+			CompletionRatio: 14.0 / 3.0,
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4),
 				CompletionRatio:     4,
@@ -58,7 +58,7 @@ func glmModels() map[string]adaptor.ModelConfig {
 			CompletionRatio: 7.5,
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1.2),
-				CompletionRatio:     6.666666666666667,
+				CompletionRatio:     8.0 / 1.2,
 				InputTokenThreshold: 32001,
 			},
 			},
@@ -66,7 +66,7 @@ func glmModels() map[string]adaptor.ModelConfig {
 		},
 		"glm-4.6": {
 			Ratio:           nativeRate(3),
-			CompletionRatio: 4.666666666666667,
+			CompletionRatio: 14.0 / 3.0,
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4),
 				CompletionRatio:     4,
@@ -77,7 +77,7 @@ func glmModels() map[string]adaptor.ModelConfig {
 		},
 		"glm-4.7": {
 			Ratio:           nativeRate(3),
-			CompletionRatio: 4.666666666666667,
+			CompletionRatio: 14.0 / 3.0,
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4),
 				CompletionRatio:     4,
@@ -91,7 +91,7 @@ func glmModels() map[string]adaptor.ModelConfig {
 			CompletionRatio: 4.5,
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(6),
-				CompletionRatio:     3.6666666666666665,
+				CompletionRatio:     22.0 / 6.0,
 				InputTokenThreshold: 32001,
 			},
 			},

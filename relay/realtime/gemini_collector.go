@@ -140,7 +140,8 @@ func (g *GeminiLedger) Observe(message []byte) error {
 func geminiSnapshotExtends(old, next Tokens) bool {
 	return next.Input >= old.Input && next.Output >= old.Output &&
 		next.Text >= old.Text && next.Audio >= old.Audio && next.Image >= old.Image && next.Video >= old.Video &&
-		next.OutputText >= old.OutputText && next.OutputAudio >= old.OutputAudio && next.ReasoningTokens >= old.ReasoningTokens
+		next.OutputText >= old.OutputText && next.OutputAudio >= old.OutputAudio && next.ReasoningTokens >= old.ReasoningTokens &&
+		next.OutputVideo >= old.OutputVideo
 }
 
 // commit records the current turn once. Parameters: none. Returns: an error at

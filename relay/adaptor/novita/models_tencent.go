@@ -9,7 +9,7 @@ func tencentModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"tencent/hy3": {
 			Ratio:             nativeRate(0.14),
-			CompletionRatio:   4.142857142857142,
+			CompletionRatio:   0.58 / 0.14,
 			CachedInputRatio:  nativeRate(0.035),
 			ContextLength:     262144,
 			MaxOutputTokens:   262144,
@@ -42,7 +42,7 @@ func tencentModels() map[string]adaptor.ModelConfig {
 		},
 		"tencent/hy4-preview": {
 			Ratio:             nativeRate(0.834),
-			CompletionRatio:   2.998800959232614,
+			CompletionRatio:   2.501 / 0.834,
 			CachedInputRatio:  nativeRate(0.042),
 			ContextLength:     1000000,
 			MaxOutputTokens:   64000,

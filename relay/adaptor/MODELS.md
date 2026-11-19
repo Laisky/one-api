@@ -20,11 +20,14 @@ and affected behavior tests. There is no generation command, source lock,
 embedded catalog, or runtime patch loader.
 
 Each model ID has one complete definition within its provider. Family constructors
-are assembled with JoinModelCatalogs, which rejects duplicates instead of applying
-overrides. Provider-specific differences, including Alibaba versus AliBailian,
-remain explicit in separate definitions. Constructors return independently owned
-maps and nested pricing metadata; common configuration is not assumed from a
-shared source URL.
+are assembled with `adaptor.JoinModelCatalogs` (`catalog.go`), the single catalog
+assembly helper: do not hand-roll a package-local merge function or copy families
+together with `maps.Copy` or a loop. It rejects duplicates instead of applying
+overrides, panicking at startup with the duplicated ID and the zero-based argument
+indexes of both families that define it. Provider-specific differences, including
+Alibaba versus AliBailian, remain explicit in separate definitions. Constructors
+return independently owned maps and nested pricing metadata; common configuration
+is not assumed from a shared source URL.
 
 Prices and provenance
 ---------------------

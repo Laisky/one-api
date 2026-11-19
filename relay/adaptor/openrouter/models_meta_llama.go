@@ -9,7 +9,7 @@ func metaLlamaModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"meta-llama/llama-3-70b-instruct": {
 			Ratio:                       nativeRate(0.51),
-			CompletionRatio:             1.4509803921568627,
+			CompletionRatio:             0.74 / 0.51,
 			ContextLength:               8192,
 			MaxOutputTokens:             8000,
 			InputModalities:             []string{"text"},
@@ -43,9 +43,11 @@ func metaLlamaModels() map[string]adaptor.ModelConfig {
 			Description:                 "meta-llama/llama-3.1-70b-instruct on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"meta-llama/llama-3.1-8b-instruct": {
-			Ratio:                       nativeRate(0.02),
-			CompletionRatio:             2,
-			CachedInputRatio:            nativeRate(0.024999999999999998),
+			Ratio:           nativeRate(0.02),
+			CompletionRatio: 2,
+			// The 2026-11-18 listing (top provider DeepInfra fp8) publishes no
+			// input_cache_read price, so cached prompt tokens bill at the input rate.
+			// The former $0.025 cache-read price came from another endpoint (Groq).
 			ContextLength:               131072,
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text"},
@@ -53,7 +55,7 @@ func metaLlamaModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "logprobs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "meta-llama/Meta-Llama-3.1-8B-Instruct",
-			Description:                 "meta-llama/llama-3.1-8b-instruct on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "meta-llama/llama-3.1-8b-instruct on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"meta-llama/llama-3.2-11b-vision-instruct": {
 			Ratio:                       nativeRate(0.345),
@@ -69,7 +71,7 @@ func metaLlamaModels() map[string]adaptor.ModelConfig {
 		},
 		"meta-llama/llama-3.2-1b-instruct": {
 			Ratio:                       nativeRate(0.027),
-			CompletionRatio:             7.444444444444445,
+			CompletionRatio:             0.201 / 0.027,
 			ContextLength:               60000,
 			MaxOutputTokens:             54000,
 			InputModalities:             []string{"text"},
@@ -81,7 +83,7 @@ func metaLlamaModels() map[string]adaptor.ModelConfig {
 		},
 		"meta-llama/llama-3.2-3b-instruct": {
 			Ratio:                       nativeRate(0.0509),
-			CompletionRatio:             6.58153241650295,
+			CompletionRatio:             0.335 / 0.0509,
 			ContextLength:               131072,
 			MaxOutputTokens:             72000,
 			InputModalities:             []string{"text"},

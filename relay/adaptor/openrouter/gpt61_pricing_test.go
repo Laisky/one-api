@@ -23,10 +23,10 @@ func TestGPT61SolProviderPricing(t *testing.T) {
 			t.Run(name+"/"+strconv.Itoa(inputTokens), func(t *testing.T) {
 				effective := pricing.ResolveEffectivePricingForUsage(name, inputTokens, 128_000, a)
 				input, cached, write, output, threshold := 2.0, 0.1, 2.5, 10.0, 0
-				// The provider's machine-readable minimum is inclusive; do not
-				// replace it with the separately documented native OpenAI threshold.
-				if inputTokens >= 272_000 {
-					input, cached, write, output, threshold = 4.0, 0.2, 5.0, 15.0, 272_000
+				// OpenRouter documents min_prompt_tokens as a strict lower bound
+				// ("strictly greater than this threshold"), stored as 272,001.
+				if inputTokens > 272_000 {
+					input, cached, write, output, threshold = 4.0, 0.2, 5.0, 15.0, 272_001
 				}
 				require.Equal(t, threshold, effective.AppliedTierThreshold)
 				require.Zero(t, effective.AppliedOutputTierThreshold)

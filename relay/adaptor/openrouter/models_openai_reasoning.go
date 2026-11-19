@@ -20,7 +20,7 @@ func openaiReasoningModels() map[string]adaptor.ModelConfig {
 			Description:                 "openai/o1 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"openai/o1-pro": {
-			Ratio:                       nativeRate(1.5e+02),
+			Ratio:                       nativeRate(150),
 			CompletionRatio:             4,
 			ContextLength:               200000,
 			MaxOutputTokens:             100000,
@@ -43,7 +43,7 @@ func openaiReasoningModels() map[string]adaptor.ModelConfig {
 			Description:                 "openai/o3 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"openai/o3-deep-research": {
-			Ratio:                       nativeRate(1e+01),
+			Ratio:                       nativeRate(10),
 			CompletionRatio:             4,
 			CachedInputRatio:            nativeRate(2.5),
 			ContextLength:               200000,
@@ -81,7 +81,7 @@ func openaiReasoningModels() map[string]adaptor.ModelConfig {
 			Description:                 "openai/o3-mini-high on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"openai/o3-pro": {
-			Ratio:                       nativeRate(2e+01),
+			Ratio:                       nativeRate(20),
 			CompletionRatio:             4,
 			ContextLength:               200000,
 			MaxOutputTokens:             100000,

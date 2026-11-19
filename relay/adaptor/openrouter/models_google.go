@@ -6,7 +6,8 @@ import "github.com/Laisky/one-api/relay/adaptor"
 // It takes no arguments and keeps each model definition directly editable in its family.
 // Source: https://openrouter.ai/api/v1/models
 // Explicit-cache writes include prompt cost plus five minutes of storage,
-// using the prompt rate selected by each inclusive context tier.
+// using the prompt rate selected by each context tier (OpenRouter min_prompt_tokens
+// is a strict lower bound, stored as InputTokenThreshold = min_prompt_tokens+1).
 // https://openrouter.ai/docs/guides/best-practices/prompt-caching
 func googleModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
@@ -36,7 +37,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 		},
 		"google/gemini-2.5-flash": {
 			Ratio:                       nativeRate(0.3),
-			CompletionRatio:             8.333333333333334,
+			CompletionRatio:             2.5 / 0.3,
 			CachedInputRatio:            nativeRate(0.03),
 			CacheWrite5mRatio:           nativeRate(0.383333333333333),
 			ContextLength:               1048576,
@@ -50,7 +51,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 		},
 		"google/gemini-2.5-flash-image": {
 			Ratio:                       nativeRate(0.3),
-			CompletionRatio:             8.333333333333334,
+			CompletionRatio:             2.5 / 0.3,
 			CachedInputRatio:            nativeRate(0.03),
 			CacheWrite5mRatio:           nativeRate(0.083333333333),
 			ContextLength:               32768,
@@ -99,7 +100,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 					CompletionRatio:     6,
 					CachedInputRatio:    nativeRate(0.25),
 					CacheWrite5mRatio:   nativeRate(2.875),
-					InputTokenThreshold: 200000,
+					InputTokenThreshold: 200001,
 				},
 			},
 			ContextLength:               1048576,
@@ -122,7 +123,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 					CompletionRatio:     6,
 					CachedInputRatio:    nativeRate(0.25),
 					CacheWrite5mRatio:   nativeRate(2.875),
-					InputTokenThreshold: 200000,
+					InputTokenThreshold: 200001,
 				},
 			},
 			ContextLength:               1048576,
@@ -254,7 +255,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 					CompletionRatio:     4.5,
 					CachedInputRatio:    nativeRate(0.4),
 					CacheWrite5mRatio:   nativeRate(4.375),
-					InputTokenThreshold: 200000,
+					InputTokenThreshold: 200001,
 				},
 			},
 			ContextLength:               1048576,
@@ -279,7 +280,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 					CompletionRatio:     4.5,
 					CachedInputRatio:    nativeRate(0.4),
 					CacheWrite5mRatio:   nativeRate(4.375),
-					InputTokenThreshold: 200000,
+					InputTokenThreshold: 200001,
 				},
 			},
 			ContextLength:               1048576,
@@ -434,7 +435,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 			Description:                 "google/gemma-2-27b-it on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"google/gemma-3-12b-it": {
-			Ratio:                       nativeRate(0.049999999999999996),
+			Ratio:                       nativeRate(0.05),
 			CompletionRatio:             3,
 			ContextLength:               131072,
 			MaxOutputTokens:             16384,
@@ -447,7 +448,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 		},
 		"google/gemma-3-27b-it": {
 			Ratio:                       nativeRate(0.08),
-			CompletionRatio:             4.375,
+			CompletionRatio:             0.45 / 0.08,
 			CachedInputRatio:            nativeRate(0.04),
 			ContextLength:               131072,
 			MaxOutputTokens:             117964,
@@ -456,10 +457,10 @@ func googleModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "logprobs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "google/gemma-3-27b-it",
-			Description:                 "google/gemma-3-27b-it on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges. Explicit cache writes include input plus the published five-minute storage component; implicit caching has no write surcharge.",
+			Description:                 "google/gemma-3-27b-it on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges. Explicit cache writes include input plus the published five-minute storage component; implicit caching has no write surcharge.",
 		},
 		"google/gemma-3-4b-it": {
-			Ratio:                       nativeRate(0.049999999999999996),
+			Ratio:                       nativeRate(0.05),
 			CompletionRatio:             2,
 			ContextLength:               131072,
 			MaxOutputTokens:             16384,
@@ -482,8 +483,8 @@ func googleModels() map[string]adaptor.ModelConfig {
 		},
 		"google/gemma-4-26b-a4b-it": {
 			Ratio:                       nativeRate(0.09),
-			CompletionRatio:             3.3333333333333335,
-			CachedInputRatio:            nativeRate(0.049999999999999996),
+			CompletionRatio:             0.3 / 0.09,
+			CachedInputRatio:            nativeRate(0.05),
 			ContextLength:               262144,
 			MaxOutputTokens:             235929,
 			InputModalities:             []string{"image", "text", "video"},
@@ -506,9 +507,10 @@ func googleModels() map[string]adaptor.ModelConfig {
 			Description:                 "google/gemma-4-26b-a4b-it:free on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"google/gemma-4-31b-it": {
-			Ratio:                       nativeRate(0.2),
-			CompletionRatio:             2,
-			CachedInputRatio:            nativeRate(0.049999999999999996),
+			Ratio:           nativeRate(0.2),
+			CompletionRatio: 2,
+			// The 2026-11-18 listing publishes no input_cache_read price, so cached
+			// prompt tokens bill at the input rate instead of the former $0.05 discount.
 			ContextLength:               262144,
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"image", "text", "video"},
@@ -516,7 +518,7 @@ func googleModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_completion_tokens", "max_tokens", "min_p", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "google/gemma-4-31B-it",
-			Description:                 "google/gemma-4-31b-it on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges. Explicit cache writes include input plus the published five-minute storage component; implicit caching has no write surcharge.",
+			Description:                 "google/gemma-4-31b-it on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges. Explicit cache writes include input plus the published five-minute storage component; implicit caching has no write surcharge.",
 		},
 		"google/gemma-4-31b-it:free": {
 			Ratio:                       0,

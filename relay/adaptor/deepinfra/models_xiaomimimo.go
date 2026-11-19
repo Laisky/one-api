@@ -7,27 +7,35 @@ import "github.com/Laisky/one-api/relay/adaptor"
 // Source: https://api.deepinfra.com/models/list
 func xiaomimimoModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
+		// Own published tariff (model API, checked 2026-11-18): $0.14 / $0.28 list
+		// with a 5% discount and cache reads at 2% of input, i.e. $0.133 / $0.266 /
+		// $0.00266. applyDeprecations floors it at the forwarded replacement's.
 		"XiaomiMiMo/MiMo-V2.5": {
-			Ratio:                       nativeRate(0.4),
-			CompletionRatio:             5,
-			CachedInputRatio:            nativeRate(0.08),
+			Ratio:                       nativeRate(0.133),
+			CompletionRatio:             0.266 / 0.133,
+			CachedInputRatio:            nativeRate(0.00266),
 			ContextLength:               262144,
+			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "MiMo V2.5 general reasoning model.",
+			Description:                 "MiMo V2.5 general reasoning model. Includes the published 5% discount; no expiry is invented.",
 		},
+		// Own published tariff (model API, checked 2026-11-18): $1 / $3 list with
+		// a 61% discount and cache reads at 20% of input, i.e. $0.39 / $1.17 /
+		// $0.078. applyDeprecations floors it at the forwarded replacement's.
 		"XiaomiMiMo/MiMo-V2.5-Pro": {
-			Ratio:                       nativeRate(1),
-			CompletionRatio:             3,
-			CachedInputRatio:            nativeRate(0.2),
+			Ratio:                       nativeRate(0.39),
+			CompletionRatio:             1.17 / 0.39,
+			CachedInputRatio:            nativeRate(0.078),
 			ContextLength:               1048576,
+			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "reasoning"},
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "frequency_penalty", "presence_penalty", "repetition_penalty", "stop", "seed", "max_tokens", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice", "n"},
-			Description:                 "MiMo V2.5 Pro long-context reasoning model.",
+			Description:                 "MiMo V2.5 Pro long-context reasoning model. Includes the published 61% discount; no expiry is invented.",
 		},
 		// DeepInfra lists all three MiMo V2.5 speech models at $0.00 per 1M input
 		// characters, "Free for a limited time" (model pages and
@@ -75,8 +83,8 @@ func xiaomimimoModels() map[string]adaptor.ModelConfig {
 		},
 		"XiaomiMiMo/MiMo-V2.6-Pro": {
 			Ratio:             nativeRate(0.387),
-			CompletionRatio:   (0.87 * 1.0) / 0.43,
-			CachedInputRatio:  nativeRate(0.00323999883),
+			CompletionRatio:   0.783 / 0.387,
+			CachedInputRatio:  nativeRate(0.00324),
 			ContextLength:     1048576,
 			InputModalities:   []string{"text", "image", "video", "audio"},
 			OutputModalities:  []string{"text"},

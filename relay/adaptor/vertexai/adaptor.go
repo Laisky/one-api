@@ -16,6 +16,7 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	nativegemini "github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
+	"github.com/Laisky/one-api/relay/adaptor/openai_compatible"
 	vertexaiClaude "github.com/Laisky/one-api/relay/adaptor/vertexai/claude"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/deepseek"
 	"github.com/Laisky/one-api/relay/adaptor/vertexai/imagen"
@@ -131,105 +132,30 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, request *model.ClaudeRequ
 		return native, nil
 	}
 
-	// Convert Claude Messages API request to OpenAI format first
+	// Convert the Claude Messages request to Chat Completions for the managed
+	// open models (DeepSeek, GPT-OSS, Qwen, MaaS), sharing the message, tool,
+	// and tool_choice conversion of OpenAI-compatible adaptors so tool history
+	// survives and no empty system message or null stop reaches the provider.
 	openaiRequest := &model.GeneralOpenAIRequest{
 		Model:       request.Model,
 		MaxTokens:   request.MaxTokens,
 		Temperature: request.Temperature,
 		TopP:        request.TopP,
 		Stream:      request.Stream != nil && *request.Stream,
-		Stop:        request.StopSequences,
 		Thinking:    request.Thinking,
 	}
-
-	// Add system message if present
-	if request.System != "" {
-		systemMessage := model.Message{
-			Role:    "system",
-			Content: request.System,
-		}
-		openaiRequest.Messages = append(openaiRequest.Messages, systemMessage)
+	if len(request.StopSequences) > 0 {
+		openaiRequest.Stop = request.StopSequences
 	}
-
-	// Convert messages
+	if system := openai_compatible.ClaudeSystemText(request.System); system != "" {
+		openaiRequest.Messages = append(openaiRequest.Messages, model.Message{Role: "system", Content: system})
+	}
 	for _, msg := range request.Messages {
-		openaiMessage := model.Message{
-			Role: msg.Role,
-		}
-
-		// Convert content based on type
-		switch content := msg.Content.(type) {
-		case string:
-			// Simple string content
-			openaiMessage.Content = content
-		case []any:
-			// Structured content blocks - convert to OpenAI format
-			var contentParts []model.MessageContent
-			for _, block := range content {
-				if blockMap, ok := block.(map[string]any); ok {
-					if blockType, exists := blockMap["type"]; exists {
-						switch blockType {
-						case "text":
-							if text, exists := blockMap["text"]; exists {
-								if textStr, ok := text.(string); ok {
-									contentParts = append(contentParts, model.MessageContent{
-										Type: "text",
-										Text: &textStr,
-									})
-								}
-							}
-						case "image":
-							if source, exists := blockMap["source"]; exists {
-								if sourceMap, ok := source.(map[string]any); ok {
-									if mediaType, exists := sourceMap["media_type"]; exists {
-										if data, exists := sourceMap["data"]; exists {
-											if mediaTypeStr, ok := mediaType.(string); ok {
-												if dataStr, ok := data.(string); ok {
-													imageURL := fmt.Sprintf("data:%s;base64,%s", mediaTypeStr, dataStr)
-													contentParts = append(contentParts, model.MessageContent{
-														Type: "image_url",
-														ImageURL: &model.ImageURL{
-															Url: imageURL,
-														},
-													})
-												}
-											}
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-			if len(contentParts) > 0 {
-				openaiMessage.Content = contentParts
-			}
-		}
-
-		openaiRequest.Messages = append(openaiRequest.Messages, openaiMessage)
+		openaiRequest.Messages = append(openaiRequest.Messages, openai_compatible.ConvertClaudeMessageToChat(msg)...)
 	}
-
-	// Convert tools if present
-	if len(request.Tools) > 0 {
-		var tools []model.Tool
-		for _, claudeTool := range request.Tools {
-			tool := model.Tool{
-				Type: "function",
-				Function: &model.Function{
-					Name:        claudeTool.Name,
-					Description: claudeTool.Description,
-					Parameters:  claudeTool.InputSchema.(map[string]any),
-				},
-			}
-			tools = append(tools, tool)
-		}
-		openaiRequest.Tools = tools
-	}
-
-	// Convert tool choice if present
+	openaiRequest.Tools = openai_compatible.ConvertClaudeToolsToChat(request.Tools)
 	if request.ToolChoice != nil {
-		openaiRequest.ToolChoice = request.ToolChoice
+		openaiRequest.ToolChoice = openai_compatible.ConvertClaudeToolChoiceToChat(request.ToolChoice)
 	}
 
 	// Mark this as a Claude Messages conversion for response handling
@@ -289,17 +215,10 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	// Ordinary Gemini models retain their shared defaults. Developer Live
 	// prices are not Vertex prices; those IDs remain selectable above and use
 	// administrator-owned channel rates rather than fabricated defaults.
+	// Vertex-owned Gemini 4 tariffs (including Carbon's gross Standard price)
+	// come from VertexGoogleModelConfigs below, which replaces these entries.
 	for name, cfg := range geminiOpenaiCompatible.ModelRatios {
 		if !adaptor.IsLiveOnlyGoogleModel(name) {
-			if name == geminiOpenaiCompatible.Gemini4CarbonModel {
-				// Cloud bills Carbon at its gross Standard tariff. Introductory
-				// account credits do not change the upstream token price.
-				// https://cloud.google.com/model-garden/pricing (2026-11-12).
-				cfg.Ratio = 4.00 * ratio.MilliTokensUsd
-				cfg.CompletionRatio = 20.00 / 4.00
-				cfg.CachedInputRatio = 0.20 * ratio.MilliTokensUsd
-				cfg.TimeWindows = nil
-			}
 			if geminiOpenaiCompatible.IsGeminiNanoBanana21Model(name) {
 				// Vertex prices implicit cache hits at $0.15/1M input tokens;
 				// the Gemini Developer API does not expose caching for this model.

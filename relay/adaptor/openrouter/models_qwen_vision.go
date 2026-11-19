@@ -8,9 +8,9 @@ import "github.com/Laisky/one-api/relay/adaptor"
 func qwenVisionModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"qwen/qwen2.5-vl-72b-instruct": {
-			Ratio:                       nativeRate(0.7999999999999999),
+			Ratio:                       nativeRate(0.8),
 			CompletionRatio:             1.25,
-			CachedInputRatio:            nativeRate(0.39999999999999997),
+			CachedInputRatio:            nativeRate(0.4),
 			ContextLength:               128000,
 			MaxOutputTokens:             115200,
 			InputModalities:             []string{"text", "image"},
@@ -22,8 +22,8 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen/qwen3-vl-235b-a22b-instruct": {
 			Ratio:                       nativeRate(0.21),
-			CompletionRatio:             9.047619047619047,
-			CachedInputRatio:            nativeRate(0.09999999999999999),
+			CompletionRatio:             1.9 / 0.21,
+			CachedInputRatio:            nativeRate(0.1),
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text", "image"},
@@ -34,7 +34,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 			Description:                 "qwen/qwen3-vl-235b-a22b-instruct on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"qwen/qwen3-vl-235b-a22b-thinking": {
-			Ratio:                       nativeRate(0.39999999999999997),
+			Ratio:                       nativeRate(0.4),
 			CompletionRatio:             10,
 			ContextLength:               131072,
 			MaxOutputTokens:             32768,
@@ -70,7 +70,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 			Description:                 "qwen/qwen3-vl-30b-a3b-thinking on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified. Reasoning is mandatory.",
 		},
 		"qwen/qwen3-vl-32b-instruct": {
-			Ratio:                       nativeRate(0.10400000000000001),
+			Ratio:                       nativeRate(0.104),
 			CompletionRatio:             4,
 			ContextLength:               131072,
 			MaxOutputTokens:             32768,
@@ -96,7 +96,7 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 		},
 		"qwen/qwen3-vl-8b-thinking": {
 			Ratio:                       nativeRate(0.18),
-			CompletionRatio:             11.666666666666664,
+			CompletionRatio:             2.1 / 0.18,
 			ContextLength:               131072,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"image", "text"},

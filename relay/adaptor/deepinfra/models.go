@@ -11,9 +11,10 @@ import (
 var ModelRatios = modelCatalog()
 
 // modelCatalog returns a fresh complete catalog with independently owned family metadata.
-// It takes no arguments and rejects duplicate model IDs during assembly.
+// It takes no arguments and rejects duplicate model IDs during assembly, then
+// marks deprecated models and floors their forwarded tariffs (applyDeprecations).
 func modelCatalog() map[string]adaptor.ModelConfig {
-	return adaptor.JoinModelCatalogs(
+	catalog := adaptor.JoinModelCatalogs(
 		anthropicModels(),
 		baaiModels(),
 		blackForestLabsModels(),
@@ -35,6 +36,8 @@ func modelCatalog() map[string]adaptor.ModelConfig {
 		xiaomimimoModels(),
 		zaiOrgModels(),
 	)
+	applyDeprecations(catalog)
+	return catalog
 }
 
 // nativeRate converts a USD per-million input-unit price into billing ratios.

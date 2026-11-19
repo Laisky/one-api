@@ -59,7 +59,7 @@ func openaiModels() map[string]adaptor.ModelConfig {
 			Ratio:           0,
 			CompletionRatio: 1,
 			Audio: &adaptor.AudioPricingConfig{
-				UsdPerSecond: 2.5e-05,
+				UsdPerSecond: 0.000025,
 			},
 		},
 	}

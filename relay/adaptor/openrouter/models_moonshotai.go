@@ -8,8 +8,8 @@ import "github.com/Laisky/one-api/relay/adaptor"
 func moonshotaiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"moonshotai/kimi-k2": {
-			Ratio:                       nativeRate(0.5700000000000001),
-			CompletionRatio:             4.035087719298245,
+			Ratio:                       nativeRate(0.57),
+			CompletionRatio:             2.3 / 0.57,
 			ContextLength:               131072,
 			MaxOutputTokens:             98304,
 			InputModalities:             []string{"text"},
@@ -21,7 +21,7 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 		},
 		"moonshotai/kimi-k2-0905": {
 			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             4.166666666666667,
+			CompletionRatio:             2.5 / 0.6,
 			ContextLength:               262144,
 			MaxOutputTokens:             98304,
 			InputModalities:             []string{"text"},
@@ -33,7 +33,7 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 		},
 		"moonshotai/kimi-k2-thinking": {
 			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             4.166666666666667,
+			CompletionRatio:             2.5 / 0.6,
 			CachedInputRatio:            nativeRate(0.15),
 			ContextLength:               262144,
 			MaxOutputTokens:             98304,
@@ -71,9 +71,9 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "moonshotai/kimi-k2.6 on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified.",
 		},
 		"moonshotai/kimi-k2.7-code": {
-			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             5.83333333333333,
-			CachedInputRatio:            nativeRate(0.16),
+			Ratio:                       nativeRate(0.7),
+			CompletionRatio:             3.75 / 0.7,
+			CachedInputRatio:            nativeRate(0.17),
 			ContextLength:               262144,
 			MaxOutputTokens:             235929,
 			InputModalities:             []string{"text", "image"},
@@ -81,7 +81,7 @@ func moonshotaiModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logit_bias", "logprobs", "max_tokens", "min_p", "parallel_tool_calls", "presence_penalty", "reasoning", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "moonshotai/Kimi-K2.7-Code",
-			Description:                 "moonshotai/kimi-k2.7-code on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "moonshotai/kimi-k2.7-code on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"moonshotai/kimi-k3": {
 			Ratio:                       nativeRate(0.192),

@@ -119,6 +119,7 @@ func RelayOCRHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	}
 
 	if isErrorHappened(meta, resp) {
+		recordUpstreamClientRejection(c, resp.StatusCode)
 		scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		if requestId != "" {
 			if err := recordZeroCostAfterFailure(c, quotaId, requestId); err != nil {

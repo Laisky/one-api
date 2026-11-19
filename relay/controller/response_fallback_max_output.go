@@ -80,7 +80,7 @@ func claudeModelOutputLimits(modelName string, configs map[string]model.ModelCon
 		candidates = append(candidates, cfg)
 	}
 	if provider != nil {
-		if cfg, ok := pricing.ResolveModelConfig(modelName, nil, provider, at); ok {
+		if cfg, ok := pricing.ResolveModelMetadata(modelName, provider, at); ok {
 			candidates = append(candidates, cfg)
 		}
 	}

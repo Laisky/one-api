@@ -8,7 +8,7 @@ import "github.com/Laisky/one-api/relay/adaptor"
 func upstageModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"upstage/solar-mini4": {
-			Ratio:                       nativeRate(0.049999999999999996),
+			Ratio:                       nativeRate(0.05),
 			CompletionRatio:             4,
 			CachedInputRatio:            nativeRate(0.005),
 			ContextLength:               524288,

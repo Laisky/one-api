@@ -15,7 +15,8 @@ import (
 // a tariff, and price-only overrides do not erase the provider's request defaults.
 func ResolveImagePricing(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (*adaptor.ImagePricingConfig, bool) {
 	var lower *adaptor.ImagePricingConfig
-	if provider != nil {
+	eligible := providerTariffEligible(provider, modelName)
+	if eligible && provider != nil {
 		if cfg, ok := provider.GetDefaultModelPricing()[modelName]; ok {
 			cfg = ApplyTimeWindow(cloneModelConfig(cfg), at)
 			if hasImageConfiguration(cfg.Image) {
@@ -23,7 +24,7 @@ func ResolveImagePricing(modelName string, channelConfigs map[string]model.Model
 			}
 		}
 	}
-	if lower == nil {
+	if eligible && lower == nil {
 		if cfg, ok := GetGlobalModelConfig(modelName); ok {
 			cfg = ApplyTimeWindow(cfg, at)
 			if hasImageConfiguration(cfg.Image) {
@@ -72,9 +73,10 @@ func ResolveImagePricing(modelName string, channelConfigs map[string]model.Model
 
 // hasImageTariff distinguishes billing overrides from request defaults.
 // Parameters: cfg is optional image metadata. Returns: true for explicit
-// prices or multiplier tables; this function does not validate their values.
+// prices, multiplier tables, or a megapixel tariff; this function does not
+// validate their values.
 func hasImageTariff(cfg *adaptor.ImagePricingConfig) bool {
-	return cfg != nil && (cfg.PricePerImageUsd != 0 || cfg.PromptRatio != 0 ||
+	return cfg != nil && (cfg.PricePerImageUsd != 0 || cfg.PromptRatio != 0 || cfg.Megapixel != nil ||
 		len(cfg.SizeMultipliers) > 0 || len(cfg.QualityMultipliers) > 0 || len(cfg.QualitySizeMultipliers) > 0)
 }
 

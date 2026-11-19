@@ -11,19 +11,10 @@ func qwenModels() map[string]adaptor.ModelConfig {
 			Ratio:           0,
 			CompletionRatio: 1,
 			Image: &adaptor.ImagePricingConfig{
-				PricePerImageUsd: 0.006081740799999999,
+				PricePerImageUsd: 0.0060817408,
 				DefaultSize:      "1024x1024",
 				MinImages:        1,
-				SizeMultipliers: map[string]float64{
-					"1024x1024": 1,
-					"1024x1536": 1.5,
-					"1536x1024": 1.5,
-					"1920x1080": 1.9775390625,
-					"2048x2048": 4,
-					"3840x2160": 7.91015625,
-					"4096x4096": 16,
-					"512x512":   0.25,
-				},
+				Megapixel:        perImageAreaTariff(0.0058),
 			},
 		},
 		"Qwen/Qwen-Image-2.0": {

@@ -21,8 +21,8 @@ func TestOctoberDeepInfraPublishedPrices(t *testing.T) {
 		input, cached, output float64
 	}{
 		{"anthropic/claude-sonnet-5-5", 2, 0, 10},
-		{"tencent/Hy4-preview", 0.834, 0.834 * 0.05035971, 2.501},
-		{"XiaomiMiMo/MiMo-V2.6-Pro", 0.387, 0.387 * 0.00837209, 0.783},
+		{"tencent/Hy4-preview", 0.834, 0.042, 2.501}, // page shows $0.042 cached; API multiplier 0.05035971 is its 8-digit truncation
+		{"XiaomiMiMo/MiMo-V2.6-Pro", 0.387, 0.00324, 0.783},
 		{"XiaomiMiMo/MiMo-V2.6-Flash", 0.14, 0.0028, 0.28},
 		{"nvidia/NVIDIA-Nemotron-3.5-Lightning", 0.06, 0.03, 0.16},
 		{"google/gemini-3.5-flash", 1.5, 0, 9},
@@ -57,9 +57,9 @@ func TestOctoberDeepInfraDiscountPreservation(t *testing.T) {
 		{"zai-org/GLM-5.3-Flash", 0.15, 0.03, 0.5},
 		{"deepseek-ai/DeepSeek-V4.1-Flash", 0.14, 0.0042, 0.42},
 		{"Qwen/Qwen3.8-27B", 0.15, 0.0375, 1.875},
-		{"zai-org/GLM-5.3", 0.5625, 0.12499999875, 2.5},
-		{"zai-org/GLM-5.2", 0.5625, 0.105000001875, 1.8},
-		{"deepseek-ai/DeepSeek-V4-Flash-Vision-Exp", 0.2156, 0.006859999608, 0.6468},
+		{"zai-org/GLM-5.3", 0.5625, 0.125, 2.5},
+		{"zai-org/GLM-5.2", 0.5625, 0.105, 1.8},
+		{"deepseek-ai/DeepSeek-V4-Flash-Vision-Exp", 0.2156, 0.00686, 0.6468},
 	} {
 		cfg, exists := deepinfra.ModelRatios[tc.id]
 		require.True(t, exists)
@@ -79,7 +79,7 @@ func TestOctoberDeepInfraNewCapabilities(t *testing.T) {
 		inputs          []string
 	}{
 		{"anthropic/claude-sonnet-5-5", 1000000, 128000, []string{"text", "image"}},
-		{"tencent/Hy4-preview", 1048576, 0, []string{"text"}},
+		{"tencent/Hy4-preview", 1048576, 131072, []string{"text"}}, // API max_output_tokens, 2026-11-18
 		{"XiaomiMiMo/MiMo-V2.6-Pro", 1048576, 0, []string{"text", "image", "video", "audio"}},
 		{"XiaomiMiMo/MiMo-V2.6-Flash", 1048576, 0, []string{"text", "image", "video", "audio"}},
 	} {

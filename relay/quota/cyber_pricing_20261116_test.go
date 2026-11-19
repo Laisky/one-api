@@ -62,3 +62,21 @@ func TestGPT6CyberExplicitWriteTariff(t *testing.T) {
 	require.False(t, result.UnpricedUsage)
 	require.EqualValues(t, 12.02*ratio.QuotaPerUsd, result.TotalQuota)
 }
+
+// TestGPT6CyberUnpricedLongWriteNotBelowGenericRule pins the estimate for a
+// long-context Cyber write that slipped past admission (the local estimate
+// stayed below 272,001 while the provider counted more). OpenAI publishes no
+// long-context Cyber write price, but its prompt-caching guide states a 30m
+// write costs 1.25x the uncached input rate on GPT-5.6+, so the estimate must
+// not price the write at the cheaper short-context rate the tier resolver
+// inherits ($25/M, below even the $40/M long-context input). It stays an
+// unpriced, flagged estimate.
+func TestGPT6CyberUnpricedLongWriteNotBelowGenericRule(t *testing.T) {
+	provider := &openai.Adaptor{ChannelType: channeltype.OpenAI}
+	usage := &model.Usage{PromptTokens: 300_000, CompletionTokens: 1_000, CacheWrite5mTokens: 300_000}
+	result := quota.Compute(quota.ComputeInput{Usage: usage, ModelName: "gpt-6-cyber",
+		ModelRatio: provider.GetModelRatio("gpt-6-cyber"), GroupRatio: 1, PricingAdaptor: provider})
+	require.True(t, result.UnpricedUsage, "the write still has no published tariff")
+	// 300,000 writes at 1.25 x $40/M = $15.00 plus 1,000 output at $150/M = $0.15.
+	require.EqualValues(t, 15.15*ratio.QuotaPerUsd, result.TotalQuota)
+}

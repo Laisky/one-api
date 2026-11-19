@@ -111,6 +111,13 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 	)
 
 	doneRendered := false
+	// terminalCompleted records a Responses terminal success event. Responses
+	// streams carry no [DONE] sentinel, so it is the completion signal for the
+	// converted Chat Completions stream.
+	terminalCompleted := false
+	// identity carries the response id/created/model from response.created to
+	// delta chunks, whose stream events have no response object.
+	var identity chatStreamIdentity
 	forwardedChunks := 0
 	var streamErr error
 
@@ -219,6 +226,10 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 			}
 		}
 
+		if eventType == "response.completed" || eventType == "response.incomplete" {
+			terminalCompleted = true
+		}
+
 		if eventType != "" && streamEvent != nil {
 			if streamEvent.Item != nil && streamEvent.Item.Type == "function_call" {
 				if state := getToolState(streamEvent.Item.Id); state != nil {
@@ -253,6 +264,8 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 
 		// Convert Response API chunk to ChatCompletion streaming format with proper index context
 		chatCompletionChunk := ConvertResponseAPIStreamToChatCompletionWithIndex(&responseAPIChunk, outputIndex)
+		identity.observe(&responseAPIChunk)
+		identity.stamp(chatCompletionChunk)
 
 		// If this is a done/complete event and the output item was already emitted
 		// from prior delta events, clear content to avoid duplicate text emission.
@@ -541,11 +554,16 @@ func ResponseAPIStreamHandler(c *gin.Context, resp *http.Response, relayMode int
 		return ErrorWrapper(streamErr, lifecycle.failureCode(streamErr), http.StatusInternalServerError), responseText, usage
 	}
 
-	// Do NOT fabricate a [DONE] if the upstream didn't send one.
-	// An honest proxy must let the client observe the same stream termination
-	// behaviour as the upstream API.
-	if !doneRendered {
-		lg.Warn("upstream response api stream ended without sending [DONE]",
+	// The client speaks Chat Completions, whose streams always end with
+	// [DONE], while a Responses upstream never sends one: its terminal
+	// response.completed/response.incomplete event is the completion signal.
+	// Render the Chat terminator only after that signal, so an interrupted or
+	// failed upstream is never disguised as a complete stream.
+	if !doneRendered && terminalCompleted {
+		render.Done(c)
+		doneRendered = true
+	} else if !doneRendered {
+		lg.Warn("upstream response api stream ended without a terminal completion event",
 			zap.Int("forwarded_chunks", forwardedChunks),
 		)
 	}

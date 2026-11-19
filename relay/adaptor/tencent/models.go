@@ -281,11 +281,16 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 		CompletionRatio:  4.0 / 1.2,
 		CachedInputRatio: 0.4 * ratio.MilliTokensRmb,
 		// Tiered input-length pricing per Tencent TokenHub
-		// (https://cloud.tencent.com/document/product/1823/130055):
-		// (0,16k] -> 1.2/4/0.4 (base above), (16k,32k] -> 1.6/6.4/0.6, (32k,256k] -> 2/8/0.8 (RMB/1M tokens).
+		// (https://cloud.tencent.com/document/product/1823/130055, archived
+		// 2026-06-20 and 2026-08-19 before the preview row was removed):
+		// 输入长度（0, 16k） -> 1.2/4/0.4 (base above), 输入长度 [16k, 32k） -> 1.6/6.4/0.6,
+		// 输入长度 [32k+） -> 2/8/0.8 (RMB/1M tokens). Each surcharge applies FROM
+		// the boundary, so the threshold is N itself. The page never says whether
+		// k is 1000 or 1024; the smaller reading (16000/32000) is used so no prompt
+		// between the two readings is under-billed at the cheaper tier.
 		Tiers: []adaptor.ModelRatioTier{
-			{Ratio: 1.6 * ratio.MilliTokensRmb, CompletionRatio: 6.4 / 1.6, CachedInputRatio: 0.6 * ratio.MilliTokensRmb, InputTokenThreshold: 16384},
-			{Ratio: 2 * ratio.MilliTokensRmb, CompletionRatio: 8.0 / 2.0, CachedInputRatio: 0.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32768},
+			{Ratio: 1.6 * ratio.MilliTokensRmb, CompletionRatio: 6.4 / 1.6, CachedInputRatio: 0.6 * ratio.MilliTokensRmb, InputTokenThreshold: 16000},
+			{Ratio: 2 * ratio.MilliTokensRmb, CompletionRatio: 8.0 / 2.0, CachedInputRatio: 0.8 * ratio.MilliTokensRmb, InputTokenThreshold: 32000},
 		},
 		ContextLength:    262144,
 		MaxOutputTokens:  131072,

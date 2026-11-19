@@ -10,7 +10,7 @@ func thinkingmachinesModels() map[string]adaptor.ModelConfig {
 		"thinkingmachines/inkling": {
 			Ratio:                       nativeRate(1),
 			CompletionRatio:             4.05,
-			CachedInputRatio:            nativeRate(0.16999999999999998),
+			CachedInputRatio:            nativeRate(0.17),
 			ContextLength:               524288,
 			MaxOutputTokens:             471859,
 			InputModalities:             []string{"text", "image", "audio"},
@@ -52,9 +52,9 @@ func thinkingmachinesModels() map[string]adaptor.ModelConfig {
 			Description:                 "thinkingmachines/inkling-2-small:free on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges. The published token tariff is explicitly free; account limits still apply.",
 		},
 		"thinkingmachines/inkling-small": {
-			Ratio:                       nativeRate(0.44999999999999996),
-			CompletionRatio:             2.666666666666667,
-			CachedInputRatio:            nativeRate(0.09999999999999999),
+			Ratio:                       nativeRate(0.45),
+			CompletionRatio:             1.2 / 0.45,
+			CachedInputRatio:            nativeRate(0.1),
 			ContextLength:               524288,
 			MaxOutputTokens:             262144,
 			InputModalities:             []string{"text", "image", "audio"},

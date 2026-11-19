@@ -40,6 +40,9 @@ func TestCompactCycleFixtureReleasesContext(t *testing.T) {
 // the caller's dialect flags and release their pool when their test ends.
 // Parameters: t owns the fixture and cleanup assertions. Return values: none.
 func TestCompactFileFixtureRestoresDialect(t *testing.T) {
+	// The fixture subtest skips itself without the compact-suite time budget;
+	// skip the parent too, or the assertions below dereference a nil pool.
+	requireCompactSuiteBudget(t)
 	originalSQLite := common.UsingSQLite.Load()
 	originalMySQL := common.UsingMySQL.Load()
 	originalPostgres := common.UsingPostgreSQL.Load()

@@ -288,6 +288,9 @@ func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, e
 	}
 
 	if !doneRendered {
+		// EOF before Replicate's done event is an interruption; report it so a
+		// Claude client never sees the stream as complete.
+		openai_compatible.MarkStreamInterrupted(c)
 		finalizeStream()
 	}
 

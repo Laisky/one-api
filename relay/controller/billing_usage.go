@@ -101,3 +101,22 @@ func recordZeroCostAfterFailure(c *gin.Context, userID int, requestID string) er
 	}
 	return nil
 }
+
+// reportedCostFloorMetadata records that settlement charged the provider's
+// reported cost because it exceeded the catalog price (OpenRouter's
+// usage.cost), so an auditor can tell the charge from a catalog price.
+// Parameters: metadata is the consume-log metadata (not mutated), usage the
+// settled receipt and result its computed price. It returns metadata
+// unchanged unless the floor applied.
+func reportedCostFloorMetadata(metadata model.LogMetadata, usage *relaymodel.Usage, result quotautil.ComputeResult) model.LogMetadata {
+	if usage == nil || !result.ReportedCostFloor {
+		return metadata
+	}
+	out := make(model.LogMetadata, len(metadata)+2)
+	for key, value := range metadata {
+		out[key] = value
+	}
+	out["billing_source"] = "provider_reported_cost"
+	out["upstream_cost_usd"] = usage.UpstreamCostUSD
+	return out
+}

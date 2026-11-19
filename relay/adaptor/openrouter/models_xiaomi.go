@@ -9,7 +9,7 @@ func xiaomiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"xiaomi/mimo-v2-flash": {
 			Ratio:                       nativeRate(0.1),
-			CompletionRatio:             2.9999999999999996,
+			CompletionRatio:             3,
 			CachedInputRatio:            nativeRate(0.01),
 			ContextLength:               262144,
 			MaxOutputTokens:             65536,
@@ -58,9 +58,10 @@ func xiaomiModels() map[string]adaptor.ModelConfig {
 			Description:                 "xiaomi/mimo-v2.5 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"xiaomi/mimo-v2.5-pro": {
-			Ratio:                       nativeRate(0.435),
-			CompletionRatio:             2,
-			CachedInputRatio:            nativeRate(0.0036),
+			// The 2026-11-18 listing's sole endpoint is DigitalOcean.
+			Ratio:                       nativeRate(0.48),
+			CompletionRatio:             1.8 / 0.48,
+			CachedInputRatio:            nativeRate(0.096),
 			ContextLength:               1024000,
 			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text"},
@@ -68,7 +69,7 @@ func xiaomiModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
 			SupportedSamplingParameters: []string{"include_reasoning", "logprobs", "max_tokens", "reasoning", "response_format", "structured_outputs", "temperature", "tool_choice", "tools", "top_logprobs", "top_p"},
 			HuggingFaceID:               "XiaomiMiMo/MiMo-V2.5-Pro",
-			Description:                 "xiaomi/mimo-v2.5-pro on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "xiaomi/mimo-v2.5-pro on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"xiaomi/mimo-v2.6-flash": {
 			Ratio:                       nativeRate(0.14),

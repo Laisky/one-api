@@ -18,7 +18,7 @@ func arceeAiModels() map[string]adaptor.ModelConfig {
 		},
 		"arcee-ai/maestro-reasoning": {
 			Ratio:                       nativeRate(0.9),
-			CompletionRatio:             3.6666666666666665,
+			CompletionRatio:             3.3 / 0.9,
 			ContextLength:               131072,
 			MaxOutputTokens:             32000,
 			InputModalities:             []string{"text"},
@@ -49,7 +49,7 @@ func arceeAiModels() map[string]adaptor.ModelConfig {
 		},
 		"arcee-ai/trinity-large-thinking": {
 			Ratio:                       nativeRate(0.25),
-			CompletionRatio:             3.1999999999999997,
+			CompletionRatio:             3.2,
 			CachedInputRatio:            nativeRate(0.06),
 			ContextLength:               262144,
 			MaxOutputTokens:             80000,
@@ -74,7 +74,7 @@ func arceeAiModels() map[string]adaptor.ModelConfig {
 		},
 		"arcee-ai/trinity-mini": {
 			Ratio:                       nativeRate(0.045),
-			CompletionRatio:             3.3333333333333335,
+			CompletionRatio:             0.15 / 0.045,
 			ContextLength:               131072,
 			MaxOutputTokens:             131072,
 			InputModalities:             []string{"text"},
@@ -86,7 +86,7 @@ func arceeAiModels() map[string]adaptor.ModelConfig {
 		},
 		"arcee-ai/virtuoso-large": {
 			Ratio:                       nativeRate(0.75),
-			CompletionRatio:             1.5999999999999999,
+			CompletionRatio:             1.6,
 			ContextLength:               131072,
 			MaxOutputTokens:             64000,
 			InputModalities:             []string{"text"},

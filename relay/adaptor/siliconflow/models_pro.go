@@ -33,7 +33,7 @@ func proModels() map[string]adaptor.ModelConfig {
 		},
 		"Pro/moonshotai/Kimi-K2.6": {
 			Ratio:            nativeRate(6.5),
-			CompletionRatio:  4.153846153846154,
+			CompletionRatio:  27.0 / 6.5,
 			CachedInputRatio: nativeRate(1.1),
 			Description:      "Pro/moonshotai/Kimi-K2.6 on siliconflow; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},

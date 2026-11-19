@@ -321,3 +321,25 @@ func TestIsGlobalPricingInitialized(t *testing.T) {
 	GetGlobalModelRatio("test-model") // trigger init
 	require.True(t, IsGlobalPricingInitialized(), "Expected global pricing to be initialized")
 }
+
+// TestContributingAdaptersSnapshotPreservesUnset proves the getter/setter pair
+// round-trips the unset (nil) state. Restoring a snapshot used to turn "unset"
+// into an empty list, so a later initializer skipped the default adapters and
+// leaked a pricing-free global layer into unrelated tests.
+func TestContributingAdaptersSnapshotPreservesUnset(t *testing.T) {
+	previous := globalPricingManager
+	t.Cleanup(func() { globalPricingManager = previous })
+
+	globalPricingManager = &GlobalPricingManager{}
+	snapshot := GetContributingAdapters()
+	require.Nil(t, snapshot, "an unset list must be reported as nil")
+	SetContributingAdapters([]int{apitype.OpenAI})
+	SetContributingAdapters(snapshot)
+	require.Nil(t, GetContributingAdapters(), "restoring the snapshot must restore the unset state")
+	InitializeGlobalPricingManager(mockGetAdaptor)
+	require.Equal(t, DefaultGlobalPricingAdapters, GetContributingAdapters(), "an unset list loads the defaults")
+
+	SetContributingAdapters([]int{})
+	require.NotNil(t, GetContributingAdapters(), "an explicit empty list stays distinct from unset")
+	require.Empty(t, GetContributingAdapters())
+}

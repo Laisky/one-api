@@ -44,7 +44,7 @@ func baiduModels() map[string]adaptor.ModelConfig {
 		},
 		"baidu/ernie-4.5-300b-a47b": {
 			Ratio:                       nativeRate(0.28),
-			CompletionRatio:             3.9285714285714284,
+			CompletionRatio:             1.1 / 0.28,
 			ContextLength:               123000,
 			MaxOutputTokens:             12000,
 			InputModalities:             []string{"text"},
@@ -67,7 +67,7 @@ func baiduModels() map[string]adaptor.ModelConfig {
 		},
 		"baidu/ernie-4.5-vl-424b-a47b": {
 			Ratio:                       nativeRate(0.42),
-			CompletionRatio:             2.9761904761904763,
+			CompletionRatio:             1.25 / 0.42,
 			ContextLength:               123000,
 			MaxOutputTokens:             16000,
 			InputModalities:             []string{"image", "text"},
@@ -107,7 +107,7 @@ func baiduModels() map[string]adaptor.ModelConfig {
 		},
 		"baidu/qianfan-ocr-fast": {
 			Ratio:                       nativeRate(0.68),
-			CompletionRatio:             4.13235294117647,
+			CompletionRatio:             2.81 / 0.68,
 			ContextLength:               65536,
 			MaxOutputTokens:             28672,
 			InputModalities:             []string{"image", "text"},

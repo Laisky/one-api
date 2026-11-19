@@ -1,8 +1,6 @@
 package zhipu
 
 import (
-	"maps"
-
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
@@ -64,14 +62,15 @@ func textImageVideoFileInput() []string { return []string{"text", "image", "vide
 //
 // The map is composed from family-specific sub-maps defined in sibling files
 // (models_text.go, models_vision.go, models_media.go, models_utility.go,
-// models_audio.go) so that each
-// file stays small and easy to navigate. Pricing entries are immutable.
+// models_audio.go) with adaptor.JoinModelCatalogs, which panics at startup when
+// two families define the same model ID, so that each file stays small and easy
+// to navigate. Pricing entries are immutable.
 //
 // Metadata sources:
 //   - https://docs.bigmodel.cn/cn/guide/start/model-overview
 //   - https://docs.bigmodel.cn/cn/guide/models/text/* and /vlm/*
 //   - https://huggingface.co/zai-org for open-weight HuggingFace IDs.
-var ModelRatios = mergeModelRatios(
+var ModelRatios = adaptor.JoinModelCatalogs(
 	flagshipTextModels,
 	flagshipVisionModels,
 	languageModels,
@@ -85,27 +84,6 @@ var ModelRatios = mergeModelRatios(
 	realtimeModels,
 	legacyModels,
 )
-
-// mergeModelRatios consolidates the per-family pricing tables into the unified
-// ModelRatios map. It panics if any model key is duplicated across families,
-// which surfaces accidental overlaps at startup rather than silently masking
-// pricing entries.
-func mergeModelRatios(tables ...map[string]adaptor.ModelConfig) map[string]adaptor.ModelConfig {
-	total := 0
-	for _, t := range tables {
-		total += len(t)
-	}
-	merged := make(map[string]adaptor.ModelConfig, total)
-	for _, t := range tables {
-		for k := range t {
-			if _, exists := merged[k]; exists {
-				panic("zhipu: duplicate model key in ModelRatios: " + k)
-			}
-		}
-		maps.Copy(merged, t)
-	}
-	return merged
-}
 
 // ZhipuToolingDefaults captures Open BigModel's published CNY search-tool prices.
 // Sources checked 2026-09-24: https://docs.bigmodel.cn/cn/guide/start/pricing

@@ -79,6 +79,11 @@ func minimaxModels() map[string]adaptor.ModelConfig {
 			SupportedSamplingParameters: []string{"temperature", "top_p", "top_k", "min_p", "max_tokens", "stop", "presence_penalty", "frequency_penalty", "repetition_penalty", "seed", "n", "logit_bias", "logprobs", "top_logprobs", "response_format", "tools", "tool_choice"},
 			Description:                 "minimax/minimax-m2.7-highspeed on novita; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
+		// Novita's tiered_billing_configs (https://api.novita.ai/v3/openai/models,
+		// re-verified 2026-11-18) list {min_tokens 1, max_tokens 524288} and
+		// {min_tokens 524288, max_tokens 1000000}. min_tokens is inclusive (the
+		// first tier starts at 1) and 524288 sits in both ranges, so the boundary
+		// is billed at the dearer tier: threshold = 524288, never under-billing.
 		"minimax/minimax-m3": {
 			Ratio:            nativeRate(0.3),
 			CompletionRatio:  4,

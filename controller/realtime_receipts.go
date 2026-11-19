@@ -73,8 +73,11 @@ func realtimeReceiptMetadata(usage *rmodel.Usage, result quota.ComputeResult) mo
 	}
 	lowerBound := result.UnpricedUsage
 	for _, record := range usage.Realtime.Records {
+		// Explicitly labelled VIDEO output is a subset of OutputUnallocated
+		// with its own tariff; an unpriced video rate already sets
+		// UnpricedUsage. Only the truly unlabelled remainder is a lower bound.
 		lowerBound = lowerBound || record.Tokens.Unallocated > 0 ||
-			record.Tokens.OutputUnallocated > 0 || record.Tokens.CachedUnallocated > 0
+			record.Tokens.OutputUnallocated-record.Tokens.OutputVideo > 0 || record.Tokens.CachedUnallocated > 0
 	}
 	if lowerBound {
 		metadata["realtime_pricing_lower_bound"] = true

@@ -22,7 +22,7 @@ func qwenMathModels() map[string]adaptor.ModelConfig {
 		"qwq-32b-preview": {
 			Ratio:                       nativeRate(2.06),
 			CompletionRatio:             2.995,
-			CachedInputRatio:            nativeRate(0.41200000000000003),
+			CachedInputRatio:            nativeRate(0.412),
 			ContextLength:               32768,
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text"},
@@ -37,7 +37,7 @@ func qwenMathModels() map[string]adaptor.ModelConfig {
 		"qwq-plus": {
 			Ratio:                       nativeRate(1.6),
 			CompletionRatio:             2.5,
-			CachedInputRatio:            0.023571428571428573,
+			CachedInputRatio:            nativeRate(0.33),
 			ContextLength:               131072,
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text"},

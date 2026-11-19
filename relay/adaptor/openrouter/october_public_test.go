@@ -15,7 +15,8 @@ import (
 )
 
 // TestOctoberOpenRouterPublishedRates checks host-specific token defaults through
-// both public channel surfaces using the November 16 API quotes. It performs no I/O.
+// both public channel surfaces using the November 16 API quotes; rows whose
+// listing moved were re-quoted from the 2026-11-18 14:16 UTC fetch. It performs no I/O.
 func TestOctoberOpenRouterPublishedRates(t *testing.T) {
 	t.Parallel()
 	a := &openrouter.Adaptor{}
@@ -40,17 +41,17 @@ func TestOctoberOpenRouterPublishedRates(t *testing.T) {
 		{"~deepseek/deepseek-flash-latest", 0.036, 0.01, 0.5},
 		{"~openai/gpt-sol-latest", 2, 0.1, 10},
 		{"inclusionai/ling-3.0-flash-vl", 0.06, 0.012, 0.18},
-		{"deepseek/deepseek-v4.1-flash", 0.14, 0.0042, 0.42},
+		{"deepseek/deepseek-v4.1-flash", 0.0507, 0.001014, 0.2028},
 		{"inclusionai/ling-3.0-flash-sante", 0.042, 0.0084, 0.1232},
 		{"google/gemini-3.8-flash", 0.825, 0.0825, 4.125},
 		{"tencent/hy4-preview", 0.834, 0.042, 2.501},
 		{"inclusionai/ling-3.0-flash-fin", 0.042, 0.0084, 0.1232},
-		{"~z-ai/glm-flash-latest", 0.0399, 0.03, 0.0784},
-		{"z-ai/glm-5.3-flash", 0.0399, 0.03, 0.0784},
+		{"~z-ai/glm-flash-latest", 0.15, 0.03, 0.5},
+		{"z-ai/glm-5.3-flash", 0.15, 0.03, 0.5},
 		{"deepseek/deepseek-v4-flash-vision-exp", 0.44, 0.014, 1.32},
 		{"~z-ai/glm-latest", 0.0699, 0.0689, 1.4},
 		{"z-ai/glm-5.3", 0.0699, 0.0689, 1.4},
-		{"qwen/qwen3.8-27b", 0.15, 0.0375, 1.875},
+		{"qwen/qwen3.8-27b", 0.06, 0.059, 2.2},
 		{"google/gemini-3.7-flash", 0.75, 0.075, 3.75},
 		{"deepseek/deepseek-v4-pro-0813", 0.111, 0.097, 4.44},
 		{"nvidia/nemotron-3.5-lightning", 0.07, 0.04, 0.2},
@@ -62,7 +63,7 @@ func TestOctoberOpenRouterPublishedRates(t *testing.T) {
 		{"~x-ai/grok-latest", 2, 0.5, 6},
 		{"tencent/hy3", 0.132, 0.033, 0.528},
 		{"z-ai/glm-5.2", 0.007, 0.006, 6.8},
-		{"moonshotai/kimi-k2.7-code", 0.6, 0.16, 3.5},
+		{"moonshotai/kimi-k2.7-code", 0.7, 0.17, 3.75},
 		{"~anthropic/claude-haiku-latest", 0.1, 0.01, 0.5},
 		{"~google/gemini-pro-latest", 2, 0.1, 10},
 		{"~moonshotai/kimi-latest", 0.1824, 0.18, 11.0055},
@@ -75,7 +76,7 @@ func TestOctoberOpenRouterPublishedRates(t *testing.T) {
 		{"moonshotai/kimi-k2.6", 0.65, 0.15, 3.41},
 		{"minimax/minimax-m2.7", 0.21, 0.042, 0.84},
 		{"qwen/qwen3.5-35b-a3b", 0.14, 0.05, 1},
-		{"qwen/qwen3.5-27b", 0.26, 0, 2.6},
+		{"qwen/qwen3.5-27b", 0.3, 0, 2.4},
 		{"google/gemini-3.1-pro-preview-customtools", 2, 0.2, 12},
 		{"google/gemini-3.1-pro-preview", 2, 0.2, 12},
 		{"moonshotai/kimi-k2.5", 0.5, 0.15, 2.5},
@@ -87,7 +88,7 @@ func TestOctoberOpenRouterPublishedRates(t *testing.T) {
 		{"qwen/qwen3-vl-30b-a3b-instruct", 0.15, 0, 0.6},
 		{"z-ai/glm-4.6", 0.5, 0.1, 2},
 		{"openai/gpt-oss-120b", 0.15, 0.075, 0.6},
-		{"openai/gpt-oss-20b", 0.075, 0.0375, 0.3},
+		{"openai/gpt-oss-20b", 0.018, 0.009, 0.09},
 		{"qwen/qwen3-30b-a3b-instruct-2507", 0.1, 0.1, 0.3},
 		{"qwen/qwen3-235b-a22b-thinking-2507", 0.45, 0, 3.5},
 		{"qwen/qwen3-235b-a22b-2507", 0.14, 0.05, 0.8},
@@ -116,7 +117,7 @@ func TestOctoberOpenRouterPublishedRates(t *testing.T) {
 }
 
 // TestOctoberOpenRouterHaikuTier pins every Haiku tariff on either side of the
-// inclusive host threshold. It accepts t and returns no values.
+// host's strict min_prompt_tokens bound (stored as 100,001). It accepts t and returns no values.
 func TestOctoberOpenRouterHaikuTier(t *testing.T) {
 	t.Parallel()
 	for _, id := range []string{"anthropic/claude-haiku-5.5", "~anthropic/claude-haiku-latest"} {
@@ -124,8 +125,8 @@ func TestOctoberOpenRouterHaikuTier(t *testing.T) {
 			got := pricing.ResolveEffectivePricingForUsage(id, tokens, 1, &openrouter.Adaptor{})
 			input, cached, output, write5m, write1h := 0.1, 0.01, 0.5, 0.125, 0.2
 			threshold := 0
-			if tokens >= 100000 {
-				input, cached, output, write5m, write1h, threshold = 0.5, 0.05, 2.5, 0.625, 1, 100000
+			if tokens > 100000 {
+				input, cached, output, write5m, write1h, threshold = 0.5, 0.05, 2.5, 0.625, 1, 100001
 			}
 			require.Equal(t, threshold, got.AppliedTierThreshold)
 			require.InDelta(t, input, got.InputRatio/ratio.MilliTokensUsd, 1e-10)
@@ -146,9 +147,9 @@ func TestOctoberOpenRouterClockRates(t *testing.T) {
 		id, at                string
 		input, cached, output float64
 	}{
-		{"deepseek/deepseek-v4.1-flash", "2026-11-16T00:59:59Z", 0.14, 0.0042, 0.42},
-		{"deepseek/deepseek-v4.1-flash", "2026-11-16T01:00:00Z", 0.14, 0.0042, 0.42},
-		{"deepseek/deepseek-v4.1-flash", "2026-11-16T04:00:00Z", 0.14, 0.0042, 0.42},
+		{"deepseek/deepseek-v4.1-flash", "2026-11-16T00:59:59Z", 0.0507, 0.001014, 0.2028},
+		{"deepseek/deepseek-v4.1-flash", "2026-11-16T01:00:00Z", 0.0507, 0.001014, 0.2028},
+		{"deepseek/deepseek-v4.1-flash", "2026-11-16T04:00:00Z", 0.0507, 0.001014, 0.2028},
 		{"deepseek/deepseek-v4-pro-0813", "2026-11-16T06:00:00Z", 0.111, 0.097, 4.44},
 		{"deepseek/deepseek-v4-pro-0813", "2026-11-16T10:00:00Z", 0.111, 0.097, 4.44},
 		{"deepseek/deepseek-v4-pro-0813", "2026-11-15T06:00:00Z", 0.111, 0.097, 4.44},
@@ -198,7 +199,7 @@ func TestOctoberOpenRouterGoogleWriteTier(t *testing.T) {
 		for _, tokens := range []int{199999, 200000, 200001} {
 			got := pricing.ResolveEffectivePricingForUsage(id, tokens, 1, &openrouter.Adaptor{})
 			want := 1.25 + 0.375
-			if tokens >= 200000 {
+			if tokens > 200000 {
 				want = 2.5 + 0.375
 			}
 			require.InDelta(t, want, got.CacheWrite5mRatio/ratio.MilliTokensUsd, 1e-12)

@@ -13,7 +13,8 @@ import (
 )
 
 // TestNovemberOpenRouterPublishedCatalog pins new model tariffs and host limits through
-// native and generic discovery. Fixtures were read from https://openrouter.ai/api/v1/models.
+// native and generic discovery. Fixtures were read from https://openrouter.ai/api/v1/models;
+// rows whose listing moved were re-quoted from the 2026-11-18 14:16 UTC fetch.
 func TestNovemberOpenRouterPublishedCatalog(t *testing.T) {
 	t.Parallel()
 	a := &openrouter.Adaptor{}
@@ -23,9 +24,9 @@ func TestNovemberOpenRouterPublishedCatalog(t *testing.T) {
 		input, cached, output float64
 		context, maxOutput    int32
 	}{
-		{"qwen/qwen3.5-9b", 0.115, 0.104, 0.169, 262144, 40960},
-		{"tencent/hy4-flash", 0.04375, 0.001875, 0.175625, 1048576, 65536},
-		{"qwen/qwen4-max", 1.5, 0.075, 4.5, 1000000, 131072},
+		{"qwen/qwen3.5-9b", 0.17, 0.153, 0.25, 262144, 40960},
+		{"tencent/hy4-flash", 0.035, 0.0015, 0.1405, 1048576, 65536},
+		{"qwen/qwen4-max", 1.425, 0.07125, 4.275, 1000000, 131072},
 		{"inclusionai/ling-3.2-flash:free", 0, 0, 0, 1048576, 262144},
 		{"google/gemini-4-hydrogen", 1.5, 0.075, 7.5, 1048576, 943718},
 		{"baidu/ernie-5.5-flash-preview:free", 0, 0, 0, 1024000, 921600},
@@ -49,8 +50,8 @@ func TestNovemberOpenRouterPublishedCatalog(t *testing.T) {
 		{"openai/gpt-6.1-terra", 1, 0.05, 5, 1050000, 128000},
 		{"moonshotai/kimi-k3.1-pro", 0.2403, 0.2, 8.4023, 1048576, 943718},
 		{"recursive/flint-v1.0:free", 0, 0, 0, 262144, 235929},
-		{"minimax/minimax-m3.1-flash", 0.075, 0.0075, 0.3, 1048576, 524288},
-		{"deepseek/deepseek-v4.1-flash-1017", 0.15, 0.003, 0.6, 1048576, 393216},
+		{"minimax/minimax-m3.1-flash", 0.15, 0.015, 0.6, 1048576, 524288},
+		{"deepseek/deepseek-v4.1-flash-1017", 0.036, 0.01, 0.5, 1048576, 393216},
 		{"elorian/glimpse", 0.6, 0.06, 3, 262144, 256000},
 		{"reflection/beam-1.0-501b-a23b", 0.3, 0.04, 1, 1048576, 943718},
 		{"prism-ml/ternary-bonsai-2-9b", 0.08, 0.04, 0.13, 262144, 65536},

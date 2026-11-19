@@ -93,7 +93,13 @@ func userContentRequest(ctx context.Context, method, url string) (*http.Response
 	if err != nil {
 		return nil, errors.Wrap(err, "build user content request")
 	}
-	resp, err := client.UserContentRequestHTTPClient.Do(req)
+	httpClient := client.UserContentRequestHTTPClient
+	if httpClient == nil {
+		// client.Init has not run (tests, tools, misordered bootstrap); never fall
+		// back to an unguarded client for user-supplied URLs.
+		return nil, errors.New("user content HTTP client is not initialized")
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, errors.Wrap(err, "send user content request")
 	}

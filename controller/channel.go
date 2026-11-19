@@ -108,13 +108,19 @@ func parseToolingConfigPayload(raw json.RawMessage) (*model.ChannelToolingConfig
 	return &cfg, true, nil
 }
 
+// convertAdaptorVideoPricing converts a provider default video tariff into the
+// channel model_configs form used by "Load Default". It keeps the realtime
+// video-output ratio, which HasData deliberately ignores because it does not
+// enable per-second video generation billing. Parameter cfg may be nil. It
+// returns nil when the default carries no video pricing at all.
 func convertAdaptorVideoPricing(cfg *adaptor.VideoPricingConfig) *model.VideoPricingLocal {
-	if cfg == nil || !cfg.HasData() {
+	if cfg == nil || (!cfg.HasData() && cfg.OutputTokenRatio <= 0) {
 		return nil
 	}
 	local := &model.VideoPricingLocal{
-		PerSecondUsd:  cfg.PerSecondUsd,
-		InputImageUsd: cfg.InputImageUsd,
+		PerSecondUsd:     cfg.PerSecondUsd,
+		InputImageUsd:    cfg.InputImageUsd,
+		OutputTokenRatio: cfg.OutputTokenRatio,
 	}
 	if strings.TrimSpace(cfg.BaseResolution) != "" {
 		local.BaseResolution = cfg.BaseResolution
@@ -278,7 +284,7 @@ func GetChannel(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	channel, err := model.GetChannelById(id, false)
@@ -298,7 +304,7 @@ func GetChannel(c *gin.Context) {
 func DuplicateChannel(c *gin.Context) {
 	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 
@@ -397,7 +403,7 @@ func AddChannel(c *gin.Context) {
 func DeleteChannel(c *gin.Context) {
 	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	channel := model.Channel{Id: id}
@@ -437,12 +443,12 @@ func UpdateChannel(c *gin.Context) {
 	}
 	ref, err := preferUUIDRef(channel.UUID, channel.Id)
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	channel.Id, err = resolveChannelRef(ref)
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	channel.UUID = ""
@@ -459,11 +465,8 @@ func UpdateChannel(c *gin.Context) {
 	}
 
 	if statusOnly != "" {
-		// Only update status safely
-		if channel.Id == 0 {
-			helper.RespondError(c, errkind.InvalidRequestErr(errors.New("Channel id is required")))
-			return
-		}
+		// Only update status safely. channel.Id is always positive here:
+		// resolveChannelRef returns an error rather than a non-positive id.
 		if channel.Status != model.ChannelStatusEnabled && channel.Status != model.ChannelStatusManuallyDisabled && channel.Status != model.ChannelStatusAutoDisabled {
 			helper.RespondErrorWithStatus(c, http.StatusBadRequest, errkind.InvalidRequestErr(errors.New("Invalid channel status")))
 			return
@@ -514,7 +517,7 @@ func GetChannelPricing(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 	channel, err := model.GetChannelById(id, false)
@@ -562,7 +565,7 @@ func GetChannelPricing(c *gin.Context) {
 func UpdateChannelPricing(c *gin.Context) {
 	id, err := resolveChannelRef(c.Param("id"))
 	if err != nil {
-		helper.RespondError(c, err)
+		respondResourceRefError(c, err)
 		return
 	}
 

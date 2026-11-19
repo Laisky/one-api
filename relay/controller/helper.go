@@ -176,7 +176,7 @@ func estimateEmbeddingPromptUsage(c *gin.Context, meta *meta.Meta, textRequest *
 
 // estimatePreConsumedQuota derives the quota reservation amount before dispatching the upstream request.
 // Parameters: textRequest is the validated payload, promptUsage is the preflight prompt usage, pricing arguments resolve effective rates, and meta identifies the request mode.
-// Returns: the quota amount to reserve before forwarding the request.
+// Returns: the quota amount to reserve before forwarding the request, or -1 when the request cannot be priced.
 func estimatePreConsumedQuota(
 	textRequest *relaymodel.GeneralOpenAIRequest,
 	promptUsage *relaymodel.Usage,
@@ -189,6 +189,31 @@ func estimatePreConsumedQuota(
 	meta *meta.Meta,
 	providerPayload ...any,
 ) int64 {
+	quote, _, err := estimatePreConsumedQuotaWithCachePolicy(textRequest, promptUsage, modelRatio, completionRatio,
+		channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta, providerPayload...)
+	if err != nil {
+		return -1
+	}
+	return quote
+}
+
+// estimatePreConsumedQuotaWithCachePolicy is estimatePreConsumedQuota that also
+// returns the tiered prompt-cache admission decision the dispatch must apply.
+// Parameters match estimatePreConsumedQuota. Returns: the quote (-1 for an
+// unpriceable request), the cache-write decision, and an admission refusal
+// error that callers surface to the client.
+func estimatePreConsumedQuotaWithCachePolicy(
+	textRequest *relaymodel.GeneralOpenAIRequest,
+	promptUsage *relaymodel.Usage,
+	modelRatio float64,
+	completionRatio float64,
+	channelModelRatio map[string]float64,
+	groupRatio float64,
+	channelModelConfigs map[string]model.ModelConfigLocal,
+	channelCompletionRatio map[string]float64,
+	meta *meta.Meta,
+	providerPayload ...any,
+) (int64, promptCacheAdmission, error) {
 	// A generation is priced once regardless of token estimates or receipts.
 	// Admission rejects unresolved contracts before this estimate can authorize work.
 	if meta != nil {
@@ -198,7 +223,7 @@ func estimatePreConsumedQuota(
 			result := quotautil.Compute(quotautil.ComputeInput{Usage: &relaymodel.Usage{},
 				ModelName: textRequest.Model, GroupRatio: groupRatio, ChannelModelConfigs: channelModelConfigs,
 				PricingAdaptor: provider, RequestTime: meta.StartTime})
-			return result.TotalQuota
+			return result.TotalQuota, promptCacheAdmission{}, nil
 		}
 	}
 	promptTokens := 0
@@ -219,7 +244,7 @@ func estimatePreConsumedQuota(
 			RequestTime:            meta.StartTime,
 		})
 		bufferQuota := int64(float64(config.PreConsumedQuota) * modelRatio * groupRatio)
-		return computeResult.TotalQuota + bufferQuota
+		return computeResult.TotalQuota + bufferQuota, promptCacheAdmission{}, nil
 	}
 
 	if meta != nil {
@@ -237,33 +262,33 @@ func estimatePreConsumedQuota(
 			if len(providerPayload) > 0 {
 				payload = providerPayload[0]
 			}
-			write5m, write1h, cacheErr := tierAdmissionCacheWrites(payload)
+			cache, cacheErr := decideTierAdmissionCacheWrites(meta, textRequest.Model, payload, promptTokens, channelModelConfigs, resolvePricingAdaptor(meta))
 			if cacheErr != nil {
-				return -1
+				return -1, promptCacheAdmission{}, errors.Wrap(cacheErr, "inspect tiered chat cache controls")
 			}
 			quote, applies, err := quotautil.EstimateTierAdmission(quotautil.ComputeInput{
 				Usage: promptUsage, ModelName: textRequest.Model, ModelRatio: modelRatio,
 				ChannelModelRatio: channelModelRatio, GroupRatio: groupRatio,
 				ChannelModelConfigs: channelModelConfigs, ChannelCompletionRatio: channelCompletionRatio,
 				PricingAdaptor: resolvePricingAdaptor(meta), RequestTime: meta.StartTime,
-			}, maxOutput, config.PreConsumedQuota, quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h, OutputCount: count})
+			}, maxOutput, config.PreConsumedQuota, quotautil.AdmissionOptions{CacheWrite5m: cache.write5m, CacheWrite1h: cache.write1h, OutputCount: count})
 			if applies {
 				if err != nil {
-					return -1
+					return -1, promptCacheAdmission{}, nil
 				}
-				return quote
+				return quote, cache, nil
 			}
 		}
 	}
 	quote := getPreConsumedQuota(textRequest, promptTokens, modelRatio*groupRatio, completionRatio)
 	if !isNativeGoogleChannel(meta) {
-		return quote
+		return quote, promptCacheAdmission{}, nil
 	}
 	return withMediaPromptQuota(quote, quotautil.ComputeInput{
 		Usage: promptUsage, ModelName: textRequest.Model, ModelRatio: modelRatio,
 		ChannelModelRatio: channelModelRatio, GroupRatio: groupRatio, ChannelModelConfigs: channelModelConfigs,
 		ChannelCompletionRatio: channelCompletionRatio, PricingAdaptor: resolvePricingAdaptor(meta), RequestTime: meta.StartTime,
-	})
+	}), promptCacheAdmission{}, nil
 }
 
 // preConsumeQuota reserves quota before the upstream request is sent. It returns
@@ -284,7 +309,17 @@ func preConsumeQuota(
 	if meta.ChannelType == channeltype.Jina {
 		return preConsumeJinaQuota(c, meta)
 	}
-	quote := estimatePreConsumedQuota(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta, tierAdmissionPreparedPayload(c, textRequest))
+	quote, cache, cacheErr := estimatePreConsumedQuotaWithCachePolicy(textRequest, promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta, tierAdmissionPreparedPayload(c, textRequest))
+	if cacheErr != nil {
+		openai.SetPromptCacheExplicitPin(c, meta, false)
+		if apiErr, ok := unbillableRequestControlError(cacheErr); ok {
+			return 0, apiErr
+		}
+		return 0, openai.ErrorWrapper(cacheErr, "invalid_request_quota", http.StatusBadRequest)
+	}
+	if err := recordPromptCacheAdmission(c, meta, cache); err != nil {
+		return 0, openai.ErrorWrapper(err, "invalid_request_quota", http.StatusBadRequest)
+	}
 	if quote >= 0 {
 		quote = saturatingQuotaAdd(quote, tooling.ConservativeDeepSeekToolQuota(c))
 		// Server tools the Responses fallback forwards (Claude web search)
@@ -376,7 +411,7 @@ func postConsumeQuota(ctx context.Context,
 	traceId := billingID.traceID
 	if meta.TokenId > 0 && meta.UserId > 0 && meta.ChannelId > 0 {
 		toolSummary := billingID.toolSummary
-		metadata := billingEstimateMetadata(model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens), usage.BillingEstimateReason)
+		metadata := reportedCostFloorMetadata(billingEstimateMetadata(model.AppendCacheWriteTokensMetadata(nil, usage.CacheWrite5mTokens, usage.CacheWrite1hTokens), usage.BillingEstimateReason), usage, computeResult)
 
 		billing.PostConsumeQuotaDetailed(billing.QuotaConsumeDetail{
 			Ctx:                ctx,
@@ -407,7 +442,7 @@ func postConsumeQuota(ctx context.Context,
 			RequestId:          requestId,
 			TraceId:            traceId,
 			ProvisionalLogId:   provisionalLogId,
-			UserAPIFormat:      resolveUserAPIFormat(meta.Mode),
+			UserAPIFormat:      resolveMetaUserAPIFormat(meta),
 			UpstreamAPIFormat:  apitype.String(meta.APIType),
 			UpstreamEndpoint:   meta.UpstreamRequestURL,
 			ToolUsageSummary:   toolSummary,
@@ -423,6 +458,21 @@ func postConsumeQuota(ctx context.Context,
 	}
 
 	return quota
+}
+
+// resolveMetaUserAPIFormat returns the API format the client actually used.
+// A Responses client served through the Chat Completions fallback runs with
+// meta.Mode switched to ChatCompletions, so the fallback flag takes precedence.
+// Parameter m is the attempt metadata and may be nil. It returns the
+// snake_case format name, or "" when unknown.
+func resolveMetaUserAPIFormat(m *meta.Meta) string {
+	if m == nil {
+		return ""
+	}
+	if m.ResponseAPIFallback {
+		return resolveUserAPIFormat(relaymode.ResponseAPI)
+	}
+	return resolveUserAPIFormat(m.Mode)
 }
 
 // resolveUserAPIFormat returns the snake_case user-facing API format name for the given relay mode.

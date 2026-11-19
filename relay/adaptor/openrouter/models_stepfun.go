@@ -8,7 +8,7 @@ import "github.com/Laisky/one-api/relay/adaptor"
 func stepfunModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"stepfun/step-3.5-flash": {
-			Ratio:                       nativeRate(0.09999999999999999),
+			Ratio:                       nativeRate(0.1),
 			CompletionRatio:             3,
 			ContextLength:               262144,
 			MaxOutputTokens:             65536,
@@ -20,7 +20,7 @@ func stepfunModels() map[string]adaptor.ModelConfig {
 			Description:                 "stepfun/step-3.5-flash on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"stepfun/step-3.7-flash": {
-			Ratio:                       nativeRate(0.19999999999999998),
+			Ratio:                       nativeRate(0.2),
 			CompletionRatio:             5.75,
 			CachedInputRatio:            nativeRate(0.04),
 			ContextLength:               262144,

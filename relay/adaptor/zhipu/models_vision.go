@@ -12,6 +12,10 @@ import (
 //   - https://docs.bigmodel.cn/cn/guide/models/vlm/glm-4.6v
 //   - https://docs.bigmodel.cn/cn/guide/models/free/glm-4.6v-flash
 //   - https://docs.bigmodel.cn/cn/guide/models/free/glm-4v-flash
+//
+// Tier boundaries (re-verified 2026-11-18 on https://docs.bigmodel.cn/cn/guide/start/pricing):
+// rows read 输入长度 [0, 32K) / ≥32K (or [32K, 128K), [32K, 64K)), so the long tier
+// applies FROM 32K. K is undefined there; 32_000 is the smaller, never under-billing reading.
 var flagshipVisionModels = map[string]adaptor.ModelConfig{
 	// AutoGLM-Phone: vision-language AI phone assistant (free for a limited time).
 	"autoglm-phone": {

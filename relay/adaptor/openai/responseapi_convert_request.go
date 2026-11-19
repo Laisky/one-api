@@ -108,6 +108,10 @@ func ConvertResponseAPIToChatCompletionRequestWithOptions(request *ResponseAPIRe
 		TopP:         request.TopP,
 		ToolChoice:   request.ToolChoice,
 	}
+	// The Chat destination decides independently whether the key is forwarded;
+	// a withheld copy keeps any earlier destination's scoped value off the wire.
+	chatReq.PromptCacheKey = request.PromptCacheKey
+	chatReq.PromptCacheKey.Withhold()
 
 	if request.MaxOutputTokens != nil {
 		chatReq.MaxCompletionTokens = request.MaxOutputTokens

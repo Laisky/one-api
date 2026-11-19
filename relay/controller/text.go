@@ -131,8 +131,9 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// pre-consume quota
 	promptUsage, bizErr := estimatePromptUsage(c, meta, textRequest)
 	if bizErr != nil {
-		lg.Warn("estimatePromptUsage failed",
-			zap.Error(bizErr.RawError),
+		// The returned error is logged once by the relay outcome at its
+		// status-derived level; this DEBUG line only adds admission context.
+		lg.Debug("estimatePromptUsage failed",
 			zap.Int("status_code", bizErr.StatusCode),
 			zap.String("err_msg", bizErr.Message))
 		return bizErr
@@ -141,8 +142,9 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	meta.PromptTokens = promptTokens
 	preConsumedQuota, bizErr := preConsumeQuota(c, preparedChatQuotaRequest(c, textRequest), promptUsage, modelRatio, completionRatio, channelModelRatio, groupRatio, channelModelConfigs, channelCompletionRatio, meta)
 	if bizErr != nil {
-		lg.Warn("preConsumeQuota failed",
-			zap.Error(bizErr.RawError),
+		// The returned error is logged once by the relay outcome at its
+		// status-derived level; this DEBUG line only adds admission context.
+		lg.Debug("preConsumeQuota failed",
 			zap.Int("status_code", bizErr.StatusCode),
 			zap.String("err_msg", bizErr.Message))
 		return bizErr
@@ -176,10 +178,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			Ctx:                    gmw.Ctx(c),
 		})
 		streaming.StoreTracker(c, tracker)
-		upstreamCtx, cancelUpstream := context.WithCancel(gmw.Ctx(c))
-		c.Request = c.Request.WithContext(upstreamCtx)
-		streaming.BindUpstreamCancellation(c, cancelUpstream)
-		defer cancelUpstream()
+		defer bindStreamingUpstreamContext(c)()
 
 	}
 
@@ -319,7 +318,7 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		} else {
 			// Own both the refund and ledger reconciliation before the deferred audit.
 			// The detached lifecycle survives cancellation without duplicate credits.
-			scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "do_request_failed")
+			scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, doRequestRefundReason(err))
 		}
 		// ErrorWrapper will log the error, so we don't need to log it here
 		return openai.ErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
@@ -338,11 +337,18 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 			lg.Warn("record provisional user request cost failed", zap.Error(err), zap.String("request_id", requestId))
 		}
 	}
+	// A provider error carrying a usage receipt is paid work: settle it below
+	// like any errored response with usage instead of refunding or replaying it.
+	var paidErrorUsage *relaymodel.Usage
 	if isErrorHappened(meta, resp) {
+		paidErrorUsage = paidUpstreamErrorUsage(c, meta, requestAdaptor, resp)
+	}
+	if paidErrorUsage == nil && isErrorHappened(meta, resp) {
 		if retainDeepSeekToolAttempt(c, preConsumedQuota, meta.TokenId, "upstream_http_error") {
 			return RelayErrorHandlerWithContext(c, resp)
 		}
 		// refund pre-consumed quota under lifecycle management so shutdown waits for it
+		recordUpstreamClientRejection(c, resp.StatusCode)
 		scheduleConservativeRefund(c, preConsumedQuota, meta.TokenId, "upstream_http_error")
 		// Reconcile provisional record to 0 since upstream returned error
 		quotaId := c.GetInt(ctxkey.Id)
@@ -355,7 +361,13 @@ func RelayTextHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 
 	// do response
 	c.Set(ctxkey.SkipAdaptorResponseBodyLog, true)
-	usage, respErr := requestAdaptor.DoResponse(c, resp, meta)
+	var usage *relaymodel.Usage
+	var respErr *relaymodel.ErrorWithStatusCode
+	if paidErrorUsage != nil {
+		usage, respErr = paidErrorUsage, RelayErrorHandlerWithContext(c, resp)
+	} else {
+		usage, respErr = requestAdaptor.DoResponse(c, resp, meta)
+	}
 	applyNativeGoogleUsageEvidence(c, usage)
 	if upstreamCapture != nil {
 		logUpstreamResponseFromCapture(lg, resp, upstreamCapture, "chat_completions")
@@ -505,7 +517,10 @@ func getRequestBody(c *gin.Context, meta *metalib.Meta, textRequest *relaymodel.
 		meta.OriginModelName == meta.ActualModelName &&
 		meta.ChannelType != channeltype.OpenAI &&
 		meta.ChannelType != channeltype.Baichuan &&
-		meta.ForcedSystemPrompt == "" {
+		meta.ForcedSystemPrompt == "" &&
+		// A Responses-wire upstream (Azure GPT-5, Responses-format compatible
+		// channels) needs the converted body, never the raw Chat payload.
+		!openai.ShouldForceResponseAPI(meta) {
 		c.Set(ctxkey.ConvertedRequest, textRequest)
 		// Decide on decoded root keys, never on byte substrings: a JSON escape
 		// or case-folded spelling of extra_body (or of any typed field) must

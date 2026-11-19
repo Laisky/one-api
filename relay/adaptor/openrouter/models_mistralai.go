@@ -45,7 +45,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 		},
 		"mistralai/devstral-small": {
 			Ratio:                       nativeRate(0.1),
-			CompletionRatio:             2.9999999999999996,
+			CompletionRatio:             3,
 			CachedInputRatio:            nativeRate(0.01),
 			ContextLength:               131072,
 			InputModalities:             []string{"text"},
@@ -56,7 +56,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "Devstral Small 1.1 is a 24B parameter open-weight language model for software engineering agents, developed by Mistral AI in collaboration with All Hands AI. Finetuned from Mistral Small 3.1 and... [Deprecated: no longer listed on OpenRouter's live model catalog as of 2026-07-13]",
 		},
 		"mistralai/ministral-14b-2512": {
-			Ratio:                       nativeRate(0.19999999999999998),
+			Ratio:                       nativeRate(0.2),
 			CompletionRatio:             1,
 			CachedInputRatio:            nativeRate(0.02),
 			ContextLength:               262144,
@@ -69,7 +69,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "mistralai/ministral-14b-2512 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"mistralai/ministral-3b-2512": {
-			Ratio:                       nativeRate(0.09999999999999999),
+			Ratio:                       nativeRate(0.1),
 			CompletionRatio:             1,
 			CachedInputRatio:            nativeRate(0.01),
 			ContextLength:               131072,
@@ -96,7 +96,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 		},
 		"mistralai/mistral-7b-instruct-v0.1": {
 			Ratio:                       nativeRate(0.11),
-			CompletionRatio:             1.7272727272727273,
+			CompletionRatio:             0.19 / 0.11,
 			ContextLength:               2824,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
@@ -107,7 +107,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 		"mistralai/mistral-large": {
 			Ratio:                       nativeRate(2),
 			CompletionRatio:             3,
-			CachedInputRatio:            nativeRate(0.19999999999999998),
+			CachedInputRatio:            nativeRate(0.2),
 			ContextLength:               128000,
 			MaxOutputTokens:             102400,
 			InputModalities:             []string{"text", "file"},
@@ -119,7 +119,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 		"mistralai/mistral-large-2407": {
 			Ratio:                       nativeRate(2),
 			CompletionRatio:             3,
-			CachedInputRatio:            nativeRate(0.19999999999999998),
+			CachedInputRatio:            nativeRate(0.2),
 			ContextLength:               131072,
 			MaxOutputTokens:             104857,
 			InputModalities:             []string{"text", "file"},
@@ -169,16 +169,16 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			HuggingFaceID:               "mistralai/Mistral-Large-4-1T-A52B",
 		},
 		"mistralai/mistral-medium-3": {
-			Ratio:                       nativeRate(0.39999999999999997),
-			CompletionRatio:             5,
-			CachedInputRatio:            nativeRate(0.04),
+			Ratio:                       nativeRate(0.44),
+			CompletionRatio:             2.2 / 0.44,
+			CachedInputRatio:            nativeRate(0.044),
 			ContextLength:               131072,
 			MaxOutputTokens:             104857,
 			InputModalities:             []string{"text", "image", "file"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "max_tokens", "presence_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
-			Description:                 "mistralai/mistral-medium-3 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "mistralai/mistral-medium-3 on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"mistralai/mistral-medium-3-5": {
 			Ratio:                       nativeRate(1.5),
@@ -195,16 +195,16 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			HuggingFaceID:               "mistralai/Mistral-Medium-3.5-128B",
 		},
 		"mistralai/mistral-medium-3.1": {
-			Ratio:                       nativeRate(0.39999999999999997),
-			CompletionRatio:             5,
-			CachedInputRatio:            nativeRate(0.04),
+			Ratio:                       nativeRate(0.44),
+			CompletionRatio:             2.2 / 0.44,
+			CachedInputRatio:            nativeRate(0.044),
 			ContextLength:               131072,
 			MaxOutputTokens:             104857,
 			InputModalities:             []string{"text", "image", "file"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "max_tokens", "presence_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_p"},
-			Description:                 "mistralai/mistral-medium-3.1 on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
+			Description:                 "mistralai/mistral-medium-3.1 on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"mistralai/mistral-nemo": {
 			Ratio:                       nativeRate(0.029),
@@ -219,7 +219,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "mistralai/mistral-nemo on OpenRouter; public host-specific catalogue verified 2026-10-12. Published routing-default prices, not a quote for every provider selection. Unpublished fields remain unspecified.",
 		},
 		"mistralai/mistral-saba": {
-			Ratio:                       nativeRate(0.19999999999999998),
+			Ratio:                       nativeRate(0.2),
 			CompletionRatio:             3,
 			CachedInputRatio:            nativeRate(0.02),
 			ContextLength:               32768,
@@ -231,7 +231,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "mistralai/mistral-saba on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"mistralai/mistral-small-24b-instruct-2501": {
-			Ratio:                       nativeRate(0.049999999999999996),
+			Ratio:                       nativeRate(0.05),
 			CompletionRatio:             1.6,
 			ContextLength:               32768,
 			MaxOutputTokens:             16384,
@@ -259,7 +259,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 		},
 		"mistralai/mistral-small-3.1-24b-instruct": {
 			Ratio:                       nativeRate(0.351),
-			CompletionRatio:             1.5811965811965811,
+			CompletionRatio:             0.555 / 0.351,
 			ContextLength:               128000,
 			MaxOutputTokens:             102400,
 			InputModalities:             []string{"text", "image"},
@@ -270,8 +270,11 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "mistralai/mistral-small-3.1-24b-instruct on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 		},
 		"mistralai/mistral-small-3.2-24b-instruct": {
-			Ratio:                       nativeRate(0.1),
-			CompletionRatio:             3,
+			Ratio:           nativeRate(0.075),
+			CompletionRatio: 0.2 / 0.075,
+			// The 2026-11-18 listing (top provider DeepInfra fp8) publishes no
+			// input_cache_read price, so cached prompt tokens bill at the input rate
+			// instead of the former unpublished $0.01 discount.
 			ContextLength:               256000,
 			MaxOutputTokens:             26214,
 			InputModalities:             []string{"image", "text"},
@@ -279,13 +282,12 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "logprobs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
-			Description:                 "mistralai/mistral-small-3.2-24b-instruct on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
-			CachedInputRatio:            nativeRate(0.01),
+			Description:                 "mistralai/mistral-small-3.2-24b-instruct on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"mistralai/mixtral-8x22b-instruct": {
 			Ratio:                       nativeRate(2),
 			CompletionRatio:             3,
-			CachedInputRatio:            nativeRate(0.19999999999999998),
+			CachedInputRatio:            nativeRate(0.2),
 			ContextLength:               65536,
 			MaxOutputTokens:             52428,
 			InputModalities:             []string{"text", "file"},
@@ -308,7 +310,7 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 		},
 		"mistralai/voxtral-small-24b-2507": {
 			Ratio:                       nativeRate(0.1),
-			CompletionRatio:             2.9999999999999996,
+			CompletionRatio:             3,
 			CachedInputRatio:            nativeRate(0.01),
 			ContextLength:               32768,
 			InputModalities:             []string{"text", "audio", "file"},

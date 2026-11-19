@@ -68,7 +68,7 @@ func nousresearchModels() map[string]adaptor.ModelConfig {
 		},
 		"nousresearch/hermes-4-70b": {
 			Ratio:                       nativeRate(0.13),
-			CompletionRatio:             3.076923076923077,
+			CompletionRatio:             0.4 / 0.13,
 			ContextLength:               131072,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},

@@ -50,21 +50,88 @@ func settleRetainedRequestAdmission(c *gin.Context, amount int64, tokenID int, r
 	}
 	c.Set(responseSettlementKey, true)
 	markBillingReconciled(c)
+	publishRetainedReservation(c, m, amount, tokenID,
+		"Conservative reservation retained: upstream execution or final usage is uncertain; reconciliation required",
+		"uncertain_upstream_admission_"+reason, "settleRetainedRequestAdmission")
+	return true
+}
+
+// publishRetainedReservation records an already-debited reservation as a
+// visible, estimate-flagged charge without another debit: it reconciles the
+// provisional log into a consume log, adds the amount to used quota and
+// records the request cost. Parameters: c is the request context, m the
+// attempt metadata, amount the retained reservation, tokenID the debited
+// token, content the log text, reason the billing_estimate_reason and stage
+// the critical-task label. It returns nothing; the writes run as detached
+// critical billing work.
+func publishRetainedReservation(c *gin.Context, m *metalib.Meta, amount int64, tokenID int, content, reason, stage string) {
 	entry := &model.Log{UserId: m.UserId, ChannelId: m.ChannelId, ModelName: userVisibleModelName(m, m.ActualModelName), TokenName: m.TokenName,
-		RequestId: c.GetString(ctxkey.RequestId), IsStream: m.IsStream,
-		Content:  "Conservative reservation retained: upstream execution or final usage is uncertain; reconciliation required",
-		Metadata: billingEstimateMetadata(nil, "uncertain_upstream_admission_"+reason)}
+		RequestId: c.GetString(ctxkey.RequestId), IsStream: m.IsStream, Content: content,
+		Metadata: billingEstimateMetadata(nil, reason)}
 	model.SetLogExternalUUIDs(entry, m.UserUUID, m.ChannelUUID, m.TokenUUID)
 	provisionalID, userID, requestID := c.GetInt(ctxkey.ProvisionalLogId), m.UserId, entry.RequestId
-	goDetachedBillingWork(relayctx.Detach(c), "settleRetainedRequestAdmission", func(ctx context.Context) {
+	goDetachedBillingWork(relayctx.Detach(c), stage, func(ctx context.Context) {
 		billing.PostConsumeQuotaWithLog(ctx, tokenID, 0, amount, entry, provisionalID)
 		if requestID != "" {
 			if err := model.UpdateUserRequestCostQuotaByRequestID(userID, requestID, amount); err != nil {
-				gmw.GetLogger(ctx).Error("record retained admission cost failed", zap.Error(err))
+				gmw.GetLogger(ctx).Error("record retained reservation cost failed", zap.Error(err))
 			}
 		}
 	})
-	return true
+}
+
+// retainedReservationPendingKey marks an attempt whose reservation the
+// conservative refund policy retained (the request may have reached the
+// provider and no receipt proved its cost) without publishing a charge. A
+// cross-channel retry refunds it (ResetPerAttemptBillingForRetry); a terminal
+// relay failure publishes it (SettleTerminalRetainedReservation). The value is
+// the refund reason.
+const retainedReservationPendingKey = "billing_retained_reservation_pending"
+
+// markRetainedReservationPending records that this attempt's reservation was
+// retained but not yet published. Parameters: c is the request context and
+// reason the conservative refund reason. It returns nothing.
+func markRetainedReservationPending(c *gin.Context, reason string) {
+	if reason == "" {
+		reason = "unspecified"
+	}
+	c.Set(retainedReservationPendingKey, reason)
+}
+
+// SettleTerminalRetainedReservation publishes the final failed attempt's
+// retained reservation once the relay has stopped retrying. The documented
+// policy keeps a possibly-forwarded attempt's hold on a terminal failure so
+// unmetered provider work is never billed as zero; before this, the hold stayed
+// debited while used quota, the request cost and the logs showed nothing (the
+// provisional log stayed filtered out of every Logs query). Parameter c is the
+// request context. It returns nothing and is a no-op unless a retained, still
+// unpublished and unrefunded reservation exists.
+func SettleTerminalRetainedReservation(c *gin.Context) {
+	if c == nil {
+		return
+	}
+	reason := c.GetString(retainedReservationPendingKey)
+	if reason == "" {
+		return
+	}
+	c.Set(retainedReservationPendingKey, "")
+	amount := c.GetInt64(ctxkey.PreConsumedQuotaAmount)
+	if amount <= 0 || c.GetBool(ctxkey.PreConsumedQuotaRefundClaimed) || c.GetBool(responseSettlementKey) {
+		return
+	}
+	value, ok := c.Get(ctxkey.Meta)
+	if !ok {
+		return
+	}
+	m, ok := value.(*metalib.Meta)
+	if !ok || m == nil || m.UserId <= 0 || m.ChannelId <= 0 || m.ActualModelName == "" || m.TokenId <= 0 {
+		return
+	}
+	gmw.GetLogger(c).Warn("publishing retained reservation after a terminal upstream failure",
+		zap.Int64("retained_quota", amount), zap.String("reason", reason))
+	publishRetainedReservation(c, m, amount, m.TokenId,
+		"Reservation retained after a terminal upstream failure: the request may have reached the provider and no receipt proved its cost",
+		"retained_reservation_"+reason, "settleTerminalRetainedReservation")
 }
 
 // retainDeepSeekToolAttempt settles an already-forwarded uncertain DeepSeek

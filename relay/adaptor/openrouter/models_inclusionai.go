@@ -9,7 +9,7 @@ func inclusionaiModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"inclusionai/ling-2.6-1t": {
 			Ratio:                       nativeRate(0.075),
-			CompletionRatio:             8.333333333333334,
+			CompletionRatio:             0.625 / 0.075,
 			CachedInputRatio:            nativeRate(0.015),
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,
@@ -32,9 +32,9 @@ func inclusionaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "Ling-2.6-flash is an instant (instruct) model from inclusionAI with 104B total parameters and 7.4B active parameters, designed for real-world agents that require fast responses, strong execution, and high token efficiency....",
 		},
 		"inclusionai/ling-3.0-flash": {
-			Ratio:                       nativeRate(0.020999999999999998),
-			CompletionRatio:             3.0000000000000004,
-			CachedInputRatio:            nativeRate(0.004200000000000001),
+			Ratio:                       nativeRate(0.021),
+			CompletionRatio:             3,
+			CachedInputRatio:            nativeRate(0.0042),
 			ContextLength:               262144,
 			MaxOutputTokens:             32768,
 			InputModalities:             []string{"text"},
@@ -143,7 +143,7 @@ func inclusionaiModels() map[string]adaptor.ModelConfig {
 		},
 		"inclusionai/ring-2.6-1t": {
 			Ratio:                       nativeRate(0.075),
-			CompletionRatio:             8.333333333333334,
+			CompletionRatio:             0.625 / 0.075,
 			CachedInputRatio:            nativeRate(0.015),
 			ContextLength:               262144,
 			MaxOutputTokens:             65536,

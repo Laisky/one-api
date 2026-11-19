@@ -23,7 +23,7 @@ func qwenTranslationModels() map[string]adaptor.ModelConfig {
 			SupportedFeatures:           nil,
 		},
 		"qwen-mt-turbo": {
-			Ratio:                       0.05142857142857143,
+			Ratio:                       nativeRate(0.72),
 			CompletionRatio:             2.79,
 			CachedInputRatio:            nativeRate(0.144),
 			ContextLength:               4096,

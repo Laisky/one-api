@@ -57,7 +57,7 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 		},
 		"nvidia/nemotron-3-super-120b-a12b": {
 			Ratio:                       nativeRate(0.075),
-			CompletionRatio:             5.33333333333333,
+			CompletionRatio:             0.4 / 0.075,
 			ContextLength:               262144,
 			MaxOutputTokens:             16384,
 			InputModalities:             []string{"text"},
@@ -84,9 +84,9 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 			Description:                 "nvidia/nemotron-3-super-120b-a12b:free on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"nvidia/nemotron-3-ultra-550b-a55b": {
-			Ratio:                       nativeRate(0.6),
-			CompletionRatio:             4,
-			CachedInputRatio:            nativeRate(0.12),
+			Ratio:                       nativeRate(0.5),
+			CompletionRatio:             2.2 / 0.5,
+			CachedInputRatio:            nativeRate(0.1),
 			ContextLength:               262144,
 			MaxOutputTokens:             182520,
 			InputModalities:             []string{"text"},
@@ -96,7 +96,7 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"high", "medium", "none"},
 			DefaultReasoningEffort:      "high",
 			HuggingFaceID:               "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16",
-			Description:                 "nvidia/nemotron-3-ultra-550b-a55b on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "nvidia/nemotron-3-ultra-550b-a55b on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
 		},
 		"nvidia/nemotron-3-ultra-550b-a55b:free": {
 			Ratio:                       0,
@@ -113,7 +113,7 @@ func nvidiaModels() map[string]adaptor.ModelConfig {
 			Description:                 "nvidia/nemotron-3-ultra-550b-a55b:free on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges. The published token tariff is explicitly free; account limits still apply.",
 		},
 		"nvidia/nemotron-3.5-content-safety": {
-			Ratio:                       nativeRate(0.19999999999999998),
+			Ratio:                       nativeRate(0.2),
 			CompletionRatio:             1,
 			ContextLength:               131072,
 			MaxOutputTokens:             117964,

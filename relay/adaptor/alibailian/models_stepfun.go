@@ -11,12 +11,12 @@ func stepfunModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"stepfun/step-3.7-flash": {
 			Ratio:           nativeRate(1.35),
-			CompletionRatio: 5.999999999999999,
+			CompletionRatio: 6,
 			Description:     "stepfun/step-3.7-flash on alibailian; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"stepfun/step-5-preview": {
 			Ratio:           nativeRate(7),
-			CompletionRatio: 2.857142857142857,
+			CompletionRatio: 20.0 / 7.0,
 			Description:     "stepfun/step-5-preview on alibailian; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 	}
