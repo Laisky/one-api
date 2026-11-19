@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"maps"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -74,16 +75,24 @@ func retainUnpricedUsage(ctx context.Context, usage *relaymodel.Usage, result qu
 	return true
 }
 
+// cloneLogMetadata returns a writable copy of metadata so a caller can add
+// keys without mutating the map it was given. Parameter metadata may be nil.
+// It returns a non-nil map holding the same entries.
+func cloneLogMetadata(metadata model.LogMetadata) model.LogMetadata {
+	out := maps.Clone(metadata)
+	if out == nil {
+		out = make(model.LogMetadata)
+	}
+	return out
+}
+
 // billingEstimateMetadata adds an explicit estimation label without mutating an
 // existing metadata map. An empty reason preserves measured-usage metadata.
 func billingEstimateMetadata(metadata model.LogMetadata, reason string) model.LogMetadata {
 	if reason == "" {
 		return metadata
 	}
-	out := make(model.LogMetadata, len(metadata)+2)
-	for key, value := range metadata {
-		out[key] = value
-	}
+	out := cloneLogMetadata(metadata)
 	out["billing_estimated"] = true
 	out[model.LogMetadataKeyEstimatedCharge] = true
 	out["billing_estimate_reason"] = reason
@@ -112,10 +121,7 @@ func reportedCostFloorMetadata(metadata model.LogMetadata, usage *relaymodel.Usa
 	if usage == nil || !result.ReportedCostFloor {
 		return metadata
 	}
-	out := make(model.LogMetadata, len(metadata)+2)
-	for key, value := range metadata {
-		out[key] = value
-	}
+	out := cloneLogMetadata(metadata)
 	out["billing_source"] = "provider_reported_cost"
 	out["upstream_cost_usd"] = usage.UpstreamCostUSD
 	return out

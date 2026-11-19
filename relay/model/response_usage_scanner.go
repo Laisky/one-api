@@ -190,8 +190,9 @@ func (s *responseReceiptScanner) decodedKey() string {
 	if bytes.IndexByte(s.key, '\\') < 0 {
 		return string(s.key)
 	}
-	quoted := make([]byte, 0, len(s.key)+2)
-	quoted = append(append(append(quoted, '"'), s.key...), '"')
+	// s.key is bounded by responseReceiptKeyLimit, so the quoted name fits.
+	var buf [responseReceiptKeyLimit + 2]byte
+	quoted := append(append(append(buf[:0], '"'), s.key...), '"')
 	var name string
 	if json.Unmarshal(quoted, &name) != nil {
 		return ""
