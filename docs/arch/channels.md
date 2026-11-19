@@ -122,13 +122,13 @@ Classification (examples):
   - Action: no suspension, no auto‑disable. Emit failure metric only.
 - Rate limit (channel‑origin transient):
   - 429, or vendor‑specific rate‑limit types.
-  - Action: suspend the ability for `CHANNEL_SUSPEND_SECONDS_FOR_429`.
+  - Action: advance the adaptive ability cooldown for a provider response.
 - Capacity (model/token/context window limits):
   - 413, or explicit vendor messages for token/context overflow.
   - Action: no suspension by default; rely on retry strategy to pick channels with larger `max_tokens`.
 - Server/transport transient (channel‑origin):
   - 5xx responses; network timeouts/EOF/connection reset; upstream gateway failures.
-  - Action: suspend the ability for a short window `CHANNEL_SUSPEND_SECONDS_FOR_5XX`.
+  - Action: advance the adaptive ability cooldown for a provider response, except where an existing transient-retry exemption applies. Failures without provider-response provenance retain the legacy handling.
 - Auth/permission/quota (potentially channel‑wide):
   - 401/403; error types `authentication_error`, `permission_error`, `insufficient_quota`; known vendor strings like “API key not valid/expired”, “organization restricted”, “已欠费/余额不足”.
   - Action: suspend the ability for `CHANNEL_SUSPEND_SECONDS_FOR_AUTH`. If `monitor.ShouldDisableChannel` deems the condition fatal (e.g., invalid API key or deactivated account), auto‑disable the entire channel.
@@ -148,10 +148,9 @@ Suspension (temporary, per ability)
 - Scope: always the ability (group, model, channel_id), not the entire channel.
 - Triggers: channel‑origin/transient classes (rate‑limit 429, server/transport 5xx/network), and optionally auth/quota/permission depending on severity.
 - Actions:
-  - 429: set `abilities.suspend_until = now + CHANNEL_SUSPEND_SECONDS_FOR_429`.
-  - 5xx/network: set `abilities.suspend_until = now + CHANNEL_SUSPEND_SECONDS_FOR_5XX`.
+  - Eligible upstream 429 and 5xx responses share a persisted streak: 10 seconds, 30 seconds, 60 seconds, 3 minutes, then 10 minutes (cap). This includes provider `AccountQuotaExceeded` reported as 429 and does not disable unrelated model abilities. An expired deadline does not clear the streak. Only a successful provider-backed relay clears it. The fixed suspension for authentication or an operator override is independent.
   - Auth/quota/permission: set `abilities.suspend_until = now + CHANNEL_SUSPEND_SECONDS_FOR_AUTH`, unless immediately escalated to auto‑disable by policy.
-- Effect: the ability is excluded from selection until suspension expires and the cache refreshes.
+- Effect: routing excludes the ability until both deadlines expire. This process publishes its own updates to its cache after persistence; other replicas learn persisted updates at their next cache rebuild.
 - Channel saves keep it. The `abilities` table is a projection of the channel's models, groups, status, and priority that also carries this runtime state, so every channel write reconciles it in place (`syncAbilitiesWithDB`): abilities the configuration drops are deleted, new ones are inserted, and retained ones are updated without touching `suspend_until`. Saving a testing model, name, priority, status, pricing, or a model-list change therefore never lifts an active suspension of a retained (group, model). A save that changes the upstream the suspension was measured against — channel type, key, base URL, config, model mapping, or inference profile map — does lift the channel's suspensions, because rotating a revoked key or repointing the endpoint is how an administrator remedies the failure.
 
 Auto‑disable (persistent, per channel)
@@ -172,8 +171,8 @@ Auto‑disable (persistent, per channel)
 
 Environment variables (see `common/config/config.go`):
 
-- `CHANNEL_SUSPEND_SECONDS_FOR_429` (int seconds, default 60): ability suspension window after 429.
-- `CHANNEL_SUSPEND_SECONDS_FOR_5XX` (int seconds, default 30): ability suspension window after transient 5xx/network errors.
+- `CHANNEL_SUSPEND_SECONDS_FOR_429` (int seconds, optional): explicit fixed-delay override for 429. With no override, proven upstream responses use the adaptive ladder.
+- `CHANNEL_SUSPEND_SECONDS_FOR_5XX` (int seconds, optional): explicit fixed-delay override for 5xx. Without it, proven upstream responses use the adaptive ladder; legacy non-proven failures that still qualify use 30 seconds.
 - `CHANNEL_SUSPEND_SECONDS_FOR_AUTH` (int seconds, default 60): ability suspension window after auth/quota/permission errors, unless escalated to channel‑wide auto‑disable.
 - `MEMORY_CACHE_ENABLED` (bool): enable in‑memory channel cache. Auto‑enabled when Redis is enabled.
 - `SYNC_FREQUENCY` (int seconds, default 600): cache refresh interval for channels and abilities.
@@ -184,10 +183,12 @@ Environment variables (see `common/config/config.go`):
 
 ## Operational guidance
 
+- Retry budget: `RetryTimes` defaults to 3 when no override is stored. An explicit 0 still disables ordinary provider failover. A retryable 429 doubles a positive base budget (up to six alternate attempts by default), subject to eligible channels and the existing replay, billing and pinning rules.
 - Priority assignment: higher integer = higher priority. Place primary channels at higher numbers; backups use lower numbers. On any retryable failure (429 included) the retry engine excludes the failed channel and walks the remaining channels strictly by descending priority, so backups are reached only after every higher‑priority channel has been tried.
 - Max tokens configuration: populate `Model Configs` with realistic `max_tokens` per model. This enables the 413 path to move to channels with larger capacity.
 - Pinning to a specific channel disables retries: if a request carries a specific channel id (populated into `SpecificChannelId`), the system will not try alternatives.
-- Cache consistency: suspensions take effect for new requests after the next cache refresh; the current request already excludes the failed channel via its local exclusion set.
+- Cache consistency: the current request excludes the failed channel before asynchronous persistence. Other replicas can still use stale in-memory routing until they rebuild, although outcomes are persisted against the same database row. Outcome ordering uses host UTC clocks, so keep replica clocks synchronized. A completed success writes a recovery watermark even on an otherwise healthy ability, so a delayed failure cannot reopen it.
+- Rollout: let the schema-migrating primary create the additive ability columns before starting new non-migrating replicas. Older binaries do not read the adaptive deadline. Existing fixed deadlines are preserved.
 - Prefer ability‑level suspension for transient issues; reserve channel‑wide disable for fatal vendor/account problems.
 
 ## Known limitations

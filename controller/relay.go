@@ -152,13 +152,16 @@ func Relay(c *gin.Context) {
 	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
 
 	observation := &relayOutcomeObservation{retryOutcome: "not_needed"}
+	attemptStarted := time.Now().UTC()
 	bizErr := observation.invoke(c, relayMode)
+	attemptCompleted := time.Now().UTC()
 	defer func() { observation.failure = bizErr; observation.logFinal(c) }()
 	if bizErr == nil {
 		if c.GetString(asyncvideo.DurableTaskKey) != "" {
 			PrometheusMonitor.RecordRelayRequest(c, relayMeta, startTime, c.Writer.Status() < 400, 0, 0, 0)
 			return
 		}
+		recordRelayCooldownSuccess(ctx, c, relayMode, attemptStarted, attemptCompleted)
 		monitor.Emit(channelId, true)
 
 		// Record successful relay request metrics
@@ -177,6 +180,8 @@ func Relay(c *gin.Context) {
 	requestURL := c.Request.URL.String()
 	// Ensure channel error processing is completed during graceful drain
 	goProcessChannelRelayError(ctx, bizErr, processChannelRelayErrorParams{
+		StartedAt:     attemptStarted,
+		CompletedAt:   attemptCompleted,
 		Attempt:       observation.attempts,
 		RequestID:     requestId,
 		UserId:        userId,
@@ -401,11 +406,14 @@ func Relay(c *gin.Context) {
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 
 		// Record retry attempt
-		retryStartTime := time.Now()
+		retryStartTime := time.Now().UTC()
 		retryMeta := meta.GetByContext(c)
 
+		attemptStarted = retryStartTime
 		bizErr = observation.invoke(c, relayMode)
+		attemptCompleted = time.Now().UTC()
 		if bizErr == nil {
+			recordRelayCooldownSuccess(ctx, c, relayMode, attemptStarted, attemptCompleted)
 			// Record successful retry
 			PrometheusMonitor.RecordRelayRequest(c, retryMeta, retryStartTime, true, 0, 0, 0)
 			return
@@ -431,6 +439,8 @@ func Relay(c *gin.Context) {
 		retryActualModel := retryMeta.ActualModelName
 		actualModel = retryActualModel
 		goProcessChannelRelayError(ctx, bizErr, processChannelRelayErrorParams{
+			StartedAt:     attemptStarted,
+			CompletedAt:   attemptCompleted,
 			Attempt:       observation.attempts,
 			RequestID:     requestId,
 			UserId:        userId,

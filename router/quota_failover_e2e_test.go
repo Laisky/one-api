@@ -50,6 +50,10 @@ type quotaRouterSpec struct {
 	memory     bool
 	alternate  string
 	requests   int
+	// leaveRetryBudgetUntouched exercises the package default, not an override.
+	leaveRetryBudgetUntouched bool
+	// seedExpiredCooldown verifies an actual winning attempt resets its streak.
+	seedExpiredCooldown bool
 }
 
 // quotaFailure returns the issue #625 HTTP 429 failure in its flat or nested envelope.
@@ -114,8 +118,16 @@ func runQuotaRouterSpec(t *testing.T, spec quotaRouterSpec) quotaRouterResult {
 	client.HTTPClient = failed.Client()
 	client.HTTPClient.Timeout = 2 * time.Second
 	oldRetries, oldBatch := config.RetryTimes, config.BatchUpdateEnabled
-	config.RetryTimes, config.BatchUpdateEnabled = retries, false
-	t.Cleanup(func() { config.RetryTimes, config.BatchUpdateEnabled = oldRetries, oldBatch })
+	config.BatchUpdateEnabled = false
+	if !spec.leaveRetryBudgetUntouched {
+		config.RetryTimes = retries
+	}
+	t.Cleanup(func() {
+		config.BatchUpdateEnabled = oldBatch
+		if !spec.leaveRetryBudgetUntouched {
+			config.RetryTimes = oldRetries
+		}
+	})
 	if alternate != "absent" && alternate != "direct" {
 		priority := int64(-10)
 		base := healthy.URL
@@ -133,6 +145,16 @@ func runQuotaRouterSpec(t *testing.T, spec quotaRouterSpec) quotaRouterResult {
 		if alternate == "suspended" {
 			require.NoError(t, model.SuspendAbility(context.Background(), "default", passthroughKeysAllowedModel, ch.Id, time.Hour))
 		}
+	}
+	winnerID := 929294
+	if alternate == "direct" {
+		winnerID = 929293
+	}
+	if spec.seedExpiredCooldown {
+		failedAt := time.Now().UTC().Add(-time.Minute)
+		duration, err := model.RecordAbilityCooldownFailure(context.Background(), "default", passthroughKeysAllowedModel, winnerID, failedAt.Add(-time.Second), failedAt)
+		require.NoError(t, err)
+		require.Equal(t, 10*time.Second, duration)
 	}
 	config.MemoryCacheEnabled = memory
 	if memory {
@@ -158,6 +180,15 @@ func runQuotaRouterSpec(t *testing.T, spec quotaRouterSpec) quotaRouterResult {
 		drainCriticalTasksForRouter(t)
 		status = resp.StatusCode
 	}
+	if spec.seedExpiredCooldown {
+		require.Equal(t, http.StatusOK, status, string(body))
+		// The next failure should be the first rung again. If success did
+		// not reset the persisted streak, this returns the second rung.
+		next := time.Now().UTC().Add(time.Second)
+		duration, err := model.RecordAbilityCooldownFailure(context.Background(), "default", passthroughKeysAllowedModel, winnerID, next, next)
+		require.NoError(t, err)
+		require.Equal(t, 10*time.Second, duration)
+	}
 	after, billed := passthroughKeysLedger(t)
 	result := quotaRouterResult{status: status, body: string(body), failedCalls: failedCalls.Load(), healthyCalls: healthyCalls.Load(), quotaDelta: before - after, billed: billed}
 	var token model.Token
@@ -181,6 +212,36 @@ func runQuotaRouterSpec(t *testing.T, spec quotaRouterSpec) quotaRouterResult {
 		}
 	}
 	return result
+}
+
+// TestDefaultQuotaFailoverPublicRouter verifies the untouched retry default on
+// the first authenticated request, with DB and in-process routing selectors.
+func TestDefaultQuotaFailoverPublicRouter(t *testing.T) {
+	require.Equal(t, 3, config.RetryTimes, "expected the shipped default before any fixture override")
+	for _, memory := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cache=%t", memory), func(t *testing.T) {
+			got := runQuotaRouterSpec(t, quotaRouterSpec{memory: memory, alternate: "eligible", leaveRetryBudgetUntouched: true, seedExpiredCooldown: true})
+			require.Equal(t, http.StatusOK, got.status, got.body)
+			require.EqualValues(t, 1, got.failedCalls)
+			require.EqualValues(t, 1, got.healthyCalls)
+			require.Equal(t, 1, got.positiveConsumes)
+			require.Zero(t, got.failedUsed)
+			require.Equal(t, got.quotaDelta, got.healthyUsed)
+		})
+	}
+}
+
+// TestInitialSuccessResetsQuotaCooldownPublicRouter verifies recovery when the
+// initial attempt succeeds without entering the retry loop.
+func TestInitialSuccessResetsQuotaCooldownPublicRouter(t *testing.T) {
+	for _, memory := range []bool{false, true} {
+		t.Run(fmt.Sprintf("cache=%t", memory), func(t *testing.T) {
+			got := runQuotaRouterSpec(t, quotaRouterSpec{memory: memory, alternate: "direct", seedExpiredCooldown: true})
+			require.Equal(t, http.StatusOK, got.status, got.body)
+			require.Zero(t, got.failedCalls)
+			require.EqualValues(t, 1, got.healthyCalls)
+		})
+	}
 }
 
 // TestQuotaCooldownPublicRouter requires the next authenticated request to avoid

@@ -31,9 +31,14 @@ type Ability struct {
 	// solely on the parent channel (channels.weight, the single source of truth) and
 	// is read there by both routing paths. See getRandomSatisfiedChannel and
 	// pickWeightedChannel.
-	SuspendUntil *time.Time `json:"suspend_until,omitempty" gorm:"index"`
-	CreatedAt    int64      `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
-	UpdatedAt    int64      `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
+	SuspendUntil         *time.Time `json:"suspend_until,omitempty" gorm:"index"`
+	AdaptiveSuspendUntil *time.Time `json:"-" gorm:"index"`
+	CooldownFailures     int        `json:"-" gorm:"not null;default:0"`
+	CooldownLastFailure  int64      `json:"-" gorm:"not null;default:0"`
+	CooldownRecovery     int64      `json:"-" gorm:"not null;default:0"`
+	CooldownRevision     int64      `json:"-" gorm:"not null;default:0"`
+	CreatedAt            int64      `json:"created_at" gorm:"bigint;autoCreateTime:milli"`
+	UpdatedAt            int64      `json:"updated_at" gorm:"bigint;autoUpdateTime:milli"`
 }
 
 // exactModelPredicate returns a parameterized equality predicate for a trusted,
@@ -66,9 +71,10 @@ func availableAbilitiesQuery(db *gorm.DB, group string, model string, now time.T
 	}
 
 	query := db.Model(&Ability{}).Where(
-		groupCol+" = ? AND "+exactModelPredicate("model")+" AND enabled = ? AND (suspend_until IS NULL OR suspend_until < ?)",
-		group, model, true, now,
+		groupCol+" = ? AND "+exactModelPredicate("model")+" AND enabled = ?",
+		group, model, true,
 	)
+	query = query.Where(abilityRoutablePredicate(""), now, now)
 	if len(excludeIDs) > 0 {
 		query = query.Where("channel_id NOT IN ?", excludeIDs)
 	}
@@ -264,7 +270,8 @@ func GetGroupModels(ctx context.Context, group string) ([]string, error) {
 		trueVal = "true"
 	}
 	var models []string
-	err := DB.Model(&Ability{}).Distinct("model").Where(groupCol+" = ? AND enabled = "+trueVal+" AND (suspend_until IS NULL OR suspend_until < ?)", group, time.Now()).Pluck("model", &models).Error
+	now := time.Now().UTC()
+	err := DB.Model(&Ability{}).Distinct("model").Where(groupCol+" = ? AND enabled = "+trueVal, group).Where(abilityRoutablePredicate(""), now, now).Pluck("model", &models).Error
 	if err != nil {
 		return nil, errors.Wrap(err, "get group models")
 	}
@@ -391,7 +398,7 @@ func GetGroupModelsV2(ctx context.Context, group string) ([]dto.EnabledAbility, 
 		groupCol = `"group"`
 		trueVal = "true"
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 
 	// query with JOIN to get model, channel type, and channel ID in a single query
 	var models []dto.EnabledAbility
@@ -401,7 +408,8 @@ func GetGroupModelsV2(ctx context.Context, group string) ([]dto.EnabledAbility, 
 		// PostgreSQL/MySQL, which would 500 the entire model listing for a group.
 		Select("DISTINCT abilities.model AS model, channels.type AS channel_type, abilities.channel_id AS channel_id, COALESCE(abilities.priority, 0) AS priority").
 		Joins("JOIN channels ON abilities.channel_id = channels.id").
-		Where("abilities."+groupCol+" = ? AND abilities.enabled = "+trueVal+" AND (abilities.suspend_until IS NULL OR abilities.suspend_until < ?)", group, now).
+		Where("abilities."+groupCol+" = ? AND abilities.enabled = "+trueVal, group).
+		Where(abilityRoutablePredicate("abilities."), now, now).
 		Order("abilities.model")
 
 	err := query.Find(&models).Error
@@ -464,8 +472,7 @@ func SuspendAbility(ctx context.Context, group string, modelName string, channel
 				group, modelName, channelId, result.RowsAffected),
 			LookupChannelRef(ctx, channelId))
 	}
-	publishCachedAbilitySuspension(cachedAbilityKey{group, modelName, channelId}, suspendTime)
-	return nil
+	return refreshCachedAbilityDeadline(ctx, cachedAbilityKey{group, modelName, channelId})
 }
 
 // GetRandomSatisfiedChannelExcluding selects a random enabled channel for an exact

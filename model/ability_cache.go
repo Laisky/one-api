@@ -19,7 +19,7 @@ import (
 //   - channelSyncLock (RWMutex) guards every variable below. Selectors hold it for
 //     reading only while they copy candidates out, so database I/O never runs under it.
 //   - abilityCacheUpdateLock serializes the two WRITERS of cached routing state:
-//     InitChannelCacheContext (a full rebuild) and SuspendAbility (one published
+//     InitChannelCacheContext (a full rebuild) and cooldown updates (one published
 //     deadline). Without it, a rebuild that read the abilities table just before a
 //     suspension was persisted could publish its older snapshot after that
 //     suspension, silently dropping it until the next rebuild.
@@ -129,6 +129,10 @@ func routableCachedChannelsLocked(group, model string, excluded map[int]bool, no
 func publishCachedAbilitySuspension(key cachedAbilityKey, until time.Time) {
 	channelSyncLock.Lock()
 	defer channelSyncLock.Unlock()
+	if until.IsZero() {
+		delete(cachedAbilitySuspensions, key)
+		return
+	}
 	if cachedAbilitySuspensions == nil {
 		cachedAbilitySuspensions = make(map[cachedAbilityKey]time.Time)
 	}
@@ -195,8 +199,9 @@ func AbilityCoolingDown(ctx context.Context, group, model string, channelID int)
 	}
 	var count int64
 	if err := DB.WithContext(ctx).Model(&Ability{}).
-		Where(groupCol+" = ? AND "+exactModelPredicate("model")+" AND channel_id = ? AND suspend_until IS NOT NULL AND suspend_until >= ?",
-			group, model, channelID, now).
+		Where(groupCol+" = ? AND "+exactModelPredicate("model")+" AND channel_id = ? ",
+			group, model, channelID).
+		Where("(suspend_until >= ? OR adaptive_suspend_until >= ?)", now, now).
 		Count(&count).Error; err != nil {
 		return false, errors.Wrapf(err, "check ability cooldown for group %q, model %q, channel %d", group, model, channelID)
 	}

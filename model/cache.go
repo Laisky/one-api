@@ -351,8 +351,8 @@ func InitChannelCacheContext(ctx context.Context) error {
 			continue
 		}
 		key := cachedAbilityKey{ability.Group, ability.Model, ability.ChannelId}
-		if ability.SuspendUntil != nil {
-			newSuspensions[key] = *ability.SuspendUntil
+		if deadline := abilityEffectiveDeadline(ability); deadline != nil {
+			newSuspensions[key] = *deadline
 		}
 		// The ability must also belong to a channel in the enabled-channel snapshot.
 		if _, channelExists := newChannelId2channel[ability.ChannelId]; channelExists {

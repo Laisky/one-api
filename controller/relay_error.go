@@ -337,6 +337,8 @@ func logChannelSuspensionStatus(ctx context.Context, group, model string, failed
 // appendRelayFailureFields so every relay failure remains self-contained even when
 // request-scoped logger bindings are unavailable.
 type processChannelRelayErrorParams struct {
+	StartedAt     time.Time
+	CompletedAt   time.Time
 	Attempt       int
 	RequestID     string
 	UserId        int
@@ -572,22 +574,17 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 	}
 
 	if params.Err.StatusCode == http.StatusTooManyRequests {
-		// For 429, we will suspend the specific model for a while
-		lg.Warn("ability suspended due to rate limit (429)",
-			appendRelayFailureFields(params,
-				stacklessErrorField(params.Err.RawError),
-				zap.String("suspension_rationale", "upstream rate limit exceeded; suspending ability to allow cooldown"),
-				zap.Duration("suspension_duration", config.ChannelSuspendSecondsFor429),
-			)...,
-		)
-		if suspendErr := dbmodel.SuspendAbility(ctx,
-			params.Group, params.OriginalModel, params.ChannelId,
-			config.ChannelSuspendSecondsFor429); suspendErr != nil {
+		duration, persisted, suspendErr := suspendRelayAbility(ctx, params, "CHANNEL_SUSPEND_SECONDS_FOR_429", config.ChannelSuspendSecondsFor429)
+		if suspendErr != nil {
 			lg.Error("failed to suspend ability for channel",
+				appendRelayFailureFields(params, zap.Error(errors.Wrap(suspendErr, "suspend ability failed")))...)
+		} else if persisted {
+			lg.Warn("ability suspended due to rate limit (429)",
 				appendRelayFailureFields(params,
-					zap.Error(errors.Wrap(suspendErr, "suspend ability failed")),
-				)...,
-			)
+					stacklessErrorField(params.Err.RawError),
+					zap.String("suspension_rationale", "upstream rate limit exceeded; suspending ability to allow cooldown"),
+					zap.Duration("suspension_duration", duration),
+				)...)
 		}
 		emitChannelHealth()
 		return
@@ -620,15 +617,17 @@ func processChannelRelayError(ctx context.Context, params processChannelRelayErr
 			return
 		}
 
-		suspensionDuration = config.ChannelSuspendSecondsFor5XX
-		if suspendErr := dbmodel.SuspendAbility(ctx, params.Group, params.OriginalModel, params.ChannelId, suspensionDuration); suspendErr != nil {
+		var suspendErr error
+		var persisted bool
+		suspensionDuration, persisted, suspendErr = suspendRelayAbility(ctx, params, "CHANNEL_SUSPEND_SECONDS_FOR_5XX", config.ChannelSuspendSecondsFor5XX)
+		if suspendErr != nil {
 			suspensionOutcome = "failed"
 			lg.Error("ability suspension failed after relay failure (normalized 5xx)",
 				appendRelayFailureDiagnosticFields(params, failureKind, suspensionOutcome, suspensionDuration,
 					zap.Error(errors.Wrap(suspendErr, "suspend ability failed")),
 				)...,
 			)
-		} else {
+		} else if persisted {
 			suspensionOutcome = "persisted"
 			lg.Error("ability suspension persisted after relay failure (normalized 5xx)",
 				appendRelayFailureDiagnosticFields(params, failureKind, suspensionOutcome, suspensionDuration,

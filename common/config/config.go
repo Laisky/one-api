@@ -1816,12 +1816,15 @@ var (
 	// Default: 0
 	QuotaForInvitee int64 = 0
 
-	// RetryTimes configures default retry attempts for certain background jobs.
+	// RetryTimes configures the base number of relay retries.
 	//
 	// Runtime variable (set via admin UI)
-	// Default: 0 (no retries)
-	RetryTimes = 0
+	// Default: 3; an explicit zero disables ordinary cross-channel retries.
+	RetryTimes = DefaultRetryTimes
 )
+
+// DefaultRetryTimes is the relay retry budget before persisted options load.
+const DefaultRetryTimes = 3
 
 // =============================================================================
 // ROOT USER CONFIGURATION

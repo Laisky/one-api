@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
@@ -133,8 +134,15 @@ func syncAbilitiesWithDB(db *gorm.DB, channel *Channel, liftSuspensions bool) er
 	}
 	lifted := int64(0)
 	if liftSuspensions {
-		result := db.Model(&Ability{}).Where("channel_id = ? AND suspend_until IS NOT NULL", channel.Id).
-			Update("suspend_until", nil)
+		// Any existing ability can have an attempt still in flight against the
+		// old upstream. Fence those attempts even if there is no current deadline.
+		now := time.Now().UTC().UnixNano()
+		result := db.Model(&Ability{}).Where("channel_id = ?", channel.Id).
+			Updates(map[string]any{
+				"suspend_until": nil, "adaptive_suspend_until": nil,
+				"cooldown_recovery": gorm.Expr("CASE WHEN cooldown_recovery < ? THEN ? ELSE cooldown_recovery END", now, now),
+				"cooldown_revision": gorm.Expr("cooldown_revision + 1"),
+			})
 		if result.Error != nil {
 			return identity.Tag(errors.Wrapf(result.Error, "lift suspensions of channel %d", channel.Id), channel.Ref())
 		}
