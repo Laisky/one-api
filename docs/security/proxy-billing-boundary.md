@@ -4,6 +4,10 @@ The `/v1/oneapi/proxy/:channelid/*target` route is intentionally unmetered. It m
 
 `RelayProxyHelper` rejects any other channel/API-type combination with `403 proxy_channel_required` before reading the body, constructing an upstream request, forwarding credentials, or recording zero-cost consumption. Neither its mode argument nor the metadata mode can waive this boundary. GitHub Models path normalization is separately disabled in Proxy mode as defense in depth.
 
+## Local policy rejection is not upstream failure
+
+The gateway-generated `one_api_error` / `proxy_channel_required` response must not suspend an ability, disable a channel, count against channel health, or trigger failover. This remains true when a proxy health request has no model name. The response remains HTTP 403; fixing error attribution does not make a paid channel eligible for unmetered proxying. Provider-originated authentication and permission failures retain their existing health and suspension policy. `TestProxyPolicyRejectionDoesNotPenalizeChannel` exercises the real proxy guard and error processor with missing and populated models.
+
 ## Settled video operations are a different entrypoint
 
 Video creation remains in `RelayVideoHelper` and its existing quota admission/settlement logic. Subsequent retrieval/deletion does not create another paid task. These video routes retain the existing `BindAsyncTaskChannel` ownership/model/channel checks and call the private forwarding implementation directly, rather than entering the public arbitrary-target proxy controller.
