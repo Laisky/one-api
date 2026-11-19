@@ -76,9 +76,18 @@ func LiveHandlerWithTransport(c *gin.Context, m *meta.Meta, transport LiveTransp
 	if gate == nil {
 		return openai.ErrorWrapper(errors.Wrap(ErrLiveProtocol, "missing Live session budget"), "gemini_live_configuration", http.StatusInternalServerError), nil
 	}
+	// The endpoint is administrator-owned (ResolveLiveEndpoint already refused
+	// userinfo, query and fragment); the shared dial-site policy re-checks the
+	// final string before any credential is sent to it.
+	endpoint, err := openai.ValidateProviderWebSocketURL(transport.Endpoint)
+	if err != nil {
+		// The policy error is handled here by reporting the same fixed,
+		// URL-free configuration error as ResolveLiveEndpoint.
+		return openai.ErrorWrapper(errors.Wrap(ErrLiveProtocol, "invalid Gemini Live endpoint"), "gemini_live_configuration", http.StatusBadRequest), nil
+	}
 	// Never copy caller headers, authentication subprotocols, or query values.
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second, Proxy: http.ProxyFromEnvironment}
-	upstream, response, err := dialer.DialContext(c.Request.Context(), transport.Endpoint, transport.Headers.Clone())
+	upstream, response, err := dialer.DialContext(c.Request.Context(), endpoint, transport.Headers.Clone())
 	if err != nil {
 		// Releases the handshake response (a close failure is DEBUG-logged, never
 		// ignored) and reports the provider's 400..599 status, or 502 otherwise.
@@ -96,7 +105,7 @@ func LiveHandlerWithTransport(c *gin.Context, m *meta.Meta, transport LiveTransp
 		return openai.ErrorWrapper(connectErr, "gemini_live_connect", status), nil
 	}
 	defer upstream.Close()
-	m.UpstreamRequestURL = transport.Endpoint
+	m.UpstreamRequestURL = endpoint
 	upgrader := websocket.Upgrader{
 		HandshakeTimeout: 10 * time.Second,
 		Subprotocols:     openai.NegotiateRealtimeSubprotocols(c.Request),

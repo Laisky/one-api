@@ -36,7 +36,11 @@ func TestQueueAbilityCooldownRecoveryCoalescesAndSupersedes(t *testing.T) {
 	require.NoError(t, db.Create(&Ability{Group: key.group, Model: key.model, ChannelId: key.channelID, Enabled: true}).Error)
 	t.Cleanup(func() {
 		abilityRecoveries.Lock()
-		delete(abilityRecoveries.byKey, key)
+		for stateKey := range abilityRecoveries.byKey {
+			if stateKey.ability == key {
+				delete(abilityRecoveries.byKey, stateKey)
+			}
+		}
 		abilityRecoveries.Unlock()
 	})
 	read := func() Ability {

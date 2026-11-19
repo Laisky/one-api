@@ -156,7 +156,7 @@ func recordAbilityCooldownFailure(ctx context.Context, key cachedAbilityKey, ups
 	if err := validateAbilityCooldownOutcome(key, startedAt, completedAt); err != nil {
 		return 0, errors.WithStack(err)
 	}
-	if abilityRecoverySupersedes(key, completedAt.UnixNano()) {
+	if abilityRecoverySupersedes(key, upstreamRevision, completedAt.UnixNano()) {
 		// A newer success of this process is still being coalesced; once written
 		// it would discard this failure anyway, so do not open a cooldown now.
 		return 0, nil

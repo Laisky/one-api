@@ -164,7 +164,7 @@ func TestResolveResponseAPIWebSocketUpstreamURL(t *testing.T) {
 			ctx.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
 
 			meta := &rmeta.Meta{BaseURL: tt.baseURL}
-			got, err := resolveResponseAPIWebSocketUpstreamURL(ctx, meta)
+			got, _, err := resolveResponseAPIWebSocketUpstreamURL(ctx, meta)
 			if tt.wantErr {
 				require.Error(t, err)
 				return

@@ -31,7 +31,22 @@ type abilityRecovery struct {
 	revision          int64
 }
 
-// abilityRecoveryState coalesces the successes of one ability in this process.
+// abilityRecoveryKey partitions coalescing by ability and by the upstream
+// revision the successes were routed with. Outcomes of different revisions
+// never stand in for each other: a success routed with a replaced key or
+// endpoint must neither discard a failure of the current upstream nor replace
+// a pending recovery of it (its own durable write is fenced and would be lost).
+// AbilityUpstreamRevisionUnknown is its own partition, so an unknown-revision
+// outcome never supersedes a known-revision one or vice versa (the conservative
+// direction). A replaced revision's idle partition lingers until the bounded
+// prune at abilityRecoveryStateLimit entries.
+type abilityRecoveryKey struct {
+	ability  cachedAbilityKey
+	revision int64
+}
+
+// abilityRecoveryState coalesces the successes of one ability and upstream
+// revision in this process.
 type abilityRecoveryState struct {
 	// pending is the newest success not yet handed to a durable write.
 	pending abilityRecovery
@@ -46,8 +61,8 @@ type abilityRecoveryState struct {
 // abilityRecoveries holds the per-process recovery coalescing state.
 var abilityRecoveries = struct {
 	sync.Mutex
-	byKey map[cachedAbilityKey]*abilityRecoveryState
-}{byKey: make(map[cachedAbilityKey]*abilityRecoveryState)}
+	byKey map[abilityRecoveryKey]*abilityRecoveryState
+}{byKey: make(map[abilityRecoveryKey]*abilityRecoveryState)}
 
 // QueueAbilityCooldownRecovery records a genuine provider success for an exact
 // ability without database I/O on the caller's path. The first success after
@@ -72,10 +87,11 @@ var abilityRecoveries = struct {
 //   - error: invalid identity or timestamps; persistence errors are logged by
 //     the flush task, never returned.
 func QueueAbilityCooldownRecovery(ctx context.Context, group, modelName string, channelID int, upstreamRevision int64, startedAt, completedAt time.Time) error {
-	key := cachedAbilityKey{group, modelName, channelID}
-	if err := validateAbilityCooldownOutcome(key, startedAt, completedAt); err != nil {
+	ability := cachedAbilityKey{group, modelName, channelID}
+	if err := validateAbilityCooldownOutcome(ability, startedAt, completedAt); err != nil {
 		return errors.WithStack(err)
 	}
+	key := abilityRecoveryKey{ability: ability, revision: upstreamRevision}
 	recovery := abilityRecovery{start: startedAt.UnixNano(), completion: completedAt.UnixNano(), revision: upstreamRevision}
 	now := time.Now()
 	abilityRecoveries.Lock()
@@ -107,7 +123,7 @@ func QueueAbilityCooldownRecovery(ctx context.Context, group, modelName string, 
 // Parameters:
 //   - ctx: a detached context carrying the request-scoped logger.
 //   - key: the ability whose pending success is written.
-func flushAbilityRecovery(ctx context.Context, key cachedAbilityKey) {
+func flushAbilityRecovery(ctx context.Context, key abilityRecoveryKey) {
 	lg := gmw.GetLogger(ctx)
 	abilityRecoveries.Lock()
 	state := abilityRecoveries.byKey[key]
@@ -120,7 +136,7 @@ func flushAbilityRecovery(ctx context.Context, key cachedAbilityKey) {
 	abilityRecoveries.Unlock()
 
 	if recovery.completion != 0 {
-		if err := ResetAbilityCooldownAtRevision(ctx, key.group, key.model, key.channelID, recovery.revision,
+		if err := ResetAbilityCooldownAtRevision(ctx, key.ability.group, key.ability.model, key.ability.channelID, recovery.revision,
 			time.Unix(0, recovery.start).UTC(), time.Unix(0, recovery.completion).UTC()); err != nil {
 			lg.Warn("failed to record upstream cooldown recovery", zap.Error(err))
 		}
@@ -134,33 +150,39 @@ func flushAbilityRecovery(ctx context.Context, key cachedAbilityKey) {
 }
 
 // abilityRecoverySupersedes reports whether this process holds an unwritten or
-// in-flight success of key that completed at or after completion, so a failure
-// that completed earlier is stale and must not open a cooldown.
+// in-flight success of the same ability AND upstream revision that completed at
+// or after completion, so a failure that completed earlier is stale and must
+// not open a cooldown. A success routed with another revision never supersedes.
 //
 // Parameters:
-//   - key: the ability of the failure.
+//   - ability: the ability of the failure.
+//   - revision: the failure's routed upstream revision.
 //   - completion: the failure's completion in UTC Unix nanoseconds.
 //
 // Returns:
-//   - bool: true when a newer local success supersedes the failure.
-func abilityRecoverySupersedes(key cachedAbilityKey, completion int64) bool {
+//   - bool: true when a newer local success of the same revision supersedes it.
+func abilityRecoverySupersedes(ability cachedAbilityKey, revision, completion int64) bool {
 	abilityRecoveries.Lock()
 	defer abilityRecoveries.Unlock()
-	state := abilityRecoveries.byKey[key]
+	state := abilityRecoveries.byKey[abilityRecoveryKey{ability: ability, revision: revision}]
 	return state != nil && (state.pending.completion >= completion || state.inflight.completion >= completion)
 }
 
-// rearmAbilityRecovery lets the next success of key write immediately because
-// this process just recorded a failure for it; recovery must not wait for the
-// rate limit then.
+// rearmAbilityRecovery lets the next success of the ability, at any upstream
+// revision, write immediately because this process just recorded a failure for
+// it; recovery must not wait for the rate limit then. Re-arming every revision
+// is safe: it only lifts the write rate limit, a success of a replaced revision
+// is still fenced by its durable write, and supersession stays per revision.
 //
 // Parameters:
-//   - key: the ability that failed.
-func rearmAbilityRecovery(key cachedAbilityKey) {
+//   - ability: the ability that failed.
+func rearmAbilityRecovery(ability cachedAbilityKey) {
 	abilityRecoveries.Lock()
 	defer abilityRecoveries.Unlock()
-	if state := abilityRecoveries.byKey[key]; state != nil {
-		state.notBefore = time.Time{}
+	for key, state := range abilityRecoveries.byKey {
+		if key.ability == ability {
+			state.notBefore = time.Time{}
+		}
 	}
 }
 

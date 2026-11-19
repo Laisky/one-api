@@ -87,7 +87,8 @@ func TestRealtimeWebSocketUpstreamURL(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := realtimeWebSocketUpstreamURL(realtimeMeta(tc.base, tc.override, tc.actualModel), tc.clientQuery)
+			got, _, err := realtimeWebSocketUpstreamURL(realtimeMeta(tc.base, tc.override, tc.actualModel), tc.clientQuery)
+			require.NoError(t, err)
 			require.Equal(t, tc.want, got)
 		})
 	}

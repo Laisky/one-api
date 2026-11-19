@@ -130,7 +130,12 @@ func ResponseAPIWebSocketHandlerWithAdmission(c *gin.Context, meta *rmeta.Meta, 
 	}
 	defer func() { _ = clientConn.Close() }()
 
-	fullRequestURL, err := resolveResponseAPIWebSocketUpstreamURL(c, meta)
+	lg := gmw.GetLogger(c)
+	fullRequestURL, droppedParams, err := resolveResponseAPIWebSocketUpstreamURL(c, meta)
+	if droppedParams > 0 {
+		lg.Debug("response websocket handshake did not forward caller query parameters",
+			zap.Int("dropped_or_rewritten_params", droppedParams))
+	}
 	if err != nil {
 		return &rmodel.ErrorWithStatusCode{
 			Error:      rmodel.Error{Message: "resolve upstream url failed", Type: rmodel.ErrorTypeInternal, Code: "upstream_url_resolve_failed", RawError: err},
@@ -183,7 +188,6 @@ func ResponseAPIWebSocketHandlerWithAdmission(c *gin.Context, meta *rmeta.Meta, 
 	// Wait for one direction to finish, then close both connections
 	// to unblock the other goroutine.
 	firstErr := <-errc
-	lg := gmw.GetLogger(c)
 	if closeErr := clientConn.Close(); closeErr != nil {
 		lg.Debug("close response client socket", zap.Error(closeErr))
 	}
@@ -268,8 +272,27 @@ func (c *responseAPIWSStoreCollector) collect(msg []byte) {
 }
 
 // resolveResponseAPIWebSocketUpstreamURL builds the upstream ws(s) URL for the
-// responses endpoint while preserving query parameters.
-func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (string, error) {
+// responses endpoint.
+//
+// The caller's query is never relayed. OpenAI documents no handshake query
+// parameters for wss://.../v1/responses; the model travels in every
+// response.create frame, which copyResponseAPIClientToUpstream pins
+// (https://developers.openai.com/api/reference/resources/responses/methods/connect).
+// The only query key one-api itself reads is the `model` routing hint, so when
+// the caller sent one it is forwarded rewritten to the mapped model the
+// connection is bound to; every other key is dropped.
+//
+// Parameters:
+//   - c: the request context carrying the caller's handshake query.
+//   - meta: relay metadata carrying the channel BaseURL and bound model.
+//
+// Returns:
+//   - string: the provider handshake URL.
+//   - int: how many caller query parameters were dropped or rewritten, for
+//     DEBUG diagnostics only.
+//   - error: when the channel BaseURL cannot be parsed, uses an unsupported
+//     scheme, or yields a URL rejected by ValidateProviderWebSocketURL.
+func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (string, int, error) {
 	base := strings.TrimSpace(meta.BaseURL)
 	if base == "" {
 		base = "https://api.openai.com"
@@ -277,7 +300,7 @@ func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (s
 
 	u, err := url.Parse(base)
 	if err != nil {
-		return "", errors.Wrap(err, "parse upstream base url")
+		return "", 0, errors.Wrap(err, "parse upstream base url")
 	}
 
 	switch u.Scheme {
@@ -286,12 +309,22 @@ func resolveResponseAPIWebSocketUpstreamURL(c *gin.Context, meta *rmeta.Meta) (s
 	case "http", "ws":
 		u.Scheme = "ws"
 	default:
-		return "", errors.Errorf("unsupported upstream url scheme: %s", u.Scheme)
+		return "", 0, errors.Errorf("unsupported upstream url scheme: %s", u.Scheme)
 	}
 
 	u.Path = "/v1/responses"
-	u.RawQuery = c.Request.URL.RawQuery
-	return u.String(), nil
+	caller := parseCallerHandshakeQuery(c.Request.URL.RawQuery)
+	forwarded := url.Values{}
+	if caller.values.Has("model") && meta.ActualModelName != "" {
+		forwarded.Set("model", meta.ActualModelName)
+	}
+	u.RawQuery = forwarded.Encode()
+	u.Fragment, u.RawFragment = "", ""
+	validated, err := ValidateProviderWebSocketURL(u.String())
+	if err != nil {
+		return "", 0, err
+	}
+	return validated, caller.unforwarded(forwarded), nil
 }
 
 // copyResponseAPIClientToUpstream forwards client frames to the upstream
