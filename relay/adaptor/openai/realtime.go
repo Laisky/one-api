@@ -186,8 +186,10 @@ func RealtimeSessionsHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWit
 
 	// If upstream returned a non-2xx status, surface it as a business error
 	if resp.StatusCode >= 400 {
+		// The provider answered with this status: mark provenance so channel
+		// policy attributes 429/5xx to the provider.
 		return &rmodel.ErrorWithStatusCode{
-			Error:      rmodel.Error{Message: string(respBody), Type: rmodel.ErrorTypeUpstream, Code: resp.StatusCode},
+			Error:      rmodel.Error{Message: string(respBody), Type: rmodel.ErrorTypeUpstream, Code: resp.StatusCode, FromUpstream: true},
 			StatusCode: resp.StatusCode,
 		}, writeErr
 	}
@@ -254,17 +256,59 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	requestHeader.Set("Authorization", "Bearer "+meta.APIKey)
 
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second, Proxy: http.ProxyFromEnvironment}
-	upstreamConn, _, derr := dialer.Dial(wsURL, requestHeader)
+	upstreamConn, handshake, derr := dialer.Dial(wsURL, requestHeader)
 	if derr != nil {
-		_ = clientConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream connect failed"))
+		if werr := clientConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream connect failed")); werr != nil {
+			lg.Debug("write realtime upstream-connect close frame failed", zap.Error(werr))
+		}
+		// The client is already upgraded, so it only sees the close frame above;
+		// the returned status and provenance serve relay accounting. A provider
+		// that refused the handshake with 400..599 (for example 401, 429 or 503)
+		// is attributed to the channel with its own status; a dial or transport
+		// failure without a provider status stays one-api's own 502. The message
+		// never includes the provider's handshake body.
+		status, fromUpstream := WebSocketHandshakeFailureStatus(lg, handshake)
 		return &rmodel.ErrorWithStatusCode{
-			Error:      rmodel.Error{Message: "upstream realtime connect failed: " + derr.Error(), Type: rmodel.ErrorTypeOneAPI, Code: "upstream_connect_failed", RawError: derr},
-			StatusCode: http.StatusBadGateway,
+			Error: rmodel.Error{Message: "upstream realtime connect failed: " + derr.Error(), Type: rmodel.ErrorTypeOneAPI,
+				Code: "upstream_connect_failed", RawError: errors.Wrap(derr, "dial upstream realtime websocket"), FromUpstream: fromUpstream},
+			StatusCode: status,
 		}, nil
 	}
 	defer func() { _ = upstreamConn.Close() }()
 
 	return nil, meteredRealtimePump(clientConn, upstreamConn, lg, meta.ActualModelName, meta.OriginModelName, isRealtimeTranscriptionIntent(c.Request.URL.Query()))
+}
+
+// WebSocketHandshakeFailureStatus releases the handshake response a failed
+// gorilla/websocket dial returned and reports the status to attribute the
+// failure with. Gorilla returns that response when the provider answered the
+// upgrade request without switching protocols; its body is a bounded copy that
+// is closed here and never read, so provider bodies are not echoed or logged.
+// A close failure is logged at DEBUG with the request-scoped logger.
+//
+// Parameters:
+//   - lg: the request-scoped logger used only for the close diagnostic.
+//   - response: the handshake response from the failed dial; nil when the dial
+//     failed before the provider answered (DNS, connect, TLS or timeout).
+//
+// Returns:
+//   - int: the provider status when it is 400..599, otherwise 502.
+//   - bool: true only when the provider answered with that 400..599 status, so
+//     the caller marks the error FromUpstream; false keeps it one-api's own.
+func WebSocketHandshakeFailureStatus(lg glog.Logger, response *http.Response) (int, bool) {
+	if response == nil {
+		return http.StatusBadGateway, false
+	}
+	if response.Body != nil {
+		if closeErr := response.Body.Close(); closeErr != nil {
+			lg.Debug("close upstream websocket handshake response body failed",
+				zap.Int("status", response.StatusCode), zap.Error(closeErr))
+		}
+	}
+	if response.StatusCode >= http.StatusBadRequest && response.StatusCode <= 599 {
+		return response.StatusCode, true
+	}
+	return http.StatusBadGateway, false
 }
 
 // RealtimeBidirectionalPump relays frames between the client and upstream

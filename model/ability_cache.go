@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 
@@ -18,15 +19,28 @@ import (
 //
 //   - channelSyncLock (RWMutex) guards every variable below. Selectors hold it for
 //     reading only while they copy candidates out, so database I/O never runs under it.
-//   - abilityCacheUpdateLock serializes the two WRITERS of cached routing state:
-//     InitChannelCacheContext (a full rebuild) and cooldown updates (one published
-//     deadline). Without it, a rebuild that read the abilities table just before a
-//     suspension was persisted could publish its older snapshot after that
-//     suspension, silently dropping it until the next rebuild.
+//   - abilitySnapshotLock serializes the SNAPSHOT publishers with each other:
+//     InitChannelCacheContext (a full rebuild) and
+//     refreshCachedAbilitySuspensionsContext (the cross-replica cooldown mirror).
+//     They hold it across their database read and swap. Cooldown writers never
+//     take it, so no cooldown write waits for another ability's database I/O.
 //
-// Lock order is abilityCacheUpdateLock, then channelSyncLock. Readers take only
+// Cooldown writers and snapshot publishers are ordered by the versioned
+// publication protocol in ability_deadline_publication.go, not by a lock: a
+// writer publishes the exact state its own revision CAS committed, and a
+// snapshot merges into the cache without discarding anything newer than the
+// state it read.
+//
+// Lock order is abilitySnapshotLock, then channelSyncLock. Readers take only
 // channelSyncLock. Cooldown deadlines are kept separately from the channel
 // snapshot, so an expired deadline restores routing without a rebuild.
+//
+// provisionalAbilityCooldowns is an overlay, not persisted state: the relay
+// publishes it on the request goroutine (PublishProvisionalAbilityCooldown, which
+// takes only channelSyncLock and never waits for a writer) and the asynchronous
+// processor releases it once its write finished. Writers never touch it, so a
+// rebuild or mirror swap cannot drop it, and the persisted outcome replaces it
+// on release in either direction, including when the outcome was discarded.
 
 // group2model2channels maps group -> model -> enabled channels, sorted by priority
 // descending. It includes abilities that are cooling down; selectors filter them
@@ -38,18 +52,39 @@ var group2model2channels map[string]map[string][]*Channel
 // holds only an integer channel id. It contains ENABLED channels only.
 var channelId2channel map[int]*Channel
 
-// channelSyncLock guards group2model2channels, channelId2channel and
-// cachedAbilitySuspensions.
+// channelSyncLock guards group2model2channels, channelId2channel,
+// cachedAbilitySuspensions and provisionalAbilityCooldowns.
 var channelSyncLock sync.RWMutex
 
-// abilityCacheUpdateLock serializes database suspension writes with cache rebuilds.
-// It is separate from channelSyncLock so readers remain available during database I/O.
-var abilityCacheUpdateLock sync.Mutex
+// abilitySnapshotLock serializes the cache rebuild and the cooldown mirror with
+// each other. It is separate from channelSyncLock so readers remain available
+// during their database I/O, and cooldown writers never take it.
+var abilitySnapshotLock sync.Mutex
 
-// cachedAbilitySuspensions stores suspend_until deadlines by exact ability. It is
-// guarded by channelSyncLock; expired entries are harmless and are dropped by the
-// next rebuild.
-var cachedAbilitySuspensions map[cachedAbilityKey]time.Time
+// cachedAbilitySuspensions stores, by exact ability, the persisted effective
+// deadline (the later of suspend_until and adaptive_suspend_until) together
+// with the abilities.cooldown_revision it was committed at. A zero deadline
+// records a known lift, so an older publication cannot reopen it. It is guarded
+// by channelSyncLock; expired entries are harmless and are dropped by the next
+// rebuild or mirror refresh.
+var cachedAbilitySuspensions map[cachedAbilityKey]cachedAbilityDeadline
+
+// provisionalAbilityCooldowns holds, by exact ability, the provisional cooldowns
+// of failures whose persistence is still pending, one hold per failure. Guarded
+// by channelSyncLock. A key is deleted with its last hold.
+var provisionalAbilityCooldowns map[cachedAbilityKey][]provisionalAbilityHold
+
+// provisionalAbilityHoldSeq numbers holds so each release removes exactly its own.
+// Guarded by channelSyncLock.
+var provisionalAbilityHoldSeq uint64
+
+// provisionalAbilityHold is the provisional cooldown of one failure.
+type provisionalAbilityHold struct {
+	// id identifies the hold for its release.
+	id uint64
+	// until is the provisional deadline: publication time plus the first rung.
+	until time.Time
+}
 
 // cachedAbilityKey identifies one exact routing ability without string-key collisions.
 type cachedAbilityKey struct {
@@ -73,18 +108,91 @@ func abilityCoolingAt(until, now time.Time) bool {
 	return !until.Before(now)
 }
 
-// cachedAbilityCoolingLocked reports whether the cached deadline for key still
-// blocks routing at now. The caller must hold channelSyncLock.
+// cachedAbilityCoolingLocked reports whether the cached persisted deadline or an
+// outstanding provisional cooldown for key still blocks routing at now. The
+// caller must hold channelSyncLock.
 //
 // Parameters:
 //   - key: the exact (group, model, channel) ability.
 //   - now: the UTC selection time.
 //
 // Return values:
-//   - bool: true when a cached deadline exists and has not yet passed.
+//   - bool: true when either deadline exists and has not yet passed.
 func cachedAbilityCoolingLocked(key cachedAbilityKey, now time.Time) bool {
-	until, suspended := cachedAbilitySuspensions[key]
-	return suspended && abilityCoolingAt(until, now)
+	if cached, suspended := cachedAbilitySuspensions[key]; suspended && abilityCoolingAt(cached.until, now) {
+		return true
+	}
+	if len(provisionalAbilityCooldowns) == 0 {
+		return false
+	}
+	for _, hold := range provisionalAbilityCooldowns[key] {
+		if abilityCoolingAt(hold.until, now) {
+			return true
+		}
+	}
+	return false
+}
+
+// PublishProvisionalAbilityCooldown hides one exact ability from this replica's
+// cached routing for the first adaptive rung, synchronously, while the failure
+// that cools it is persisted asynchronously. Without it, requests arriving
+// between the provider failure and the database write are routed straight back
+// to the failing ability. The caller must call the returned release once its
+// persistence attempt finished, whatever the outcome; release then removes this
+// hold, so the persisted state (published by the writer, or unchanged when the
+// outcome was discarded or the write failed) decides routing again. Holds of
+// concurrent failures of one ability stack, each with its own deadline, so a
+// released hold never leaves its deadline behind. A hold that is never released
+// still expires with the first rung. It never waits for database I/O.
+//
+// It does nothing when the memory cache is disabled (database routing reads
+// the persisted row) or the identity is incomplete.
+//
+// Parameters:
+//   - group, model: the exact ability; model is the caller-facing name.
+//   - channelID: the channel whose ability failed.
+//
+// Return values:
+//   - func(): the idempotent release of this hold.
+//   - time.Duration: the provisional cooldown, zero when nothing was published.
+func PublishProvisionalAbilityCooldown(group, model string, channelID int) (func(), time.Duration) {
+	if !config.MemoryCacheEnabled || group == "" || model == "" || channelID <= 0 {
+		return func() {}, 0
+	}
+	key := cachedAbilityKey{group, model, channelID}
+	duration := abilityCooldownLadder[0]
+	until := time.Now().UTC().Add(duration)
+	channelSyncLock.Lock()
+	if provisionalAbilityCooldowns == nil {
+		provisionalAbilityCooldowns = make(map[cachedAbilityKey][]provisionalAbilityHold)
+	}
+	provisionalAbilityHoldSeq++
+	id := provisionalAbilityHoldSeq
+	provisionalAbilityCooldowns[key] = append(provisionalAbilityCooldowns[key], provisionalAbilityHold{id: id, until: until})
+	channelSyncLock.Unlock()
+	return func() { releaseProvisionalAbilityCooldown(key, id) }, duration
+}
+
+// releaseProvisionalAbilityCooldown removes the hold id from key's provisional
+// cooldowns, deleting the key with its last hold. Releasing a hold that is
+// already gone does nothing, so release is idempotent.
+//
+// Parameters:
+//   - key: the exact ability.
+//   - id: the hold to remove.
+func releaseProvisionalAbilityCooldown(key cachedAbilityKey, id uint64) {
+	channelSyncLock.Lock()
+	defer channelSyncLock.Unlock()
+	holds := provisionalAbilityCooldowns[key]
+	index := slices.IndexFunc(holds, func(hold provisionalAbilityHold) bool { return hold.id == id })
+	if index < 0 {
+		return
+	}
+	if holds = slices.Delete(holds, index, index+1); len(holds) == 0 {
+		delete(provisionalAbilityCooldowns, key)
+		return
+	}
+	provisionalAbilityCooldowns[key] = holds
 }
 
 // routableCachedChannelsLocked returns a new slice with the cached channels for
@@ -116,36 +224,6 @@ func routableCachedChannelsLocked(group, model string, excluded map[int]bool, no
 		}
 	}
 	return candidates, routable
-}
-
-// publishAbilityCooldownRecovery refreshes the merged deadline after a successful
-// recovery changed adaptive state. It takes the writer lock only on that slow
-// path, so a watermark-only update never waits for cache rebuild database I/O.
-func publishAbilityCooldownRecovery(ctx context.Context, key cachedAbilityKey) error {
-	abilityCacheUpdateLock.Lock()
-	defer abilityCacheUpdateLock.Unlock()
-	return refreshCachedAbilityDeadline(ctx, key)
-}
-
-// publishCachedAbilitySuspension makes a persisted suspension visible to cached
-// routing immediately. The caller must hold abilityCacheUpdateLock and must call
-// it only after the database write succeeded, so the cache never claims a
-// cooldown that the database rejected.
-//
-// Parameters:
-//   - key: the exact suspended ability.
-//   - until: the persisted UTC deadline.
-func publishCachedAbilitySuspension(key cachedAbilityKey, until time.Time) {
-	channelSyncLock.Lock()
-	defer channelSyncLock.Unlock()
-	if until.IsZero() {
-		delete(cachedAbilitySuspensions, key)
-		return
-	}
-	if cachedAbilitySuspensions == nil {
-		cachedAbilitySuspensions = make(map[cachedAbilityKey]time.Time)
-	}
-	cachedAbilitySuspensions[key] = until
 }
 
 // CountCachedRetryCandidates counts the cached channels that could still serve

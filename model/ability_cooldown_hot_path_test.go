@@ -15,15 +15,15 @@ import (
 // path's SQL and lock costs while the global cache writer is held.
 func TestAdaptiveAbilityCooldownHealthySuccessDoesNotWaitForCache(t *testing.T) {
 	reset, updates, reads := prepareCooldownWatermarkFixture(t)
-	abilityCacheUpdateLock.Lock()
+	abilitySnapshotLock.Lock()
 	done := make(chan error, 1)
 	go func() { done <- reset(1) }()
 	select {
 	case err := <-done:
-		abilityCacheUpdateLock.Unlock()
+		abilitySnapshotLock.Unlock()
 		require.NoError(t, err)
 	case <-time.After(5 * time.Second):
-		abilityCacheUpdateLock.Unlock()
+		abilitySnapshotLock.Unlock()
 		<-done
 		t.Fatal("healthy success waited on the cache writer")
 	}

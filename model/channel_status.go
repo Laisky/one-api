@@ -3,6 +3,7 @@ package model
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
@@ -59,8 +60,38 @@ func persistChannelStatusWithDB(tx *gorm.DB, id, status int) error {
 	if err := tx.Model(&Channel{}).Where("id = ?", id).Update("status", status).Error; err != nil {
 		return errors.Wrap(err, "persist channel status")
 	}
+	if status == ChannelStatusEnabled {
+		if err := restartReenabledAbilityCooldowns(tx, id); err != nil {
+			return errors.Wrap(err, "restart re-enabled ability cooldowns")
+		}
+	}
 	if err := tx.Model(&Ability{}).Where("channel_id = ?", id).Update("enabled", status == ChannelStatusEnabled).Error; err != nil {
 		return errors.Wrap(err, "persist channel ability status")
+	}
+	return nil
+}
+
+// restartReenabledAbilityCooldowns starts a new adaptive cooldown streak for the
+// abilities of channel id that are about to be re-enabled. Outcomes are not
+// recorded while a channel is disabled, so its streak and adaptive deadline are
+// frozen; a re-enable is an operator repair or a successful automatic probe, so
+// the first later failure restarts at the first rung instead of inheriting the
+// pre-disable rung, and outcomes of attempts dispatched before the re-enable are
+// fenced. Already-enabled abilities and the fixed legacy suspend_until are left
+// unchanged. It must run inside the caller's channel-row-locked transaction,
+// before the routing flag is set.
+//
+// Parameters:
+//   - tx: the transaction holding the channel row lock.
+//   - id: the channel being re-enabled.
+//
+// Return values:
+//   - error: a wrapped database failure.
+func restartReenabledAbilityCooldowns(tx *gorm.DB, id int) error {
+	columns := abilityCooldownRestartColumns(time.Now().UTC().UnixNano())
+	if err := tx.Model(&Ability{}).Where("channel_id = ? AND (enabled = ? OR enabled IS NULL)", id, false).
+		Updates(columns).Error; err != nil {
+		return errors.Wrapf(err, "restart adaptive cooldowns of re-enabled channel %d", id)
 	}
 	return nil
 }
@@ -126,6 +157,11 @@ func TransitionChannelStatusWithContext(ctx context.Context, id, status int, fro
 			current.Status, change.Changed = status, true
 		}
 		enabled := current.Status == ChannelStatusEnabled
+		if enabled {
+			if err := restartReenabledAbilityCooldowns(tx, id); err != nil {
+				return errors.Wrap(err, "restart re-enabled ability cooldowns")
+			}
+		}
 		result := tx.Model(&Ability{}).Where("channel_id = ? AND enabled <> ?", id, enabled).Update("enabled", enabled)
 		if result.Error != nil {
 			return errors.Wrap(result.Error, "align channel ability status")

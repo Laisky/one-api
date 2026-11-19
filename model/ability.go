@@ -64,9 +64,19 @@ func excludedChannelIDs(excluded map[int]bool) []int {
 	return ids
 }
 
-// availableAbilitiesQuery builds the shared enabled, unsuspended, exact-model
-// ability query and optionally excludes channel IDs. The returned query is not executed.
-func availableAbilitiesQuery(db *gorm.DB, group string, model string, now time.Time, excludeIDs []int) *gorm.DB {
+// routingPoolQuery builds the exact-model query for the routing pool of (group,
+// model): every enabled ability, including abilities that are cooling down,
+// optionally without excludeIDs. It is the database form of the memory cache's
+// group2model2channels snapshot. The returned query is not executed.
+//
+// Parameters:
+//   - db: the session to build on.
+//   - group, model: the exact routing pool; model is the caller-facing name.
+//   - excludeIDs: channel IDs to omit; empty omits none.
+//
+// Return values:
+//   - *gorm.DB: the unexecuted query over abilities.
+func routingPoolQuery(db *gorm.DB, group string, model string, excludeIDs []int) *gorm.DB {
 	groupCol := "`group`"
 	if common.UsingPostgreSQL.Load() {
 		groupCol = `"group"`
@@ -76,11 +86,27 @@ func availableAbilitiesQuery(db *gorm.DB, group string, model string, now time.T
 		groupCol+" = ? AND "+exactModelPredicate("model")+" AND enabled = ?",
 		group, model, true,
 	)
-	query = query.Where(abilityRoutablePredicate(""), now, now)
 	if len(excludeIDs) > 0 {
 		query = query.Where("channel_id NOT IN ?", excludeIDs)
 	}
 	return query
+}
+
+// availableAbilitiesQuery builds the shared enabled, unsuspended, exact-model
+// ability query and optionally excludes channel IDs: the routing pool minus the
+// abilities still cooling down at now under either the fixed or the adaptive
+// deadline (abilityRoutablePredicate). The returned query is not executed.
+//
+// Parameters:
+//   - db: the session to build on.
+//   - group, model: the exact routing pool; model is the caller-facing name.
+//   - now: the UTC selection time.
+//   - excludeIDs: channel IDs to omit; empty omits none.
+//
+// Return values:
+//   - *gorm.DB: the unexecuted query over routable abilities.
+func availableAbilitiesQuery(db *gorm.DB, group string, model string, now time.Time, excludeIDs []int) *gorm.DB {
+	return routingPoolQuery(db, group, model, excludeIDs).Where(abilityRoutablePredicate(""), now, now)
 }
 
 // priorityPolicy selects which priority tier participates in routing.
@@ -426,10 +452,14 @@ func GetGroupModelsV2(ctx context.Context, group string) ([]dto.EnabledAbility, 
 }
 
 // SuspendAbility persists and immediately publishes a cooldown for one exact
-// (group, model, channel) ability. The database write and the cache publication
-// run under abilityCacheUpdateLock (see ability_cache.go), and the cache is only
-// updated after the write succeeded. Other replicas observe the persisted
-// deadline on their next cache rebuild.
+// (group, model, channel) ability. It only ever extends the fixed cooldown: when
+// the ability already cools down at least until the new deadline, the persisted
+// deadline is kept. The write is a compare-and-set on cooldown_revision that
+// also increments it, so this process publishes exactly the state it committed
+// (both deadlines at the new revision) without a read-back, and never holds a
+// lock across database I/O; see ability_deadline_publication.go. The cache is
+// only updated after the write succeeded. Other replicas observe the persisted
+// deadline on their next mirror refresh or cache rebuild.
 //
 // Parameters:
 //   - ctx: lifecycle scope for the database write.
@@ -438,7 +468,9 @@ func GetGroupModelsV2(ctx context.Context, group string) ([]dto.EnabledAbility, 
 //   - duration: how long routing must avoid the ability, from now.
 //
 // Return values:
-//   - error: a wrapped failure when the write fails or does not affect exactly one row.
+//   - error: a wrapped failure when the read or write fails, the ability does not
+//     exist, the write affects more than one row, or concurrent writers keep
+//     changing the ability.
 func SuspendAbility(ctx context.Context, group string, modelName string, channelId int, duration time.Duration) error {
 	if DB == nil {
 		return errors.New("database not initialized")
@@ -446,35 +478,59 @@ func SuspendAbility(ctx context.Context, group string, modelName string, channel
 	if group == "" || modelName == "" || channelId == 0 {
 		return errors.New("group, modelName, and channelId must be specified for suspending ability")
 	}
-	abilityCacheUpdateLock.Lock()
-	defer abilityCacheUpdateLock.Unlock()
+	key := cachedAbilityKey{group, modelName, channelId}
 	suspendTime := time.Now().UTC().Add(duration)
-
-	// Handle database-specific identifier quoting like other functions
-	groupCol := "`group`"
-	modelCol := "`model`"
-	channelCol := "`channel_id`"
-	if common.UsingPostgreSQL.Load() {
-		groupCol = `"group"`
-		modelCol = `"model"`
-		channelCol = `"channel_id"`
+	db := cooldownOutcomeDB(ctx)
+	for range abilityCooldownCASAttempts {
+		var ability Ability
+		if err := exactCooldownAbility(db, key).
+			Select("suspend_until", "adaptive_suspend_until", "cooldown_revision").
+			Take(&ability).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return identity.Tag(
+					errors.Errorf("suspend ability for group %q, model %q, channel %d affected 0 rows instead of 1: ability not found",
+						group, modelName, channelId),
+					LookupChannelRef(ctx, channelId))
+			}
+			return identity.Tag(
+				errors.Wrapf(err, "read ability for suspension of group %q, model %q, channel %d", group, modelName, channelId),
+				LookupChannelRef(ctx, channelId))
+		}
+		// Suspensions only extend a cooldown. Failures on one ability carry different
+		// cooldowns (a quota exhaustion or provider Retry-After lasts far longer than a
+		// plain failure), and a shorter one arriving later must not cut a longer active
+		// cooldown short. Lifting a suspension is a separate, explicit write.
+		if ability.SuspendUntil != nil && !ability.SuspendUntil.Before(suspendTime) {
+			// The read state is committed; publish it in case this process missed it.
+			publishCommittedAbilityDeadline(key, ability.SuspendUntil, ability.AdaptiveSuspendUntil, ability.CooldownRevision)
+			return nil
+		}
+		result := exactCooldownAbility(db, key).Where("cooldown_revision = ?", ability.CooldownRevision).
+			UpdateColumns(map[string]any{
+				"suspend_until":     suspendTime,
+				"cooldown_revision": ability.CooldownRevision + 1,
+			})
+		if result.Error != nil {
+			return identity.Tag(
+				errors.Wrapf(result.Error, "suspend ability for group %q, model %q, channel %d", group, modelName, channelId),
+				LookupChannelRef(ctx, channelId))
+		}
+		if result.RowsAffected > 1 {
+			return identity.Tag(
+				errors.Errorf("suspend ability for group %q, model %q, channel %d affected %d rows instead of 1",
+					group, modelName, channelId, result.RowsAffected),
+				LookupChannelRef(ctx, channelId))
+		}
+		if result.RowsAffected == 1 {
+			publishCommittedAbilityDeadline(key, &suspendTime, ability.AdaptiveSuspendUntil, ability.CooldownRevision+1)
+			return nil
+		}
+		// Another writer changed the ability since the read; retry on its state.
 	}
-	result := DB.WithContext(ctx).Model(&Ability{}).
-		Where(groupCol+" = ? AND "+exactModelPredicate(modelCol)+" AND "+channelCol+" = ?",
-			group, modelName, channelId).
-		Update("suspend_until", suspendTime)
-	if result.Error != nil {
-		return identity.Tag(
-			errors.Wrapf(result.Error, "suspend ability for group %q, model %q, channel %d", group, modelName, channelId),
-			LookupChannelRef(ctx, channelId))
-	}
-	if result.RowsAffected != 1 {
-		return identity.Tag(
-			errors.Errorf("suspend ability for group %q, model %q, channel %d affected %d rows instead of 1",
-				group, modelName, channelId, result.RowsAffected),
-			LookupChannelRef(ctx, channelId))
-	}
-	return refreshCachedAbilityDeadline(ctx, cachedAbilityKey{group, modelName, channelId})
+	return identity.Tag(
+		errors.Errorf("suspend ability for group %q, model %q, channel %d: ability changed repeatedly",
+			group, modelName, channelId),
+		LookupChannelRef(ctx, channelId))
 }
 
 // GetRandomSatisfiedChannelExcluding selects a random enabled channel for an exact

@@ -64,7 +64,8 @@ func parseConversationSelector(raw json.RawMessage) string {
 // response or conversation (provider affinity, proposal ST-005 / row R01). It
 // returns a channel only when the binding is present AND the bound channel is
 // still eligible for this request (enabled, serves the group, supports the model,
-// is not cooling down for that exact group and model, endpoint, and — for
+// has a routable exact ability for that group and model -- present, enabled and
+// not cooling down, see model.AbilityRoutable -- endpoint, and — for
 // websocket handshakes — the Responses websocket transport, row R07). Any miss,
 // unhealthy binding, or store error returns nil so the caller falls back to
 // normal selection and the fallback path replays canonical items (rows R02, R05).
@@ -138,18 +139,22 @@ func responseStateAffinityChannel(c *gin.Context, relayMode int, userGroup, requ
 	if requestModel != "" && !channel.SupportsModel(requestModel) {
 		return unpinned()
 	}
-	// Honor the same exact-ability cooldown as normal routing: a binding is a soft
-	// preference, so a cooling (group, model, channel) ability falls back to normal
-	// selection and canonical replay instead of re-sending to a rate-limited channel.
+	// Honor the same exact-ability eligibility as normal routing: a binding is a
+	// soft preference, so a (group, model, channel) ability that normal selection
+	// would not pick -- missing (model hidden or removed), disabled, or cooling
+	// down -- falls back to normal selection and canonical replay instead of
+	// re-sending to that channel.
 	lg := gmw.GetLogger(c)
 	if requestModel != "" {
-		cooling, err := model.AbilityCoolingDown(ctx, userGroup, requestModel, channel.Id)
+		routable, err := model.AbilityRoutable(ctx, userGroup, requestModel, channel.Id)
 		if err != nil {
-			lg.Warn("response state affinity cooldown check failed; using normal selection",
+			lg.Debug("response state affinity routability check failed; using normal selection",
 				zap.Int("channel_id", channel.Id), zap.Error(err))
 			return unpinned()
 		}
-		if cooling {
+		if !routable {
+			lg.Debug("response state affinity binding is not routable; using normal selection",
+				zap.Int("channel_id", channel.Id))
 			return unpinned()
 		}
 	}

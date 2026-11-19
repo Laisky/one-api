@@ -16,7 +16,9 @@ import (
 	"github.com/Laisky/one-api/relay/model"
 )
 
-// ConvertImageEditRequest handles the conversion from multipart form to Imagen request format
+// ConvertMultipartImageEditRequest converts a multipart OpenAI image edit form
+// into an Imagen edit request. It accepts the gin context and returns the
+// converted request or an error when the form is invalid.
 func ConvertMultipartImageEditRequest(c *gin.Context) (*CreateImageRequest, error) {
 	// Recover request body for binding
 	requestBody, err := common.GetRequestBody(c)
@@ -116,20 +118,23 @@ func ConvertMultipartImageEditRequest(c *gin.Context) (*CreateImageRequest, erro
 	return req, nil
 }
 
-// HandleImageEdit processes an image edit response from Imagen API
+// HandleImageEdit processes an Imagen image edit response: it reads the body
+// with a bounded read, reports a provider rejection without echoing the raw
+// body, and writes the OpenAI image response. It accepts the gin context and
+// the provider response, and returns zero usage (Imagen bills per image) or the
+// relay error.
 func HandleImageEdit(c *gin.Context, resp *http.Response) (*model.Usage, *model.ErrorWithStatusCode) {
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+	respBody, readErr := readImagenResponse(c, resp)
+	if readErr != nil {
+		return nil, readErr
 	}
-	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, openai.ErrorWrapper(errors.New(string(respBody)), "imagen_api_error", resp.StatusCode)
+		return nil, imagenStatusError(resp.StatusCode, respBody)
 	}
 
 	var imageResponse CreateImageResponse
-	err = json.Unmarshal(respBody, &imageResponse)
+	err := json.Unmarshal(respBody, &imageResponse)
 	if err != nil {
 		return nil, openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
 	}

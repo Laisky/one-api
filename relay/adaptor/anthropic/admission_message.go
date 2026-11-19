@@ -33,8 +33,11 @@ func ParseClaudeMessageAdmissionRejection(body []byte, httpStatus int, closeErr 
 	if status == 0 {
 		return nil
 	}
+	// The rejection is the provider's answer, so it is provider-marked; the
+	// literal is kept because RawError must carry the private admission proof.
 	return &model.ErrorWithStatusCode{StatusCode: status, Error: model.Error{
 		Type: model.ErrorType(envelope.Error.Type), Code: envelope.Error.Type,
-		Message: envelope.Error.Message, RawError: errors.WithStack(&admissionRejectionError{}),
+		Message: envelope.Error.Message, FromUpstream: true,
+		RawError: errors.WithStack(&admissionRejectionError{}),
 	}}
 }

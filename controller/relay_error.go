@@ -337,8 +337,16 @@ func logChannelSuspensionStatus(ctx context.Context, group, model string, failed
 // appendRelayFailureFields so every relay failure remains self-contained even when
 // request-scoped logger bindings are unavailable.
 type processChannelRelayErrorParams struct {
-	StartedAt     time.Time
-	CompletedAt   time.Time
+	StartedAt   time.Time
+	CompletedAt time.Time
+	// ReadOnly marks a read-only provider call (GET/HEAD, e.g. a video status
+	// poll). Its outcome keeps the legacy cooldown policy and never drives the
+	// adaptive ladder, whose rungs describe generation capacity.
+	ReadOnly bool
+	// Revision is the routed channel snapshot's UpstreamRevision, or
+	// dbmodel.AbilityUpstreamRevisionUnknown; it fences outcomes of attempts
+	// routed with a replaced key or endpoint.
+	Revision      int64
 	Attempt       int
 	RequestID     string
 	UserId        int
@@ -401,16 +409,13 @@ func appendRelayFailureFields(params processChannelRelayErrorParams, extra ...za
 	if params.Err.StatusCode > 0 {
 		fields = append(fields, zap.Int("status_code", params.Err.StatusCode))
 	}
+	// Code, type and param are provider-controlled; log only vocabulary-shaped
+	// values and redact free text, credentials and opaque identifiers. The raw
+	// code still drives classification below.
 	errorCode := strings.TrimSpace(fmt.Sprint(params.Err.Code))
-	if errorCode != "" && errorCode != "<nil>" {
-		fields = append(fields, zap.String("error_code", errorCode))
-	}
-	if errorType := strings.TrimSpace(string(params.Err.Type)); errorType != "" {
-		fields = append(fields, zap.String("error_type", errorType))
-	}
-	if errorParam := strings.TrimSpace(params.Err.Param); errorParam != "" {
-		fields = append(fields, zap.String("error_param", errorParam))
-	}
+	fields = append(fields, applog.UntrustedIdentifierFields("error_code", params.Err.Code)...)
+	fields = append(fields, applog.UntrustedIdentifierFields("error_type", string(params.Err.Type))...)
+	fields = append(fields, applog.UntrustedIdentifierFields("error_param", params.Err.Param)...)
 	if quotaScope := oneAPIQuotaScope(params.Err, errorCode); quotaScope != "" {
 		fields = append(fields, zap.String("quota_scope", quotaScope))
 	}
@@ -488,10 +493,14 @@ var processChannelRelayErrorGateForTest chan struct{}
 // goProcessChannelRelayError snapshots the upstream error into params SYNCHRONOUSLY on
 // the request goroutine before spawning the async processor, so it can never read
 // bizErr.Error.Message while the request goroutine rewrites it for the client response.
+// It also publishes the provisional cooldown (see publishRelayProvisionalCooldown),
+// which the processor releases when done so the persisted outcome replaces it.
 func goProcessChannelRelayError(ctx context.Context, bizErr *model.ErrorWithStatusCode, params processChannelRelayErrorParams) {
 	params.Err = *bizErr // synchronous snapshot on the request goroutine
+	release := publishRelayProvisionalCooldown(ctx, params)
 	gate := processChannelRelayErrorGateForTest
 	graceful.GoCritical(ctx, "processChannelRelayError", func(ctx context.Context) {
+		defer release()
 		if gate != nil {
 			<-gate
 		}

@@ -50,17 +50,21 @@ func UnifiedStreamProcessing(c *gin.Context, resp *http.Response, promptTokens i
 			zap.Int("body_bytes", len(responseBody)),
 			zap.Bool("body_logging_suppressed", true))
 
-		// Try to parse as error response
+		// Try to parse as error response. Both returns below report the
+		// provider's own status for a body the provider sent, so they are
+		// provider-marked (FromUpstream) for channel attribution.
 		var errorResponse SlimTextResponse
 		if err := json.Unmarshal(responseBody, &errorResponse); err == nil && errorResponse.Error != nil && errorResponse.Error.Type != "" {
+			providerError := *errorResponse.Error
+			providerError.FromUpstream = true
 			return &model.ErrorWithStatusCode{
-				Error:      *errorResponse.Error,
+				Error:      providerError,
 				StatusCode: resp.StatusCode,
 			}, nil
 		}
 
 		// Return generic error if parsing fails
-		return ErrorWrapper(errors.Errorf("unexpected non-streaming response with %d bytes", len(responseBody)),
+		return UpstreamErrorWrapper(errors.Errorf("unexpected non-streaming response with %d bytes", len(responseBody)),
 			"unexpected_response_format", resp.StatusCode), nil
 	}
 

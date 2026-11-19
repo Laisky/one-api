@@ -19,6 +19,21 @@ func ErrorWrapper(err error, code string, statusCode int) *model.ErrorWithStatus
 	}
 }
 
+// UpstreamErrorWrapper wraps a failure the provider reported with its own HTTP
+// status. It delegates to openai_compatible.UpstreamErrorWrapper, which documents
+// the provenance contract; use ErrorWrapper only for failures one-api produced.
+//
+// Parameters:
+//   - err: the failure description; it becomes Message and RawError.
+//   - code: the stable error code exposed to clients.
+//   - statusCode: the HTTP status to report, normally the provider's status.
+//
+// Returns:
+//   - *model.ErrorWithStatusCode: the wrapped error, marked as provider-caused.
+func UpstreamErrorWrapper(err error, code string, statusCode int) *model.ErrorWithStatusCode {
+	return openai_compatible.UpstreamErrorWrapper(err, code, statusCode)
+}
+
 // NormalizeDataLine normalizes SSE data lines
 // This function delegates to the shared implementation for consistency
 func NormalizeDataLine(data string) string {

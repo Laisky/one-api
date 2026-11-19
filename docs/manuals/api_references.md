@@ -310,6 +310,20 @@ See [Conventions](#two-response-envelopes) for the two envelopes. In short:
 - **Management** errors: `{"success": false, "message": "<reason>"}` (usually HTTP 200; auth failures use a real `401`/`403`, and a missing or malformed resource reference uses `400` — see [Resource reference errors](#resource-reference-errors-management-api)).
 - **Relay** errors: `{"error": {"message", "type", "param", "code"}}` with the real HTTP status. `type` is one of the upstream error types or `one_api_error` for gateway-originated errors; `code` is a machine-readable string (e.g. `insufficient_user_quota`, `api_not_implemented`).
 
+### Upstream error metadata
+
+When an upstream provider rejects a relayed request, the gateway forwards only the fields it can parse from the provider's JSON error object, together with the provider's HTTP status:
+
+- An OpenAI nested envelope (`{"error": {...}}`) whose `message` is a string is relayed as a whole (`message`, `type`, `code`, `param`); Anthropic (`{"type":"error","error":{...}}`) and Google (`{"error":{"code","message","status"}}`) envelopes take the same path.
+- Otherwise `type`, `code` and `param` are taken field by field from the nested object first, then from a flat envelope (`{"message", "type", "code", "param"}`, as sent by Volcengine Ark and other OpenAI-compatible providers). Missing values default to `upstream_error`, `bad_response_status_code` and the HTTP status.
+- The message may also come from common legacy keys (a string `error`, `msg`, `err`, `error_msg`, `header.message`, `response.error.message`) or a string FastAPI `detail`.
+- Members of the wrong JSON kind are dropped rather than failing the whole body: `message`, `type` and `param` must be strings, and `code` a string or number. A repeated key (keys match case-insensitively) whose value is `null` or of the wrong kind never erases a readable earlier value, so `{"message":"quota exceeded","Message":null}` still yields `quota exceeded`.
+- A body that is empty, larger than 1 MiB, not a JSON object, or has no recognizable message yields a generic message that names only the status, content type and size, for example `upstream returned HTTP 502 with an unrecognized error body (content-type text/html, 147 bytes)`, `upstream returned HTTP 503 with an empty error body`, or `upstream returned HTTP 502 with an error body larger than the 1048576-byte limit (content-type text/plain)`. A body that cannot be read yields `upstream returned HTTP 502 with an error body that could not be read`. Raw provider bodies are never echoed to the client or written to logs, because they can carry internal hosts or account identifiers; at most 1 MiB (plus one byte, to detect an oversized body) is read.
+- The same rules cover Gemini and Vertex AI `countTokens` pre-flight failures for multimodal embeddings (the Google message, or the generic message, with the provider status) and GitHub Copilot token-exchange failures (`copilot token endpoint: <parsed reason or generic message>`).
+- When a channel's upstream is itself a one-api compatible gateway, its error envelope is relayed as received, including a `one_api_error` type. This gateway still treats such an error as an upstream failure for retries, failover and channel health, never as its own.
+
+Compatibility note: earlier releases appended the raw upstream body to the message when it could not be parsed (`failed to unmarshal response body: ...` or `bad response [502] <body>`), and a nested error object without a string `message` lost its own `type`/`code` to the flat keys or defaults. Clients must not parse provider bodies out of `message`; well-formed provider envelopes are relayed exactly as before.
+
 ### HTTP status codes
 
 | Code | Meaning in this gateway | Client action |
@@ -2063,16 +2077,16 @@ Creates an asynchronous video-generation task and returns a task object whose `i
 |-------|----------|------|----------|---------|-------------|
 | Model | `model` | string | No | `sora-2` | Video model. Defaults to `sora-2` when omitted (falls back to the request-context model first, then `sora-2`). |
 | Prompt | `prompt` | string | No | — | Text description of the video. |
-| Seconds | `seconds` | number | Yes* | — | Requested duration in seconds. Used when `duration_seconds` is absent. |
-| Duration | `duration` | number | Yes* | — | Alternative duration key. Lowest priority. |
-| DurationSeconds | `duration_seconds` | number | Yes* | — | Duration key with the highest priority. |
+| Seconds | `seconds` | string or number | Yes* | — | Requested duration in seconds. OpenAI's contract sends a decimal string such as `"4"`; a JSON number is also accepted. |
+| Duration | `duration` | string or number | Yes* | — | Alternative duration key. |
+| DurationSeconds | `duration_seconds` | string or number | Yes* | — | Alternative duration key. |
 | Size | `size` | string | No | — | Resolution hint (highest priority), e.g. `1280x720`. |
 | Resolution | `resolution` | string | No | — | Resolution hint used if `size` is absent. |
 | AspectRatio | `aspect_ratio` | string | No | — | e.g. `16:9`. |
 | RemixID | `remix_id` | string | No | — | ID of a prior video to remix. |
 | ReferenceID | `reference_id` | string | No | — | ID of a reference asset. |
 
-\* At least one of `duration_seconds`, `seconds`, or `duration` must resolve to a positive number (priority: `duration_seconds` > `seconds` > `duration`); otherwise the request is rejected with `invalid_video_duration`.
+\* At least one of `duration_seconds`, `seconds`, or `duration` is required. Every duration key that is present must be a positive unsigned decimal string (such as `"4"` or `"7.5"`; no sign, exponent or whitespace) or a positive JSON number, and all present keys must agree; otherwise the request is rejected with `invalid_video_duration` before any quota is reserved, so the billed duration always equals the duration the provider renders. The request body is forwarded unchanged.
 
 ```json
 {

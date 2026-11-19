@@ -3,7 +3,6 @@ package copilot
 import (
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -13,6 +12,7 @@ import (
 	"github.com/Laisky/errors/v2"
 
 	"github.com/Laisky/one-api/common/client"
+	relaymodel "github.com/Laisky/one-api/relay/model"
 )
 
 const (
@@ -89,12 +89,20 @@ func fetchCopilotToken(ctx context.Context, githubAccessToken string) (token str
 	}
 	defer resp.Body.Close()
 
-	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	// The returned error text reaches the API caller as the do_request_failed
+	// message, so it carries a parsed reason or a generic description, never
+	// the raw endpoint response (OWASP API8:2023 / API10:2023), and the read is
+	// bounded (OWASP API4:2023).
+	body, readErr := relaymodel.ReadBoundedUpstreamBody(resp.Body)
 	if readErr != nil {
 		return "", time.Time{}, errors.Wrap(readErr, "read response")
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", time.Time{}, errors.Errorf("copilot token endpoint returned %d: %s", resp.StatusCode, string(body))
+		return "", time.Time{}, errors.Errorf("copilot token endpoint: %s",
+			relaymodel.UpstreamErrorBodyMessage(resp.StatusCode, resp.Header.Get("Content-Type"), body))
+	}
+	if len(body) > relaymodel.MaxUpstreamErrorBodyBytes {
+		return "", time.Time{}, errors.Errorf("copilot token endpoint response exceeds the %d-byte limit", relaymodel.MaxUpstreamErrorBodyBytes)
 	}
 
 	// The response shape is not formally documented; accept multiple variants.
@@ -116,7 +124,10 @@ func fetchCopilotToken(ctx context.Context, githubAccessToken string) (token str
 	}
 
 	if raw.Token == "" {
-		return "", time.Time{}, errors.Errorf("missing token in response: %s", string(body))
+		if text := relaymodel.UpstreamErrorBodyText(body); text != "" {
+			return "", time.Time{}, errors.Errorf("copilot token endpoint response has no token: %s", text)
+		}
+		return "", time.Time{}, errors.New("copilot token endpoint response has no token")
 	}
 
 	now := time.Now()

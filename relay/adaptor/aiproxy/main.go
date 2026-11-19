@@ -197,16 +197,9 @@ func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *
 		return openai.ErrorWrapper(errors.WithStack(err), "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	if AIProxyLibraryResponse.ErrCode != 0 {
-		errType := model.ErrorType(strconv.Itoa(AIProxyLibraryResponse.ErrCode))
-		return &model.ErrorWithStatusCode{
-			Error: model.Error{
-				Message:  AIProxyLibraryResponse.Message,
-				Type:     errType,
-				Code:     AIProxyLibraryResponse.ErrCode,
-				RawError: errors.New(AIProxyLibraryResponse.Message),
-			},
-			StatusCode: resp.StatusCode,
-		}, nil
+		// The errCode envelope is AIProxy's answer, so the error is provider-marked.
+		return model.NewUpstreamError(resp.StatusCode, AIProxyLibraryResponse.Message,
+			model.ErrorType(strconv.Itoa(AIProxyLibraryResponse.ErrCode)), AIProxyLibraryResponse.ErrCode), nil
 	}
 	fullTextResponse := responseAIProxyLibrary2OpenAI(c, &AIProxyLibraryResponse)
 	jsonResponse, err := json.Marshal(fullTextResponse)

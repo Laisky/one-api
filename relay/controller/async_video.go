@@ -124,8 +124,18 @@ func RelayAsyncVideoHelper(c *gin.Context, syncWait bool) *relaymodel.ErrorWithS
 	if err != nil {
 		return openai.ErrorWrapper(err, "invalid_async_video_request", http.StatusBadRequest)
 	}
-	video := &relaymodel.VideoRequest{}
-	if err := common.UnmarshalBodyReusable(c, video); err != nil || strings.TrimSpace(video.Model) == "" {
+	// Share the synchronous decoder so both paths bill identically: string and
+	// number durations decode alike, and a non-positive or conflicting alias is
+	// refused before a quote or reservation can bill a length the provider will
+	// not render. Duration refusals keep the shared invalid_video_duration code.
+	video, decodeErr := decodeVideoRequest(c)
+	if decodeErr != nil {
+		if decodeErr.Code == "invalid_video_request" {
+			decodeErr.Code = "invalid_async_video_request"
+		}
+		return decodeErr
+	}
+	if strings.TrimSpace(video.Model) == "" {
 		return openai.ErrorWrapper(errors.New("async video requires a JSON object with model"), "invalid_async_video_request", http.StatusBadRequest)
 	}
 	info := meta.GetByContext(c)

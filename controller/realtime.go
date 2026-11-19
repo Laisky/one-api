@@ -50,11 +50,18 @@ const (
 //  3. Defer billing audit safety net — catch unreconciled pre-consumption
 //  4. Run WebSocket session — preserve native frames and collect provider usage
 //  5. Post-consume quota — settle response and transcription receipts by modality
+//
+// A failure that ends the attempt before any session traffic (for example a
+// provider refusing the WebSocket handshake) is refunded and handed to the same
+// channel policy the HTTP relay applies; a session that started is settled by
+// billing alone.
 func RelayRealtime(c *gin.Context) {
 	lg := gmw.GetLogger(c)
 	ctx := gmw.Ctx(c)
 	start := time.Now()
 	relayMeta := meta.GetByContext(c)
+	// Snapshot the routing identity before any adaptor runs, as Relay does.
+	routing := snapshotRealtimeRouting(c)
 
 	// Record channel requests in flight
 	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
@@ -164,7 +171,13 @@ func RelayRealtime(c *gin.Context) {
 	}
 
 	// ── Step 4: Run WebSocket session ───────────────────────────────────
+	// Derive completion from the monotonic clock: UTC() strips the monotonic
+	// reading, and a wall-clock step must not make an outcome finish before it
+	// started (the cooldown writer rejects such timestamps).
+	attemptClock := time.Now()
+	attemptStarted := attemptClock.UTC()
 	bizErr, usage := runRealtimeProviderWithGemini(c, relayMeta)
+	attemptCompleted := attemptStarted.Add(time.Since(attemptClock))
 	if spendGate != nil {
 		reservation = spendGate.settlement()
 		rtMarkPreConsumed(c, reservation.Reserved)
@@ -172,6 +185,9 @@ func RelayRealtime(c *gin.Context) {
 	if bizErr != nil {
 		// Handshake/connection error — upstream was NOT reached, safe to refund
 		c.Set(ctxkey.UpstreamRequestPossiblyForwarded, false)
+		// Adaptors return an error only before the session starts, so this
+		// outcome carries no billing ambiguity and is channel-health evidence.
+		processRealtimeStartFailure(c, relayMeta, bizErr, routing, attemptStarted, attemptCompleted)
 		rtReturnPreConsumedQuota(ctx, c, reservation.Reserved, relayMeta.TokenId, "realtime_connect_failed")
 		c.JSON(bizErr.StatusCode, gin.H{"error": bizErr.Error})
 		PrometheusMonitor.RecordRelayRequest(c, relayMeta, start, false, 0, 0, 0)
@@ -357,6 +373,73 @@ func settleRealtimeQuota(
 	})
 
 	return float64(totalQuota)
+}
+
+// realtimeRouting is the routing identity of one realtime attempt. RelayRealtime
+// snapshots it before the adaptor runs because an adaptor may rewrite
+// ctxkey.RequestModel, while channel policy must keep addressing the routed
+// ability.
+type realtimeRouting struct {
+	// group is the routing group the ability belongs to.
+	group string
+	// originalModel is the routed model name whose ability exists.
+	originalModel string
+	// revision is the routed channel snapshot's upstream revision.
+	revision int64
+}
+
+// snapshotRealtimeRouting captures the routing identity Distribute bound for the
+// selected channel.
+//
+// Parameters:
+//   - c: the authenticated realtime request context.
+//
+// Returns:
+//   - realtimeRouting: the routing group, routed model and upstream revision.
+func snapshotRealtimeRouting(c *gin.Context) realtimeRouting {
+	return realtimeRouting{
+		group:         c.GetString(ctxkey.Group),
+		originalModel: c.GetString(ctxkey.RequestModel),
+		revision:      relayAttemptUpstreamRevision(c),
+	}
+}
+
+// processRealtimeStartFailure hands a realtime attempt that failed before any
+// session traffic to the channel policy the HTTP relay applies (ability
+// cooldown, channel health and auth suspension or auto-disable). The policy
+// classifies the error itself: a provider handshake status is provider
+// evidence, while one-api's own and caller-side failures are logged without
+// cooling the channel. The error is snapshotted synchronously and processed on
+// a detached context, so the request context is never held by the goroutine.
+//
+// Parameters:
+//   - c: the realtime request context, read only on the request goroutine.
+//   - relayMeta: the attempt's relay metadata, for the mapped model name.
+//   - bizErr: the pre-session failure the adaptor returned.
+//   - routing: the routing identity snapshotted before the adaptor ran.
+//   - started: the UTC instant the adaptor started.
+//   - completed: the UTC instant it returned, derived from the monotonic clock.
+//
+// Returns: none.
+func processRealtimeStartFailure(c *gin.Context, relayMeta *meta.Meta, bizErr *rmodel.ErrorWithStatusCode, routing realtimeRouting, started, completed time.Time) {
+	goProcessChannelRelayError(relayctx.Detach(c), bizErr, processChannelRelayErrorParams{
+		StartedAt:   started,
+		CompletedAt: completed,
+		// A WebSocket upgrade is a GET, but it opens a generation session, so
+		// its outcome describes generation capacity like a POST does.
+		ReadOnly:      false,
+		Revision:      routing.revision,
+		Attempt:       1,
+		RequestID:     c.GetString(ctxkey.RequestId),
+		UserId:        c.GetInt(ctxkey.Id),
+		TokenId:       c.GetInt(ctxkey.TokenId),
+		ChannelId:     c.GetInt(ctxkey.ChannelId),
+		ChannelName:   c.GetString(ctxkey.ChannelName),
+		Group:         routing.group,
+		OriginalModel: routing.originalModel,
+		ActualModel:   relayMeta.ActualModelName,
+		RequestURL:    c.Request.URL.String(),
+	})
 }
 
 // resolveRealtimePricingAdaptor returns the pricing adaptor for a realtime session

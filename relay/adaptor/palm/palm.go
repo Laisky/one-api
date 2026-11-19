@@ -146,16 +146,10 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 		return openai.ErrorWrapper(errors.WithStack(err), "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	if palmResponse.Error.Code != 0 || len(palmResponse.Candidates) == 0 {
-		return &model.ErrorWithStatusCode{
-			Error: model.Error{
-				Message:  palmResponse.Error.Message,
-				Type:     model.ErrorType(palmResponse.Error.Status),
-				Param:    "",
-				Code:     palmResponse.Error.Code,
-				RawError: errors.New(palmResponse.Error.Message),
-			},
-			StatusCode: resp.StatusCode,
-		}, nil
+		// The error envelope (or the missing candidates) is PaLM's answer, so
+		// the error is provider-marked.
+		return model.NewUpstreamError(resp.StatusCode, palmResponse.Error.Message,
+			model.ErrorType(palmResponse.Error.Status), palmResponse.Error.Code), nil
 	}
 	fullTextResponse := responsePaLM2OpenAI(&palmResponse)
 	fullTextResponse.Model = modelName

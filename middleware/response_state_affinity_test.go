@@ -81,7 +81,7 @@ func affinityContext(t *testing.T, prevID string) *gin.Context {
 // TestResponseStateAffinityPinsBoundChannel proves an eligible provider binding
 // is preferred before normal selection (row R01, closing B12).
 func TestResponseStateAffinityPinsBoundChannel(t *testing.T) {
-	setupAffinityTestDB(t, &dbmodel.Channel{
+	bound := &dbmodel.Channel{
 		Id:     7,
 		Type:   channeltype.OpenAI,
 		Name:   "bound",
@@ -89,7 +89,16 @@ func TestResponseStateAffinityPinsBoundChannel(t *testing.T) {
 		Models: "gpt-5",
 		Group:  "default",
 		Config: "{}",
-	})
+	}
+	setupAffinityTestDB(t, bound)
+	// Every saved channel has its abilities projection; affinity, like normal
+	// routing, requires the bound (group, model, channel) ability to be routable.
+	require.NoError(t, bound.AddAbilities())
+	// Pin the database routing path: an earlier test in this package may leave
+	// the memory cache enabled with a snapshot that predates this fixture.
+	originalMemory := config.MemoryCacheEnabled
+	config.MemoryCacheEnabled = false
+	t.Cleanup(func() { config.MemoryCacheEnabled = originalMemory })
 	gwID := enableAffinityState(t, 7)
 	c := affinityContext(t, gwID)
 

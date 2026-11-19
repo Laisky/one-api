@@ -7,6 +7,8 @@ import (
 	"math"
 	"mime"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/Laisky/errors/v2"
@@ -83,9 +85,9 @@ func resolveMuAPIDuration(payload map[string]json.RawMessage, request *model.Vid
 		if !exists {
 			continue
 		}
-		var value float64
-		if err := json.Unmarshal(raw, &value); err != nil {
-			return 0, errors.Wrapf(err, "MuAPI video %s must be a number", field)
+		value, err := decodeMuAPIDuration(raw)
+		if err != nil {
+			return 0, errors.Wrapf(err, "MuAPI video %s must be a number or a decimal string", field)
 		}
 		if value <= 0 || value > maxMuAPIVideoDuration || math.IsNaN(value) || math.IsInf(value, 0) || math.Trunc(value) != value {
 			return 0, errors.Errorf("MuAPI video duration must be an integer from 1 through %d seconds", maxMuAPIVideoDuration)
@@ -102,6 +104,40 @@ func resolveMuAPIDuration(payload map[string]json.RawMessage, request *model.Vid
 		return 0, errors.New("MuAPI video generation requires a positive integer duration")
 	}
 	return duration, nil
+}
+
+// muAPIDurationText is the accepted string form of a duration alias. The
+// OpenAI Videos contract sends `seconds` as a decimal string ("4"); the gateway
+// has already validated and billed that exact value, and MuAPI's native API
+// receives it as a number. Signs, exponents and whitespace are refused.
+var muAPIDurationText = regexp.MustCompile(`^[0-9]{1,9}(\.[0-9]{1,9})?$`)
+
+// decodeMuAPIDuration decodes one duration alias given as a JSON number or as a
+// decimal string matching muAPIDurationText.
+//
+// Parameters:
+//   - raw: the alias's raw JSON value.
+//
+// Returns:
+//   - float64: the decoded duration in seconds.
+//   - error: a wrapped error for any other value.
+func decodeMuAPIDuration(raw json.RawMessage) (float64, error) {
+	var text string
+	if err := json.Unmarshal(raw, &text); err == nil {
+		if !muAPIDurationText.MatchString(text) {
+			return 0, errors.New("duration string must be unsigned decimal seconds such as \"4\"")
+		}
+		value, err := strconv.ParseFloat(text, 64)
+		if err != nil {
+			return 0, errors.Wrap(err, "parse duration string")
+		}
+		return value, nil
+	}
+	var value float64
+	if err := json.Unmarshal(raw, &value); err != nil {
+		return 0, errors.Wrap(err, "decode duration number")
+	}
+	return value, nil
 }
 
 // validateMuAPIVideoOperation permits only creation and opaque-task polling.

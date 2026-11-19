@@ -101,17 +101,10 @@ func EmbeddingHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStat
 	}
 
 	if aliResponse.Code != "" {
-		errType := model.ErrorType(aliResponse.Code)
-		return &model.ErrorWithStatusCode{
-			Error: model.Error{
-				Message:  aliResponse.Message,
-				Type:     errType,
-				Param:    aliResponse.RequestId,
-				Code:     aliResponse.Code,
-				RawError: errors.New(aliResponse.Message),
-			},
-			StatusCode: resp.StatusCode,
-		}, nil
+		// The provider reported the failure, so keep its fields and mark the
+		// error FromUpstream (a provider "one_api_error" code is not ours).
+		return model.NewUpstreamError(resp.StatusCode, aliResponse.Message, model.ErrorType(aliResponse.Code), aliResponse.Code,
+			model.WithUpstreamErrorParam(aliResponse.RequestId)), nil
 	}
 	requestModel := c.GetString(ctxkey.RequestModel)
 	fullTextResponse := embeddingResponseAli2OpenAI(&aliResponse)
@@ -332,17 +325,10 @@ func Handler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *
 		return openai.ErrorWrapper(errors.WithStack(err), "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	if aliResponse.Code != "" {
-		errType := model.ErrorType(aliResponse.Code)
-		return &model.ErrorWithStatusCode{
-			Error: model.Error{
-				Message:  aliResponse.Message,
-				Type:     errType,
-				Param:    aliResponse.RequestId,
-				Code:     aliResponse.Code,
-				RawError: errors.New(aliResponse.Message),
-			},
-			StatusCode: resp.StatusCode,
-		}, nil
+		// The provider reported the failure, so keep its fields and mark the
+		// error FromUpstream (a provider "one_api_error" code is not ours).
+		return model.NewUpstreamError(resp.StatusCode, aliResponse.Message, model.ErrorType(aliResponse.Code), aliResponse.Code,
+			model.WithUpstreamErrorParam(aliResponse.RequestId)), nil
 	}
 	fullTextResponse := responseAli2OpenAI(&aliResponse)
 	fullTextResponse.Model = "qwen"

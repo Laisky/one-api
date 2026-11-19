@@ -100,6 +100,29 @@ func ErrorWrapper(err error, code string, statusCode int) *model.ErrorWithStatus
 	}
 }
 
+// UpstreamErrorWrapper creates the same client-visible error as ErrorWrapper for
+// a failure the provider reported with its own HTTP status, for example a
+// non-2xx response whose body is deliberately not exposed. The JSON payload keeps
+// type one_api_error, the code and the message unchanged; only the server-side
+// FromUpstream provenance is set. IsOneAPIError then reports false, so relay
+// classifiers attribute the failure to the channel: provider 429 and 5xx advance
+// the adaptive ability cooldown instead of taking the legacy fixed fallback or
+// being skipped as a one-api internal error. Use ErrorWrapper only for failures
+// one-api produced itself, including transport failures with no provider status.
+//
+// Parameters:
+//   - err: the failure description; it becomes Message and RawError.
+//   - code: the stable error code exposed to clients.
+//   - statusCode: the HTTP status to report, normally the provider's status.
+//
+// Returns:
+//   - *model.ErrorWithStatusCode: the wrapped error, marked as provider-caused.
+func UpstreamErrorWrapper(err error, code string, statusCode int) *model.ErrorWithStatusCode {
+	wrapped := ErrorWrapper(err, code, statusCode)
+	wrapped.FromUpstream = true
+	return wrapped
+}
+
 // CountTokenText estimates token count (simplified implementation)
 func CountTokenText(text string, modelName string) int {
 	// Simple estimation: ~4 characters per token

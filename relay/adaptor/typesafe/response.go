@@ -81,7 +81,25 @@ func (a *Adaptor) ReadResponse(c *gin.Context, response *http.Response, _ *meta.
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxResponseBytes+1))
 	if err != nil || len(body) > maxResponseBytes {
-		return nil, usage, openai.ErrorWrapper(errors.New("incomplete or oversized TypeSafe response"), "typesafe_response_read_failed", http.StatusBadGateway)
+		// Billing is decided by the status line alone here and is unchanged: an
+		// admission rejection (4xx, 529) keeps the zero-usage refund and any other
+		// status keeps the ambiguous-attempt estimate. A receipt is never taken
+		// from a truncated or oversized body; "a measured receipt outranks the
+		// status" applies only to a body that was read completely and in bounds.
+		// Only the error's attribution follows the status line: when TypeSafe
+		// answered 400..599, that status is the provider's own verdict however its
+		// body ended, so the error keeps it with FromUpstream (relay policy then
+		// attributes 429/5xx to the channel) and the same code and message.
+		// Anything else (an unreadable 200 or an unexpected status class) stays
+		// one-api's own 502.
+		lg.Debug("TypeSafe response body unreadable",
+			zap.Int("status", response.StatusCode), zap.Int("body_bytes", len(body)),
+			zap.Bool("oversized", len(body) > maxResponseBytes), zap.Error(err))
+		readErr := errors.New("incomplete or oversized TypeSafe response")
+		if response.StatusCode >= http.StatusBadRequest && response.StatusCode <= 599 {
+			return nil, usage, openai.UpstreamErrorWrapper(readErr, "typesafe_response_read_failed", response.StatusCode)
+		}
+		return nil, usage, openai.ErrorWrapper(readErr, "typesafe_response_read_failed", http.StatusBadGateway)
 	}
 	result := &Response{Body: body, StatusCode: response.StatusCode, RetryAfter: response.Header.Get("Retry-After"),
 		RetryAfterMs: response.Header.Get(retryAfterMsHeader), RequestID: requestID}
@@ -97,7 +115,7 @@ func (a *Adaptor) ReadResponse(c *gin.Context, response *http.Response, _ *meta.
 		if !json.Valid(body) {
 			result = nil
 		}
-		return result, usage, openai.ErrorWrapper(errors.Errorf("TypeSafe returned HTTP %d", response.StatusCode), "typesafe_upstream_error", response.StatusCode)
+		return result, usage, openai.UpstreamErrorWrapper(errors.Errorf("TypeSafe returned HTTP %d", response.StatusCode), "typesafe_upstream_error", response.StatusCode)
 	}
 	fields, err := decodeObject(body)
 	if err != nil {

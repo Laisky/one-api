@@ -94,8 +94,10 @@ func TestAdaptiveAbilityCooldownPersistsAndResets(t *testing.T) {
 	require.Nil(t, other.AdaptiveSuspendUntil)
 }
 
-// TestAdaptiveAbilityCooldownConcurrentFailures verifies that concurrent outcomes
-// neither lose bounded streak increments nor move the effective deadline earlier.
+// TestAdaptiveAbilityCooldownConcurrentFailures verifies that concurrent
+// failures of attempts dispatched together form one episode: whatever order they
+// persist in, the ability cools at the first rung from the latest completion
+// instead of climbing the ladder, and the deadline never moves earlier.
 func TestAdaptiveAbilityCooldownConcurrentFailures(t *testing.T) {
 	db := setupTestDB(t)
 	sqlDB, err := db.DB()
@@ -124,15 +126,58 @@ func TestAdaptiveAbilityCooldownConcurrentFailures(t *testing.T) {
 	for err := range errs {
 		require.NoError(t, err)
 	}
-	var rungs []time.Duration
+	applied := 0
 	for result := range results {
-		rungs = append(rungs, result)
+		require.Contains(t, []time.Duration{0, abilityCooldownLadder[0]}, result)
+		if result > 0 {
+			applied++
+		}
 	}
-	require.ElementsMatch(t, abilityCooldownLadder[:], rungs)
+	require.Positive(t, applied)
 	var row Ability
 	require.NoError(t, exactCooldownAbility(db, key).Take(&row).Error)
-	require.Equal(t, len(abilityCooldownLadder), row.CooldownFailures)
-	require.Equal(t, at.Add(4*time.Second+10*time.Minute), *row.AdaptiveSuspendUntil)
+	require.Equal(t, 1, row.CooldownFailures)
+	require.Equal(t, at.Add(4*time.Second+abilityCooldownLadder[0]), *row.AdaptiveSuspendUntil)
+}
+
+// TestAdaptiveAbilityCooldownEpisodeEscalation verifies the episode rule
+// directly: a failure dispatched before the deadline in force joins the current
+// rung and extends it, a failed probe dispatched at or after the deadline opens
+// the next rung, and an outcome no newer than the recorded episode is ignored.
+func TestAdaptiveAbilityCooldownEpisodeEscalation(t *testing.T) {
+	db := setupTestDB(t)
+	previous := DB
+	DB = db
+	t.Cleanup(func() { DB = previous })
+	ctx := context.Background()
+	key := cachedAbilityKey{"test", "episode", 731}
+	require.NoError(t, db.Create(&Ability{Group: key.group, Model: key.model, ChannelId: key.channelID, Enabled: true}).Error)
+	read := func() Ability {
+		var row Ability
+		require.NoError(t, exactCooldownAbility(db, key).Take(&row).Error)
+		return row
+	}
+	fail := func(start, completion time.Time) time.Duration {
+		got, err := RecordAbilityCooldownFailure(ctx, key.group, key.model, key.channelID, start, completion)
+		require.NoError(t, err)
+		return got
+	}
+	at := time.Now().UTC().Truncate(time.Second)
+	require.Equal(t, 10*time.Second, fail(at, at.Add(time.Second)))
+	// Dispatched during the cooldown (stale routing on another replica): same rung, later end.
+	require.Equal(t, 10*time.Second, fail(at.Add(5*time.Second), at.Add(6*time.Second)))
+	row := read()
+	require.Equal(t, 1, row.CooldownFailures)
+	require.Equal(t, at.Add(16*time.Second), *row.AdaptiveSuspendUntil)
+	// An older outcome persisted late and a duplicate change nothing.
+	require.Zero(t, fail(at, at.Add(2*time.Second)))
+	require.Zero(t, fail(at.Add(5*time.Second), at.Add(6*time.Second)))
+	require.Equal(t, row.CooldownRevision, read().CooldownRevision)
+	// A probe dispatched exactly at the deadline failed: next rung.
+	require.Equal(t, 30*time.Second, fail(at.Add(16*time.Second), at.Add(17*time.Second)))
+	row = read()
+	require.Equal(t, 2, row.CooldownFailures)
+	require.Equal(t, at.Add(47*time.Second), *row.AdaptiveSuspendUntil)
 }
 
 // TestAdaptiveAbilityCooldownMigrationAddsDefaults verifies that the additive
@@ -183,11 +228,14 @@ func TestAdaptiveAbilityCooldownRetriesConflict(t *testing.T) {
 			return
 		}
 		injected = true
+		// A competing replica persists an earlier, already expired episode, so
+		// this failure is a failed probe that must escalate after the CAS retry.
+		earlier := at.Add(-20 * time.Second)
 		result := exactCooldownAbility(second, key).UpdateColumns(map[string]any{
 			"cooldown_failures": 1, "cooldown_revision": 1,
-			"adaptive_suspend_until": at.Add(10 * time.Second),
-			"cooldown_last_failure":  at.UnixNano(),
-			"cooldown_history":       fmt.Sprintf("[%d]", at.UnixNano()),
+			"adaptive_suspend_until": earlier.Add(10 * time.Second),
+			"cooldown_last_failure":  earlier.UnixNano(),
+			"cooldown_history":       fmt.Sprintf("[%d]", earlier.UnixNano()),
 		})
 		if result.Error != nil {
 			_ = tx.AddError(result.Error)
@@ -271,11 +319,12 @@ func TestAdaptiveAbilityCooldownUpstreamReplacement(t *testing.T) {
 		return row
 	}
 	at := time.Unix(0, read().CooldownConfigChangedAt).UTC()
-	for i, rung := range abilityCooldownLadder {
-		event := at.Add(time.Duration(i+1) * time.Nanosecond)
+	event := at.Add(time.Nanosecond)
+	for _, rung := range abilityCooldownLadder {
 		got, err := RecordAbilityCooldownFailure(ctx, key.group, key.model, key.channelID, event, event)
 		require.NoError(t, err)
 		require.Equal(t, rung, got)
+		event = event.Add(rung) // The next failed probe is dispatched when this cooldown ends.
 	}
 	require.Equal(t, 5, read().CooldownFailures)
 	require.NoError(t, syncAbilitiesWithDB(db, channel, true))

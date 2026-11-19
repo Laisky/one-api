@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
-	"strings"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -74,23 +72,9 @@ func countGeminiEmbeddingTokens(c *gin.Context, meta *meta.Meta, contents []gemi
 		_ = resp.Body.Close()
 	}()
 
-	responseBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, vertexAICountTokensError(http.StatusBadGateway, errors.Wrap(err, "read_count_tokens_response"))
-	}
-
-	var countTokensResp gemini.CountTokensResponse
-	if err = json.Unmarshal(responseBody, &countTokensResp); err != nil {
-		return nil, vertexAICountTokensError(http.StatusBadGateway, errors.Wrap(err, "unmarshal_count_tokens_response"))
-	}
-	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, vertexAICountTokensAPIError(resp.StatusCode, countTokensResp.Error, responseBody)
-	}
-	if countTokensResp.Error != nil {
-		return nil, vertexAICountTokensAPIError(http.StatusBadGateway, countTokensResp.Error, responseBody)
-	}
-
-	return &countTokensResp, nil
+	// Vertex AI returns the Gemini countTokens shape; the shared reader bounds
+	// the body and never echoes it to the caller.
+	return gemini.ReadCountTokensResponse(resp)
 }
 
 // buildGeminiCountTokensURL constructs the Vertex AI Gemini countTokens endpoint for the selected model.
@@ -113,34 +97,6 @@ func vertexAICountTokensError(statusCode int, err error) *relaymodel.ErrorWithSt
 			Type:     relaymodel.ErrorTypeGemini,
 			Code:     "count_tokens_failed",
 			RawError: err,
-		},
-		StatusCode: statusCode,
-	}
-}
-
-// vertexAICountTokensAPIError converts a Vertex AI Gemini error payload into a normalized API error.
-// Parameters: statusCode is the HTTP status, geminiErr is the parsed Gemini error payload, and rawBody is the raw response body.
-// Returns: a Gemini-shaped API error wrapper.
-func vertexAICountTokensAPIError(statusCode int, geminiErr *gemini.Error, rawBody []byte) *relaymodel.ErrorWithStatusCode {
-	message := strings.TrimSpace(string(rawBody))
-	code := any("count_tokens_failed")
-	rawErr := errors.New(message)
-	if geminiErr != nil {
-		if trimmed := strings.TrimSpace(geminiErr.Message); trimmed != "" {
-			message = trimmed
-			rawErr = errors.New(trimmed)
-		}
-		if geminiErr.Code != 0 {
-			code = geminiErr.Code
-		}
-	}
-
-	return &relaymodel.ErrorWithStatusCode{
-		Error: relaymodel.Error{
-			Message:  message,
-			Type:     relaymodel.ErrorTypeGemini,
-			Code:     code,
-			RawError: rawErr,
 		},
 		StatusCode: statusCode,
 	}

@@ -1,0 +1,43 @@
+id: upstream-status-error-needs-provenance
+valid:
+  # The canonical provider-status constructor records provenance.
+  - |
+    func ok(resp *http.Response) *model.ErrorWithStatusCode {
+        return openai.UpstreamErrorWrapper(errors.New("x"), "upstream_error", resp.StatusCode)
+    }
+  # Unqualified canonical constructor inside openai_compatible.
+  - |
+    func ok2(resp *http.Response) *model.ErrorWithStatusCode {
+        return UpstreamErrorWrapper(errors.New("x"), "upstream_error", resp.StatusCode)
+    }
+  # A local failure with a gateway-chosen status is one-api's own.
+  - |
+    func ok3(err error) *model.ErrorWithStatusCode {
+        return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+    }
+  # A transport failure has no provider status and stays local.
+  - |
+    func ok4(err error) *model.ErrorWithStatusCode {
+        return ErrorWrapper(err, "do_request_failed", http.StatusBadGateway)
+    }
+  # A local struct that merely has a StatusCode field is not a provider response.
+  - |
+    func ok5(fundingErr *ResponseAPIWSAdmissionFundingError) *model.ErrorWithStatusCode {
+        return ErrorWrapper(fundingErr, fundingErr.Code, fundingErr.StatusCode)
+    }
+invalid:
+  # Qualified local wrapper carrying the provider's status.
+  - |
+    func bad(resp *http.Response) *model.ErrorWithStatusCode {
+        return openai.ErrorWrapper(errors.New("x"), "upstream_error", resp.StatusCode)
+    }
+  # Unqualified local wrapper carrying the provider's status.
+  - |
+    func bad2(response *http.Response) *model.ErrorWithStatusCode {
+        return ErrorWrapper(errors.New("x"), "upstream_error", response.StatusCode)
+    }
+  # Other package aliases are matched too.
+  - |
+    func bad3(resp *http.Response) *model.ErrorWithStatusCode {
+        return openai_compatible.ErrorWrapper(errors.Errorf("HTTP %d", resp.StatusCode), "upstream_video_error", resp.StatusCode)
+    }

@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	applog "github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/middleware"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
@@ -229,8 +230,10 @@ func writeClaudeCountTokensUpstreamReply(c *gin.Context, resp *http.Response, pa
 		if native {
 			errorType = envelope.Error.Type
 		}
-		lg.Warn("upstream rejected claude count_tokens request",
-			zap.Int("upstream_status", status), zap.String("upstream_error_type", errorType))
+		// The error type comes from the provider body; log it only when it is
+		// vocabulary-shaped.
+		lg.Warn("upstream rejected claude count_tokens request", append([]zap.Field{zap.Int("upstream_status", status)},
+			applog.UntrustedIdentifierFields("upstream_error_type", errorType)...)...)
 		anthropic.CopyClaudeResponseHeaders(c.Writer.Header(), resp.Header)
 		if native {
 			c.Data(status, "application/json", payload)

@@ -58,7 +58,9 @@ data:
   MAX_ITEMS_PER_PAGE: '10'
 
   # Channel settings
-  CHANNEL_SUSPEND_SECONDS_FOR_429: '60'
+  # Leave CHANNEL_SUSPEND_SECONDS_FOR_429 / CHANNEL_SUSPEND_SECONDS_FOR_5XX unset to
+  # use the adaptive ability cooldown (10s, 30s, 1m, 3m, 10m cap). Setting either
+  # one, even to '60', pins that status class to the legacy fixed duration.
   OPENROUTER_PROVIDER_SORT: 'throughput'
 
   # Usage enforcement

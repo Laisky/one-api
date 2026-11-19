@@ -222,9 +222,7 @@ func relayGeminiSpeech(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 		// Keep provider response bodies private, but preserve verified HTTP
 		// provenance for the channel cooldown and error classifier.
-		failure := openai.ErrorWrapper(errors.New("Gemini speech upstream rejected the request"), "gemini_speech_upstream_error", status)
-		failure.FromUpstream = true
-		return failure
+		return openai.UpstreamErrorWrapper(errors.New("Gemini speech upstream rejected the request"), "gemini_speech_upstream_error", status)
 	}
 	receipt, err = plan.Forward(ctx, resp, c.Writer, func(accepted tts.Receipt) {
 		receipt = accepted

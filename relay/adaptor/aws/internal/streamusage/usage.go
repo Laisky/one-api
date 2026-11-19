@@ -27,6 +27,10 @@ type Observer struct {
 	prompt, completion int
 	receipt, stopped   bool
 	err                error
+	// localErr records that err was produced by one-api itself while rendering
+	// to the client (quota accounting, chunk encoding or a client write), not by
+	// the provider's stream.
+	localErr bool
 }
 
 // New initializes an explicitly estimated prompt rather than an authoritative
@@ -54,10 +58,48 @@ func (o *Observer) snapshot() {
 }
 
 // Fail remembers the first meaningful stop condition without erasing usage.
+// Callers pass provider stream errors (stream.Err()) and cancellation here;
+// failureFromUpstream decides the attribution when the stream finishes.
+//
+// Parameters:
+//   - err: the stop condition; nil is ignored.
 func (o *Observer) Fail(err error) {
 	if err != nil && o.err == nil {
 		o.err = err
 	}
+}
+
+// failLocal remembers err like Fail and, when it is the first stop condition,
+// marks it as produced by one-api rather than by the provider. Render uses it
+// for quota accounting, chunk encoding and client write failures.
+//
+// Parameters:
+//   - err: the local failure; nil is ignored.
+func (o *Observer) failLocal(err error) {
+	if err != nil && o.err == nil {
+		o.err = err
+		o.localErr = true
+	}
+}
+
+// failureFromUpstream reports whether the recorded stop condition was caused by
+// the provider's stream: an SDK stream error, invalid usage counters or a stream
+// that ended without its stop and usage receipt. Local render failures, quota
+// exhaustion, cancellation, deadlines and client disconnects keep one-api
+// attribution, because a channel must not be penalized for them.
+//
+// Parameters:
+//   - disconnected: true when the client went away during the stream.
+//
+// Returns:
+//   - bool: true only for provider-caused failures.
+func (o *Observer) failureFromUpstream(disconnected bool) bool {
+	return o.err != nil &&
+		!disconnected &&
+		!o.localErr &&
+		!errors.Is(o.err, streaming.ErrQuotaExceeded) &&
+		!errors.Is(o.err, context.Canceled) &&
+		!errors.Is(o.err, context.DeadlineExceeded)
 }
 
 // Render accounts for text, reasoning and tool arguments before delivery. Paid
@@ -86,7 +128,7 @@ func (o *Observer) Render(c *gin.Context, chunk *openai.ChatCompletionsStreamRes
 				default:
 					raw, err := json.Marshal(value)
 					if err != nil {
-						o.Fail(err)
+						o.failLocal(err)
 						return err
 					}
 					text = string(raw)
@@ -103,13 +145,13 @@ func (o *Observer) Render(c *gin.Context, chunk *openai.ChatCompletionsStreamRes
 		o.snapshot()
 		if o.tracker != nil {
 			if err := o.tracker.RecordCompletionTokens(delta); err != nil {
-				o.Fail(err)
+				o.failLocal(err)
 				return err
 			}
 		}
 	}
 	err := openai_compatible.RenderStreamChunkWithBridge(c, chunk)
-	o.Fail(err)
+	o.failLocal(err)
 	return err
 }
 
@@ -143,6 +185,18 @@ func (o *Observer) Complete() bool { return o.receipt && o.stopped && o.err == n
 
 // Finish prefers authoritative receipts, otherwise returns an explicitly marked
 // estimate together with the failure; downstream cancellation never makes it free.
+// The client-visible error keeps its one_api_error envelope and status, while
+// FromUpstream records whether the provider caused the failure (see
+// failureFromUpstream): a provider stream error is subject to the provider
+// failure policy, a local quota or render failure is not.
+//
+// Parameters:
+//   - disconnected: true when the client went away during the stream.
+//   - streamErr: the SDK stream error (stream.Err()), or nil.
+//
+// Returns:
+//   - *relaymodel.ErrorWithStatusCode: the failure, or nil for a complete stream.
+//   - *relaymodel.Usage: the measured or explicitly estimated usage.
 func (o *Observer) Finish(disconnected bool, streamErr error) (*relaymodel.ErrorWithStatusCode, *relaymodel.Usage) {
 	o.Fail(streamErr)
 	if disconnected {
@@ -158,6 +212,9 @@ func (o *Observer) Finish(disconnected bool, streamErr error) (*relaymodel.Error
 	code, status := "aws_stream_incomplete", http.StatusBadGateway
 	if errors.Is(o.err, streaming.ErrQuotaExceeded) {
 		code, status = "insufficient_user_quota", http.StatusForbidden
+	}
+	if o.failureFromUpstream(disconnected) {
+		return openai.UpstreamErrorWrapper(o.err, code, status), o.usage
 	}
 	return openai.ErrorWrapper(o.err, code, status), o.usage
 }

@@ -189,16 +189,27 @@ const (
 	ErrorTypeGemini ErrorType = "gemini_error"
 )
 
+// Error is the OpenAI-style error object relayed to clients. Decoding it from
+// JSON is tolerant and marks it as provider-sourced; see UnmarshalJSON in
+// error_json.go.
 type Error struct {
 	Message string    `json:"message"`
 	Type    ErrorType `json:"type"`
 	Param   string    `json:"param"`
 	Code    any       `json:"code"`
-	// MessageContainsRawBody identifies complete-body parser fallbacks for explicit application log redaction; API JSON stays unchanged.
+	// MessageContainsRawBody identifies a Message that embeds a complete raw
+	// provider body, for explicit application log redaction; API JSON stays
+	// unchanged. The relay's upstream error handler no longer produces such
+	// messages (it describes unrecognized bodies generically), so the flag is a
+	// safety net for any remaining producer.
 	MessageContainsRawBody bool `json:"-"`
-	// FromUpstream records that Type, Code and Param were taken from a provider
-	// response rather than produced by one-api. It is omitted from JSON, so a
-	// provider cannot set it. See IsOneAPIError.
+	// FromUpstream records that the failure was produced by, or copied from, the
+	// upstream provider (its response body, status or transport) rather than by
+	// one-api itself. Every Error decoded from JSON is marked (see UnmarshalJSON),
+	// because wire bytes never originate in this process; adaptors set it when
+	// they build an Error from provider fields (see NewUpstreamError). It is
+	// omitted from JSON, so a provider can neither set nor clear it. See
+	// IsOneAPIError.
 	FromUpstream bool `json:"-"`
 	// RawError preserves the original upstream or internal error for diagnostics.
 	// Omitted from JSON to avoid leaking provider internals.
@@ -210,6 +221,8 @@ type Error struct {
 // instance behind a channel) describes that provider, not this gateway, so every
 // classifier that exempts one-api's own errors from retry, ability suspension,
 // channel health or delivery attribution must use this instead of comparing Type.
+// Provenance survives only while the Error value is copied whole: code that
+// rebuilds an Error field by field from a provider error must set FromUpstream.
 //
 // Returns:
 //   - bool: true only for locally produced one_api_error values.
@@ -217,6 +230,9 @@ func (e Error) IsOneAPIError() bool {
 	return e.Type == ErrorTypeOneAPI && !e.FromUpstream
 }
 
+// ErrorWithStatusCode is an Error with the HTTP status reported to the client.
+// It has its own UnmarshalJSON (error_json.go) so that decoding keeps
+// status_code instead of using the promoted Error.UnmarshalJSON.
 type ErrorWithStatusCode struct {
 	Error
 	StatusCode int `json:"status_code"`

@@ -38,7 +38,8 @@ func runRelayErrorEnvelopeCases(t *testing.T, cases []relayErrorEnvelopeCase) {
 }
 
 // TestRelayErrorEnvelopeMetadata requires equivalent flat and nested upstream
-// attribution while retaining nested precedence and existing parser fallbacks.
+// attribution while retaining nested precedence, and the generic
+// unrecognized-body message (never the raw body) for unusable bodies.
 func TestRelayErrorEnvelopeMetadata(t *testing.T) {
 	upstream, defaultCode := string(model.ErrorTypeUpstream), "bad_response_status_code"
 	runRelayErrorEnvelopeCases(t, []relayErrorEnvelopeCase{
@@ -49,14 +50,15 @@ func TestRelayErrorEnvelopeMetadata(t *testing.T) {
 		{"message_only", `{"message":"capacity"}`, "capacity", upstream, "429", defaultCode, false},
 		{"legacy_message", `{"msg":"capacity"}`, "capacity", upstream, "429", defaultCode, false},
 		{"case_folded_keys", `{"Message":"capacity","Type":"limit","Code":"busy"}`, "capacity", "limit", "429", "busy", false},
-		{"empty", `{}`, "bad response [429] {}", upstream, "429", defaultCode, true},
+		{"empty", `{}`, "upstream returned HTTP 429 with an unrecognized error body (2 bytes)", upstream, "429", defaultCode, false},
 	})
 	for _, body := range []string{`{"message":`, `<html>busy</html>`, `[1,2]`, `"busy"`} {
 		got := RelayErrorHandler(&http.Response{StatusCode: http.StatusTooManyRequests, Body: io.NopCloser(strings.NewReader(body))})
 		require.Equal(t, http.StatusTooManyRequests, got.StatusCode)
 		require.Equal(t, "bad_response_status_code", got.Code)
-		require.True(t, got.MessageContainsRawBody)
-		require.Contains(t, got.Message, "failed to unmarshal response body")
+		require.False(t, got.MessageContainsRawBody, "the generic message carries no body bytes")
+		require.Contains(t, got.Message, "upstream returned HTTP 429 with an unrecognized error body")
+		require.NotContains(t, got.Message, "busy")
 	}
 }
 
@@ -81,7 +83,7 @@ func TestRelayErrorEnvelopeTolerantMetadata(t *testing.T) {
 		{"flat_response_string", `{"response":"` + secret + `","err":"capacity"}`, "capacity", upstream, "429", defaultCode, false},
 		{"nested_param_object", `{"error":{"message":"quota exceeded","type":"TooManyRequests","code":"AccountQuotaExceeded","param":{"account":"` + secret + `"}}}`, "quota exceeded", "TooManyRequests", "", "AccountQuotaExceeded", false},
 		{"nested_type_array", `{"error":{"message":"quota exceeded","type":["` + secret + `"],"code":"AccountQuotaExceeded"}}`, "quota exceeded", "", "", "AccountQuotaExceeded", false},
-		{"nested_message_object_uses_flat", `{"error":{"message":{"detail":"` + secret + `"},"code":"inner"},"message":"outer","code":"outer"}`, "outer", upstream, "429", "outer", false},
+		{"nested_message_object_uses_flat_message_nested_code", `{"error":{"message":{"detail":"` + secret + `"},"code":"inner"},"message":"outer","code":"outer"}`, "outer", upstream, "429", "inner", false},
 		{"error_string", `{"error":"model not found"}`, "model not found", upstream, "429", defaultCode, false},
 		{"error_string_with_flat_code", `{"error":"model not found","code":"model_not_found","type":"invalid_request_error"}`, "model not found", "invalid_request_error", "429", "model_not_found", false},
 		{"error_number_uses_flat", `{"error":500,"message":"capacity"}`, "capacity", upstream, "429", defaultCode, false},

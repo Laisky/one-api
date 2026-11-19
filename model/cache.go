@@ -325,8 +325,8 @@ func InitChannelCache() {
 // Return values:
 //   - error: wrapped query failure.
 func InitChannelCacheContext(ctx context.Context) error {
-	abilityCacheUpdateLock.Lock()
-	defer abilityCacheUpdateLock.Unlock()
+	abilitySnapshotLock.Lock()
+	defer abilitySnapshotLock.Unlock()
 	newChannelId2channel := make(map[int]*Channel)
 	var channels []*Channel
 	if err := DB.WithContext(ctx).Where("status = ?", ChannelStatusEnabled).Find(&channels).Error; err != nil {
@@ -336,6 +336,7 @@ func InitChannelCacheContext(ctx context.Context) error {
 		newChannelId2channel[channel.Id] = channel
 	}
 
+	startSeq := beginAbilityDeadlineSnapshot()
 	var allAbilities []*Ability
 	if err := DB.WithContext(ctx).Find(&allAbilities).Error; err != nil {
 		return errors.Wrap(err, "list abilities for cache")
@@ -345,15 +346,19 @@ func InitChannelCacheContext(ctx context.Context) error {
 	// suspension deadlines are checked when routing rather than dropping abilities.
 	// ability.Enabled mirrors channel.Status (maintained by AddAbilities/UpdateAbilities).
 	validAbilities := make(map[cachedAbilityKey]struct{}, len(allAbilities))
-	newSuspensions := make(map[cachedAbilityKey]time.Time)
+	// Every enabled ability is observed, with or without a deadline, so a lift
+	// committed since this process last published replaces the stale deadline.
+	observedDeadlines := make(map[cachedAbilityKey]cachedAbilityDeadline, len(allAbilities))
 	for _, ability := range allAbilities {
 		if !ability.Enabled {
 			continue
 		}
 		key := cachedAbilityKey{ability.Group, ability.Model, ability.ChannelId}
+		observed := cachedAbilityDeadline{revision: ability.CooldownRevision}
 		if deadline := abilityEffectiveDeadline(ability); deadline != nil {
-			newSuspensions[key] = *deadline
+			observed.until = *deadline
 		}
+		observedDeadlines[key] = observed
 		// The ability must also belong to a channel in the enabled-channel snapshot.
 		if _, channelExists := newChannelId2channel[ability.ChannelId]; channelExists {
 			validAbilities[key] = struct{}{}
@@ -396,7 +401,7 @@ func InitChannelCacheContext(ctx context.Context) error {
 
 	channelSyncLock.Lock()
 	group2model2channels = newGroup2model2channels
-	cachedAbilitySuspensions = newSuspensions
+	cachedAbilitySuspensions = mergeAbilityDeadlineSnapshotLocked(observedDeadlines, startSeq)
 	channelId2channel = newChannelId2channel
 	channelSyncLock.Unlock()
 	logger.Logger.Info("channels synced from database, considering suspensions")
@@ -533,31 +538,9 @@ func CacheGetRandomSatisfiedChannelWithContext(ctx context.Context, group string
 
 	if config.DefaultUseMinMaxTokensModel {
 		candidateChannels = candidateChannels[:endIdx]
-
-		sort.Slice(candidateChannels, func(i, j int) bool {
-			iModelConfig, jModelConfig := candidateChannels[i].GetModelConfig(model), candidateChannels[j].GetModelConfig(model)
-			// Treat 0 as infinity (no limit)
-			if iModelConfig == nil || iModelConfig.MaxTokens == 0 {
-				return false // i has no limit, so it's not less than j
-			}
-			if jModelConfig == nil || jModelConfig.MaxTokens == 0 {
-				return true // j has no limit, so i is less than j
-			}
-
-			return iModelConfig.MaxTokens < jModelConfig.MaxTokens
-		})
-
-		minTokensChannel := candidateChannels[0]
-		minTokensModelConfig := minTokensChannel.GetModelConfig(model)
-		if minTokensModelConfig.MaxTokens > 0 {
-			for i := range candidateChannels {
-				modelConfig := candidateChannels[i].GetModelConfig(model)
-				if modelConfig.MaxTokens != minTokensModelConfig.MaxTokens {
-					endIdx = i
-					break
-				}
-			}
-		}
+		// Prefer the smallest declared max_tokens; a channel without a model
+		// config (or without max_tokens) is unbounded, never a nil dereference.
+		endIdx = keepSmallestDeclaredCapacity(candidateChannels, model, endIdx)
 	}
 
 	var channel *Channel
@@ -584,10 +567,50 @@ func CacheGetRandomSatisfiedChannelExcluding(group string, model string, ignoreF
 // CacheGetRandomSatisfiedChannelExcludingWithContext selects a channel while
 // preserving request correlation in ctx. Parameters: ctx carries the logger,
 // group and model identify the routing pool, ignoreFirstPriority selects a tier,
-// excludeChannelIds contains failed channels, and tryLargerMaxTokens enables the
-// 413 recovery policy. Returns: the selected channel or a wrapped routing error.
+// excludeChannelIds contains failed channels, and tryLargerMaxTokens treats every
+// excluded channel as a 413 rejection (see excludedCapacityFloor); the relay
+// retry loop instead passes its upstream-413 evidence to
+// CacheGetRandomSatisfiedChannelAboveCapacityWithContext. Returns: the selected
+// channel or a wrapped routing error.
 func CacheGetRandomSatisfiedChannelExcludingWithContext(ctx context.Context, group string, model string, ignoreFirstPriority bool, excludeChannelIds map[int]bool, tryLargerMaxTokens bool) (*Channel, error) {
+	capacityFloor := NoCapacityFloor
+	if tryLargerMaxTokens {
+		floor, err := excludedCapacityFloor(ctx, group, model, excludeChannelIds)
+		if err != nil {
+			return nil, errors.Wrap(err, "derive the capacity floor from excluded channels")
+		}
+		capacityFloor = floor
+	}
+	return CacheGetRandomSatisfiedChannelAboveCapacityWithContext(ctx, group, model, ignoreFirstPriority, excludeChannelIds, capacityFloor)
+}
+
+// CacheGetRandomSatisfiedChannelAboveCapacityWithContext selects a routable
+// channel for (group, model) that is not in excludeChannelIds and may serve a
+// request already rejected as too large at capacityFloor, from the highest
+// remaining priority tier (strictly lower tiers with ignoreFirstPriority) by
+// weight. It reads the memory cache when enabled and the abilities table
+// otherwise; both enforce the fixed and adaptive cooldown deadlines.
+//
+// Parameters:
+//   - ctx: carries the request logger and bounds database reads.
+//   - group, model: the routing pool; model is the caller-facing name.
+//   - ignoreFirstPriority: select strictly below the highest remaining tier.
+//   - excludeChannelIds: channel IDs already tried or skipped.
+//   - capacityFloor: the largest declared max_tokens that already answered an
+//     upstream 413 for this request (see RaiseCapacityFloor); channels declaring
+//     no more than it are skipped, channels without a declared capacity stay
+//     eligible. NoCapacityFloor applies no capacity requirement.
+//
+// Return values:
+//   - *Channel: the selected channel.
+//   - error: a routing error whose text keeps the exhaustion wording that
+//     callers classify ("channel not found in memory cache", "no available
+//     channels support model", "no channels available for model").
+func CacheGetRandomSatisfiedChannelAboveCapacityWithContext(ctx context.Context, group string, model string, ignoreFirstPriority bool, excludeChannelIds map[int]bool, capacityFloor int32) (*Channel, error) {
 	if !config.MemoryCacheEnabled {
+		if capacityFloor > NoCapacityFloor {
+			return getChannelAboveCapacityFromDB(ctx, group, model, ignoreFirstPriority, excludeChannelIds, capacityFloor)
+		}
 		return GetRandomSatisfiedChannelExcluding(group, model, ignoreFirstPriority, excludeChannelIds)
 	}
 	lg := logger.FromContext(ctx)
@@ -595,41 +618,21 @@ func CacheGetRandomSatisfiedChannelExcludingWithContext(ctx context.Context, gro
 	channelSyncLock.RLock()
 	// One eligibility pass applies both the cooldown deadlines and the exclusions.
 	candidateChannels, routable := routableCachedChannelsLocked(group, model, excludeChannelIds, now)
+	channelSyncLock.RUnlock()
 
 	if routable == 0 {
-		channelSyncLock.RUnlock()
 		return nil, errors.New("channel not found in memory cache")
 	}
 
-	// For HTTP Code 413
-	// Filter out small max_tokens channels
-	if tryLargerMaxTokens {
-		// Read the rejected sizes from the full snapshot, not the routable
-		// candidates: a channel that returned 413 may have been cooled by a
-		// concurrent request since, and its size must still be skipped.
-		smallerMaxTokensSizes := make(map[int32]bool)
-		for _, channel := range group2model2channels[group][model] {
-			if excludeChannelIds[channel.Id] {
-				modelConfig := channel.GetModelConfig(model)
-				if modelConfig != nil {
-					smallerMaxTokensSizes[modelConfig.MaxTokens] = true
-				}
-			}
-		}
-
-		// candidateChannels is caller-owned, so filter it in place.
-		largerMaxTokensChannels := candidateChannels[:0]
-		for _, channel := range candidateChannels {
-			modelConfig := channel.GetModelConfig(model)
-			if modelConfig == nil || !smallerMaxTokensSizes[modelConfig.MaxTokens] {
-				largerMaxTokensChannels = append(largerMaxTokensChannels, channel)
-			}
-		}
-		candidateChannels = largerMaxTokensChannels
-	}
-	channelSyncLock.RUnlock()
-
+	// HTTP 413 recovery: keep only channels that may serve a request already
+	// rejected at capacityFloor. candidateChannels is caller-owned and the cached
+	// channels are immutable snapshots, so this runs outside the lock; reading a
+	// model config parses JSON and must not delay cache writers.
+	candidateChannels = filterByCapacityFloor(candidateChannels, model, capacityFloor)
 	if len(candidateChannels) == 0 {
+		if capacityFloor > NoCapacityFloor {
+			return nil, errors.Errorf("no available channels support model %s after exclusions (capacity above %d tokens)", model, capacityFloor)
+		}
 		return nil, errors.Errorf("no available channels support model %s after exclusions", model)
 	}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
+	applog "github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
@@ -310,11 +311,10 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		usage, respErr = requestAdaptor.DoResponse(c, resp, meta)
 	}
 	lg.Debug("response api DoResponse returned",
-		zap.Bool("has_usage", usage != nil),
-		zap.Bool("has_error", respErr != nil),
-		zap.Any("error_detail", respErr),
-		zap.String("model", meta.ActualModelName),
-		zap.String("request_id", c.GetString(ctxkey.RequestId)),
+		append(responseAPIErrorLogFields(usage != nil, respErr),
+			zap.String("model", meta.ActualModelName),
+			zap.String("request_id", c.GetString(ctxkey.RequestId)),
+		)...,
 	)
 	if upstreamCapture != nil {
 		logUpstreamResponseFromCapture(lg, resp, upstreamCapture, "response_api")
@@ -393,4 +393,35 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	// success; the settlement marker vetoes a paid cross-channel replay.
 	markResponseSettlement(c, usage, respErr)
 	return respErr
+}
+
+// responseAPIErrorLogFields describes a DoResponse outcome for the DEBUG trace.
+// An in-band provider error can carry free-form code, type and param values,
+// so they are logged through applog.UntrustedIdentifierFields, which keeps
+// vocabulary-shaped values and redacts anything else; the human message is
+// logged unless it is flagged as embedding a raw provider body.
+//
+// Parameters:
+//   - hasUsage: whether DoResponse returned usage.
+//   - respErr: the DoResponse error, or nil.
+//
+// Returns:
+//   - []zap.Field: the outcome fields.
+func responseAPIErrorLogFields(hasUsage bool, respErr *relaymodel.ErrorWithStatusCode) []zap.Field {
+	fields := []zap.Field{
+		zap.Bool("has_usage", hasUsage),
+		zap.Bool("has_error", respErr != nil),
+	}
+	if respErr == nil {
+		return fields
+	}
+	fields = append(fields, zap.Int("status_code", respErr.StatusCode))
+	fields = append(fields, applog.UntrustedIdentifierFields("error_type", string(respErr.Type))...)
+	fields = append(fields, applog.UntrustedIdentifierFields("error_code", respErr.Code)...)
+	fields = append(fields, applog.UntrustedIdentifierFields("error_param", respErr.Param)...)
+	message := respErr.Message
+	if respErr.MessageContainsRawBody {
+		message = applog.Redact(message)
+	}
+	return append(fields, zap.String("error_message", message))
 }

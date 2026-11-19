@@ -63,13 +63,19 @@ type Channel struct {
 	// a row no relation-aware writer has stored (one written before the relation existed,
 	// or by an older binary), whose column is complete. It deliberately has no column
 	// default, so existing rows read back NULL and startup reconciliation finds them.
-	GroupTruncated *bool   `json:"-" gorm:"column:group_truncated;index"`
-	UsedQuota      int64   `json:"used_quota" gorm:"bigint;default:0"`
-	ModelMapping   *string `json:"model_mapping" gorm:"type:text"`
-	Priority       *int64  `json:"priority" gorm:"bigint;default:0"`
-	Config         string  `json:"config"`
-	SystemPrompt   *string `json:"system_prompt" gorm:"type:text"`
-	RateLimit      *int    `json:"ratelimit" gorm:"column:ratelimit;default:0"`
+	GroupTruncated *bool `json:"-" gorm:"column:group_truncated;index"`
+	// UpstreamRevision counts changes of the upstream identity (the columns in
+	// abilityUpstreamColumns). A relay attempt carries the revision of the channel
+	// snapshot it was routed with, so an outcome produced by a replica whose cache
+	// still holds the previous key or endpoint cannot drive the adaptive cooldown
+	// of the new upstream. Never accepted from API input.
+	UpstreamRevision int64   `json:"-" gorm:"column:upstream_revision;not null;default:0"`
+	UsedQuota        int64   `json:"used_quota" gorm:"bigint;default:0"`
+	ModelMapping     *string `json:"model_mapping" gorm:"type:text"`
+	Priority         *int64  `json:"priority" gorm:"bigint;default:0"`
+	Config           string  `json:"config"`
+	SystemPrompt     *string `json:"system_prompt" gorm:"type:text"`
+	RateLimit        *int    `json:"ratelimit" gorm:"column:ratelimit;default:0"`
 	// Preferred testing model for this channel (optional).
 	// If empty or nil, the system auto-selects the cheapest chat-format model at test
 	// time. Set it to ChannelTestingModelSkip to exclude the channel from testing.
@@ -543,8 +549,17 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 			return errors.Wrap(err, "validate updated channel")
 		}
 		// Keep the relay-time suspensions of retained abilities unless this write changed
-		// the upstream they were measured against.
-		if err := syncAbilitiesWithDB(tx, &persisted, !sameAbilityUpstream(&upstreamBefore, &persisted)); err != nil {
+		// the upstream they were measured against. A changed upstream also advances the
+		// revision that fences outcomes of attempts routed with an older snapshot.
+		upstreamChanged := !sameAbilityUpstream(&upstreamBefore, &persisted)
+		if upstreamChanged {
+			if err := tx.Model(&Channel{}).Where("id = ?", persisted.Id).
+				UpdateColumn("upstream_revision", gorm.Expr("upstream_revision + 1")).Error; err != nil {
+				return errors.Wrapf(err, "advance upstream revision of channel %d", persisted.Id)
+			}
+			persisted.UpstreamRevision++
+		}
+		if err := syncAbilitiesWithDB(tx, &persisted, upstreamChanged); err != nil {
 			return errors.Wrapf(err, "sync abilities for channel %d during update", persisted.Id)
 		}
 		return nil

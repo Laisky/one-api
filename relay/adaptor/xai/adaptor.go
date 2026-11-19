@@ -431,9 +431,17 @@ func (a *Adaptor) handleResponseAPIResponse(c *gin.Context, resp *http.Response,
 // handleImageResponse processes XAI image generation responses and converts them to OpenAI format.
 // It parses the x.AI image response, converts it to OpenAI-compatible format,
 // and returns the response to the client with appropriate billing information.
+//
+// A non-2xx answer is the provider's refusal and is returned by imageStatusError
+// with the provider's status and FromUpstream set, never as a fabricated 200
+// with an empty image list. The image helper then settles it by its documented
+// policy: a 4xx is refunded, a forwarded 5xx keeps a visible retained charge.
 func (a *Adaptor) handleImageResponse(c *gin.Context, resp *http.Response) (usage *model.Usage, err *model.ErrorWithStatusCode) {
 	// Always close the upstream body
 	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, imageStatusError(resp)
+	}
 	// Read the response body
 	responseBody, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {

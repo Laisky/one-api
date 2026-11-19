@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/common/ctxkey"
@@ -21,6 +22,10 @@ import (
 // user-originated classification drive the retry decision.
 // Returns: nil when a retry may help, otherwise an error explaining the skip.
 func shouldRetry(c *gin.Context, bizErr *model.ErrorWithStatusCode) error {
+	// Judge the attempt that just failed before consulting the paid-video veto,
+	// so this decision and every later videoReplayUnsafe call in the retry loop
+	// (loop guard, transient-4xx exception, outcome logging) see its verdict.
+	recordVideoCreationVerdict(c, bizErr)
 	if videoReplayUnsafe(c) {
 		return errors.New("video task is durable or may already be accepted; automatic replay is unsafe")
 	}
@@ -154,6 +159,12 @@ func classifyRetryableUpstreamClientError(relayErr *model.ErrorWithStatusCode) (
 
 // videoReplayUnsafe is an authoritative veto, including when a provider labels
 // an error as a normally retryable 4xx. Local reservations are irreversible too.
+// A paid video creation that may have been forwarded stays unsafe to replay
+// unless the provider definitively rejected that same channel's attempt before
+// admitting any job (see recordVideoCreationVerdict); an accepted job or a bound
+// durable task is never replayed.
+// Parameter c is the request context. It returns true when another channel must
+// not receive the creation.
 func videoReplayUnsafe(c *gin.Context) bool {
 	if c == nil {
 		return false
@@ -161,11 +172,83 @@ func videoReplayUnsafe(c *gin.Context) bool {
 	if c.GetString(asyncvideo.DurableTaskKey) != "" || c.GetBool(adaptor.AsyncVideoAcceptedKey) {
 		return true
 	}
-	if c.Request == nil || c.Request.URL == nil || c.Request.Method != http.MethodPost || !c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) {
+	if !isPaidVideoCreation(c) || !c.GetBool(ctxkey.UpstreamRequestPossiblyForwarded) {
+		return false
+	}
+	rejectedChannel := c.GetInt(videoCreationRejectedChannelKey)
+	return rejectedChannel <= 0 || rejectedChannel != c.GetInt(ctxkey.ChannelId)
+}
+
+// isPaidVideoCreation reports whether c is a POST that creates a paid video job.
+// Parameter c is the request context. It returns true for the video creation
+// routes whose replay could start a second billable job.
+func isPaidVideoCreation(c *gin.Context) bool {
+	if c == nil || c.Request == nil || c.Request.URL == nil || c.Request.Method != http.MethodPost {
 		return false
 	}
 	switch c.Request.URL.Path {
 	case "/v1/videos", "/v1/videos/generations", "/v1/async/videos":
+		return true
+	default:
+		return false
+	}
+}
+
+// videoCreationRejectedChannelKey stores the channel id whose latest paid video
+// creation attempt the provider definitively rejected before admission; zero
+// means the latest attempt proved nothing. Binding the verdict to a channel id
+// keeps it from vouching for a later attempt on another channel.
+const videoCreationRejectedChannelKey = "relay.video_creation_rejected_channel"
+
+// recordVideoCreationVerdict stores whether the provider definitively rejected
+// the paid video creation attempt that produced bizErr, replacing any verdict of
+// an earlier attempt. Parameters: c is the request context bound to the
+// attempt's channel and bizErr the attempt's normalized failure. It returns
+// nothing and leaves non-video requests untouched.
+func recordVideoCreationVerdict(c *gin.Context, bizErr *model.ErrorWithStatusCode) {
+	if !isPaidVideoCreation(c) {
+		return
+	}
+	rejectedChannel := 0
+	if providerRejectedVideoCreation(bizErr) {
+		rejectedChannel = c.GetInt(ctxkey.ChannelId)
+		lg := gmw.GetLogger(c)
+		lg.Debug("provider rejected paid video creation before admission; replay on another channel is safe",
+			relayErrorMetadataLogFields(bizErr)...,
+		)
+	}
+	c.Set(videoCreationRejectedChannelKey, rejectedChannel)
+}
+
+// providerRejectedVideoCreation reports whether bizErr proves the provider
+// refused a video creation before admitting any job, so no billable job exists.
+// Only provider-attributed (FromUpstream) answers count: a locally produced
+// error proves nothing about the provider. The allowed statuses are explicit
+// admission refusals (400, 401, 402, 403, 404, 413, 422 and 429): providers
+// return them synchronously before creating a job (xAI documents that auth,
+// missing-model and rate-limit errors precede job creation; Google AIP-151
+// requires errors that prevent a long-running operation from starting to be
+// returned instead of an operation; Stripe and AWS treat validation, auth and
+// throttling as refusals before execution). 408 is excluded because proxies
+// and gateways use it for processing timeouts, 409 because it can mean an
+// equivalent job is already running, and 5xx, transport failures, timeouts and
+// cancellations because the job may exist. Transient 4xx shapes that describe
+// generated output are excluded too, since the provider may have done work.
+// Parameter bizErr is the attempt's normalized failure. It returns true only for
+// a definitive provider rejection.
+func providerRejectedVideoCreation(bizErr *model.ErrorWithStatusCode) bool {
+	if bizErr == nil || !bizErr.FromUpstream {
+		return false
+	}
+	if errors.Is(bizErr.RawError, context.Canceled) || errors.Is(bizErr.RawError, context.DeadlineExceeded) {
+		return false
+	}
+	if isRetryableUpstreamClientError(bizErr) {
+		return false
+	}
+	switch bizErr.StatusCode {
+	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusPaymentRequired, http.StatusForbidden,
+		http.StatusNotFound, http.StatusRequestEntityTooLarge, http.StatusUnprocessableEntity, http.StatusTooManyRequests:
 		return true
 	default:
 		return false

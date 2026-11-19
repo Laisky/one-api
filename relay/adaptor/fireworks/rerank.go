@@ -107,13 +107,6 @@ func buildRerankError(body []byte, statusCode int) *model.ErrorWithStatusCode {
 		message = http.StatusText(statusCode)
 	}
 
-	return &model.ErrorWithStatusCode{
-		Error: model.Error{
-			Message:  message,
-			Type:     errType,
-			Code:     code,
-			RawError: errors.New(message),
-		},
-		StatusCode: statusCode,
-	}
+	// Every field describes the provider's answer, so the error is provider-marked.
+	return model.NewUpstreamError(statusCode, message, errType, code)
 }

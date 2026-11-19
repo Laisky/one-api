@@ -26,16 +26,25 @@ import (
 
 var errNextLoop = errors.New("next_loop")
 
-// ImageHandler handles the response from the image creation or remix request
+// ImageHandler handles the response from the image creation or remix request:
+// it polls the prediction, downloads its outputs and writes the OpenAI-format
+// image response. A creation answer other than 201 Created is reported by
+// replicateStatusError (provider status and provenance for a non-2xx refusal,
+// client-safe message, no raw body); follow-up request failures go through
+// replicateTaskError.
+//
+// Parameters:
+//   - c: the request context.
+//   - resp: the prediction-creation response; the image helper closes its body.
+//
+// Returns:
+//   - *model.ErrorWithStatusCode: the failure, or nil after a delivered response.
+//   - *model.Usage: always nil; the image helper bills per image.
 func ImageHandler(c *gin.Context, resp *http.Response) (
 	*model.ErrorWithStatusCode, *model.Usage) {
 	lg := gmw.GetLogger(c)
 	if resp.StatusCode != http.StatusCreated {
-		payload, _ := io.ReadAll(resp.Body)
-		return openai.ErrorWrapper(
-				errors.Errorf("bad_status_code [%d]%s", resp.StatusCode, string(payload)),
-				"bad_status_code", http.StatusInternalServerError),
-			nil
+		return replicateStatusError(resp), nil
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -65,9 +74,7 @@ func ImageHandler(c *gin.Context, resp *http.Response) (
 			defer taskResp.Body.Close()
 
 			if taskResp.StatusCode != http.StatusOK {
-				payload, _ := io.ReadAll(taskResp.Body)
-				return errors.Errorf("bad status code [%d]%s",
-					taskResp.StatusCode, string(payload))
+				return replicateStatusFailure(taskResp, "get task")
 			}
 
 			taskBody, err := io.ReadAll(taskResp.Body)
@@ -120,9 +127,7 @@ func ImageHandler(c *gin.Context, resp *http.Response) (
 					defer imgResp.Body.Close()
 
 					if imgResp.StatusCode != http.StatusOK {
-						payload, _ := io.ReadAll(imgResp.Body)
-						return errors.Errorf("bad status code [%d]%s",
-							imgResp.StatusCode, string(payload))
+						return replicateStatusFailure(imgResp, "download image")
 					}
 
 					imgData, err := io.ReadAll(imgResp.Body)
@@ -164,7 +169,7 @@ func ImageHandler(c *gin.Context, resp *http.Response) (
 				continue
 			}
 
-			return openai.ErrorWrapper(err, "image_task_failed", http.StatusInternalServerError), nil
+			return replicateTaskError(err, "image_task_failed"), nil
 		}
 
 		break
