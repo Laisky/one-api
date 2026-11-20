@@ -208,6 +208,8 @@ one-api can send verification, password reset, quota reminder, and operator noti
 - `EMAIL_PROVIDER=resend` forces the Resend backend and requires `RESEND_API_KEY`.
 - Leaving `EMAIL_PROVIDER` empty enables auto mode: one-api uses Resend when `RESEND_API_KEY` is configured, otherwise it falls back to SMTP.
 
+Recipient and sender addresses must be bare email addresses (`a@example.com`, several recipients separated by `;`); they are parsed and re-serialized before any header is written, and a display-name form such as `Admin <a@example.com>` or a value containing a line break is refused. Set the SMTP "From" address explicitly when your SMTP account name is not an email address (for example SendGrid's `apikey` login); otherwise sending fails with `invalid SMTP sender address` before connecting. The system name used as the sender display name must not contain line breaks.
+
 When `RESEND_API_KEY` or `EMAIL_PROVIDER` is set as a non-empty environment variable, that environment value is authoritative during startup, periodic option sync, and runtime option updates. A saved or cleared database option will not override it. To manage these values from the admin UI instead, remove the corresponding environment variable and restart the service.
 
 ### Kubernetes Deployment

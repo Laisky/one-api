@@ -9,6 +9,7 @@ import (
 
 	"github.com/Laisky/one-api/common/errkind"
 	applog "github.com/Laisky/one-api/common/logger"
+	"github.com/Laisky/one-api/relay/model"
 )
 
 // logInitialRelayFailure takes the request context, existing failure decisions and optional suspension result, and writes exactly one generic relay record without changing classification.
@@ -64,4 +65,20 @@ func appendRelayFailureDiagnosticFields(params processChannelRelayErrorParams, f
 		}
 	}
 	return appendRelayFailureFields(params, append(fields, extra...)...)
+}
+
+// relayErrorMetadataLogFields returns the status and the provider-controlled
+// error type and code of e for a relay decision log line. The type and code are
+// unvalidated provider data, so they pass through applog.UntrustedIdentifierFields:
+// vocabulary-shaped values are logged verbatim, anything else is redacted.
+//
+// Parameters:
+//   - e: the relay failure; it must not be nil.
+//
+// Returns:
+//   - []zap.Field: status_code plus the sanitized error_type and error_code fields.
+func relayErrorMetadataLogFields(e *model.ErrorWithStatusCode) []zap.Field {
+	fields := []zap.Field{zap.Int("status_code", e.StatusCode)}
+	fields = append(fields, applog.UntrustedIdentifierFields("error_type", string(e.Type))...)
+	return append(fields, applog.UntrustedIdentifierFields("error_code", e.Code)...)
 }

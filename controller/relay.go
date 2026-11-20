@@ -18,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/common/config"
 	"github.com/Laisky/one-api/common/ctxkey"
 	"github.com/Laisky/one-api/common/helper"
+	applog "github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/common/relayctx"
 	"github.com/Laisky/one-api/middleware"
 	dbmodel "github.com/Laisky/one-api/model"
@@ -151,14 +152,30 @@ func Relay(c *gin.Context) {
 	// Track channel request in flight
 	defer PrometheusMonitor.RecordChannelRequest(relayMeta)()
 
+	// Snapshot the routing identity before any attempt runs. Some adaptors (AWS
+	// Bedrock, Vertex) overwrite ctxkey.RequestModel with the channel-mapped
+	// upstream id while converting the request; retry selection, ability
+	// cooldowns and success resets must keep using the routed model, whose
+	// abilities exist, or the retry walk finds no channel and the outcome
+	// updates no ability.
+	group := c.GetString(ctxkey.Group)
+	originalModel := c.GetString(ctxkey.RequestModel)
 	observation := &relayOutcomeObservation{retryOutcome: "not_needed"}
+	// Derive completion from the monotonic clock: UTC() strips the monotonic
+	// reading, and a wall-clock step must not make an outcome finish before it
+	// started (the cooldown writer rejects such timestamps).
+	attemptRevision := relayAttemptUpstreamRevision(c)
+	attemptClock := time.Now()
+	attemptStarted := attemptClock.UTC()
 	bizErr := observation.invoke(c, relayMode)
+	attemptCompleted := attemptStarted.Add(time.Since(attemptClock))
 	defer func() { observation.failure = bizErr; observation.logFinal(c) }()
 	if bizErr == nil {
 		if c.GetString(asyncvideo.DurableTaskKey) != "" {
 			PrometheusMonitor.RecordRelayRequest(c, relayMeta, startTime, c.Writer.Status() < 400, 0, 0, 0)
 			return
 		}
+		recordRelayCooldownSuccess(ctx, c, relayMode, group, originalModel, attemptRevision, attemptStarted, attemptCompleted)
 		monitor.Emit(channelId, true)
 
 		// Record successful relay request metrics
@@ -170,13 +187,15 @@ func Relay(c *gin.Context) {
 	}
 	lastFailedChannelId := channelId
 	channelName := c.GetString(ctxkey.ChannelName)
-	group := c.GetString(ctxkey.Group)
-	originalModel := c.GetString(ctxkey.RequestModel)
 	tokenId := c.GetInt(ctxkey.TokenId)
 	actualModel := relayMeta.ActualModelName
 	requestURL := c.Request.URL.String()
 	// Ensure channel error processing is completed during graceful drain
 	goProcessChannelRelayError(ctx, bizErr, processChannelRelayErrorParams{
+		StartedAt:     attemptStarted,
+		CompletedAt:   attemptCompleted,
+		ReadOnly:      isReadOnlyRelayRequest(c),
+		Revision:      attemptRevision,
 		Attempt:       observation.attempts,
 		RequestID:     requestId,
 		UserId:        userId,
@@ -207,14 +226,15 @@ func Relay(c *gin.Context) {
 	if err := shouldRetry(c, bizErr); err != nil {
 		if retryableClientError && !videoReplayUnsafe(c) {
 			lg.Debug("retryable upstream client error detected; keeping retry logic enabled",
-				zap.Int("status_code", bizErr.StatusCode),
-				zap.String("error_type", string(bizErr.Type)),
-				zap.String("error_code", strings.TrimSpace(fmt.Sprint(bizErr.Code))),
-				zap.String("retry_reason", retryableClientReason),
+				append(relayErrorMetadataLogFields(bizErr),
+					zap.String("retry_reason", retryableClientReason),
+				)...,
 			)
 		} else {
 			errorMessagePreview := strings.TrimSpace(bizErr.Message)
-			if len(errorMessagePreview) > 240 {
+			if bizErr.MessageContainsRawBody {
+				errorMessagePreview = applog.Redact(errorMessagePreview)
+			} else if len(errorMessagePreview) > 240 {
 				errorMessagePreview = errorMessagePreview[:240] + "..."
 			}
 			relayLogParams := processChannelRelayErrorParams{
@@ -234,10 +254,9 @@ func Relay(c *gin.Context) {
 				errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) ||
 				isUserOriginatedRelayError(bizErr)
 			lg.Debug("non-retry relay decision details",
-				zap.Int("status_code", bizErr.StatusCode),
-				zap.String("error_type", string(bizErr.Type)),
-				zap.String("error_code", strings.TrimSpace(fmt.Sprint(bizErr.Code))),
-				zap.String("error_message_preview", errorMessagePreview),
+				append(relayErrorMetadataLogFields(bizErr),
+					zap.String("error_message_preview", errorMessagePreview),
+				)...,
 			)
 			// retry_skip_reason already carries the decision text; zap.Error would add
 			// one-api's own errors/v2 stack to a WARN line that reports a routing
@@ -273,22 +292,11 @@ func Relay(c *gin.Context) {
 	// For 413 errors, increase retry attempts to exhaust all available channels
 	// to avoid returning 413 to users when other channels might be available
 	if bizErr.StatusCode == http.StatusRequestEntityTooLarge && retryAllowed {
-		// Count the eligible channels that remain after excluding the failed one.
-		// Subtracting one from the routable pool would assume the failed channel
-		// is still listed, but a concurrent cooldown may already have hidden it.
-		remaining, err := dbmodel.CountCachedRetryCandidates(group, originalModel, failedChannels)
-		if err != nil {
-			retryTimes = 1
-			lg.Warn("413 error detected, Failed to get total number of channels for a model/group from cache. increasing retry attempts",
-				zap.Int("retry_attempts", retryTimes),
-				zap.Error(err),
-			)
-		} else {
-			retryTimes = remaining
-			lg.Info("413 error detected, increasing retry attempts to exhaust alternative channels",
-				zap.Int("retry_attempts", retryTimes),
-			)
-		}
+		// Count every untried channel of the pool, cooling ones included, rather
+		// than subtracting one from the routable pool: a concurrent cooldown may
+		// already have hidden the failed channel, and a cooldown ending mid-walk
+		// must not lose its slot (see capacityRetryBudget).
+		retryTimes = capacityRetryBudget(gmw.Ctx(c), lg, group, originalModel, failedChannels)
 	}
 
 	// Debug logging to track channel exclusions (only when debug is enabled)
@@ -305,11 +313,24 @@ func Relay(c *gin.Context) {
 		}
 	}
 
-	// The selection policy is fixed by the initial failure: 413 seeks channels with
-	// a larger max_tokens, everything else (including 429) walks the untried
-	// channels strictly by descending priority. See selectRetryChannel for why the
-	// 429 case must NOT ask the selector to skip a tier.
+	// The selection policy starts from the initial failure: an upstream 413 seeks
+	// channels with a larger max_tokens, everything else (including 429 and a
+	// local one-api 413) walks the untried channels strictly by descending
+	// priority. See selectRetryChannel for why the 429 case must NOT ask the
+	// selector to skip a tier.
 	selectionPolicy := retrySelectionPolicyFor(bizErr.StatusCode)
+	// capacityFloor is the largest declared max_tokens of a channel whose upstream
+	// answered 413 for this request. Only an upstream 413 is capacity evidence: a
+	// channel that failed otherwise, was skipped without being tried, or was
+	// refused by one-api itself says nothing about whether a channel of its size
+	// can serve the request. Once positive, every later selection skips channels
+	// declaring no more than it, for the remainder of the request.
+	capacityFloor := dbmodel.NoCapacityFloor
+	if isCapacityRejection(bizErr) {
+		capacityFloor = dbmodel.RaiseCapacityFloor(capacityFloor, attemptChannel(c), originalModel)
+	} else if selectionPolicy == retrySelectLargerMaxTokens {
+		selectionPolicy = retrySelectStrictPriority
+	}
 
 	// For 5xx/server transient errors, avoid reusing the same ability first, probe within tier
 	isServerTransient := bizErr.StatusCode >= 500 && bizErr.StatusCode <= 599
@@ -325,10 +346,11 @@ func Relay(c *gin.Context) {
 				zap.Int("retry_attempt", retryTimes-i+1),
 				dbmodel.ChannelRefsField("excluded_channels", getChannelIds(failedChannels)),
 				zap.String("retry_selection_policy", string(selectionPolicy)),
+				zap.Int32("retry_capacity_floor", capacityFloor),
 				zap.Bool("server_transient", isServerTransient))
 		}
 
-		channel, err = selectRetryChannel(gmw.Ctx(c), group, originalModel, failedChannels, selectionPolicy)
+		channel, err = selectCapacityRetryChannel(gmw.Ctx(c), group, originalModel, failedChannels, selectionPolicy, capacityFloor)
 		if err != nil {
 			relayLogParams := processChannelRelayErrorParams{
 				Attempt:       observation.attempts,
@@ -348,6 +370,7 @@ func Relay(c *gin.Context) {
 				zap.Int("retry_attempt", retryTimes-i+1),
 				zap.Int("remaining_attempts", i-1),
 				zap.String("retry_selection_policy", string(selectionPolicy)),
+				zap.Int32("retry_capacity_floor", capacityFloor),
 				zap.Bool("server_transient", isServerTransient),
 				zap.String("log_stage", "retry_decision"),
 			)
@@ -382,6 +405,7 @@ func Relay(c *gin.Context) {
 			zap.String("retry_channel", channel.Ref().String()),
 			zap.Int64("retry_channel_priority", channel.GetPriority()),
 			zap.String("retry_selection_policy", string(selectionPolicy)),
+			zap.Int32("retry_capacity_floor", capacityFloor),
 			zap.Int("remaining_attempts", i),
 		)
 		// We have definitively decided to retry on a different channel. Refund and
@@ -401,11 +425,15 @@ func Relay(c *gin.Context) {
 		c.Request.Body = io.NopCloser(bytes.NewBuffer(requestBody))
 
 		// Record retry attempt
+		attemptRevision = relayAttemptUpstreamRevision(c)
 		retryStartTime := time.Now()
 		retryMeta := meta.GetByContext(c)
 
+		attemptStarted = retryStartTime.UTC()
 		bizErr = observation.invoke(c, relayMode)
+		attemptCompleted = attemptStarted.Add(time.Since(retryStartTime))
 		if bizErr == nil {
+			recordRelayCooldownSuccess(ctx, c, relayMode, group, originalModel, attemptRevision, attemptStarted, attemptCompleted)
 			// Record successful retry
 			PrometheusMonitor.RecordRelayRequest(c, retryMeta, retryStartTime, true, 0, 0, 0)
 			return
@@ -417,6 +445,12 @@ func Relay(c *gin.Context) {
 		channelId = c.GetInt(ctxkey.ChannelId)
 		failedChannels[channelId] = true // Track this failed channel
 		lastFailedChannelId = channelId
+		if isCapacityRejection(bizErr) {
+			// Capacity evidence restricts the rest of the walk, whatever the
+			// initial failure was.
+			capacityFloor = dbmodel.RaiseCapacityFloor(capacityFloor, channel, originalModel)
+			selectionPolicy = retrySelectLargerMaxTokens
+		}
 
 		// Debug logging to track which channels are being added to failed list (only when debug is enabled)
 		if config.DebugEnabled {
@@ -424,13 +458,16 @@ func Relay(c *gin.Context) {
 				dbmodel.ChannelRefsField("total_failed_channels", getChannelIds(failedChannels)))
 		}
 		channelName = c.GetString(ctxkey.ChannelName)
-		// Update group and originalModel potentially if changed by middleware, though unlikely for these.
-		group = c.GetString(ctxkey.Group)
-		originalModel = c.GetString(ctxkey.RequestModel)
+		// group and originalModel stay the routing snapshot taken before the first
+		// attempt; an adaptor may have rewritten ctxkey.RequestModel meanwhile.
 		// Get updated actual model from retry meta
 		retryActualModel := retryMeta.ActualModelName
 		actualModel = retryActualModel
 		goProcessChannelRelayError(ctx, bizErr, processChannelRelayErrorParams{
+			StartedAt:     attemptStarted,
+			CompletedAt:   attemptCompleted,
+			ReadOnly:      isReadOnlyRelayRequest(c),
+			Revision:      attemptRevision,
 			Attempt:       observation.attempts,
 			RequestID:     requestId,
 			UserId:        userId,
@@ -528,9 +565,11 @@ const (
 	// failed channel is excluded, this already realises "move on to the next
 	// tier" for a rate-limited top channel.
 	retrySelectStrictPriority retrySelectionPolicy = "strict_priority"
-	// retrySelectLargerMaxTokens is the 413 recovery policy: among the channels not
-	// yet tried, only those whose configured max_tokens differs from every channel
-	// that rejected the request as too large are eligible.
+	// retrySelectLargerMaxTokens is the 413 recovery policy: the strict priority
+	// walk restricted to channels that may serve a request that channels declaring
+	// up to the capacity floor already rejected with an upstream 413 -- channels
+	// declaring a larger max_tokens, or none. It applies from the first upstream
+	// 413 of the request, whatever the initial failure was.
 	retrySelectLargerMaxTokens retrySelectionPolicy = "larger_max_tokens"
 )
 
@@ -554,16 +593,14 @@ func retrySelectionPolicyFor(statusCode int) retrySelectionPolicy {
 // as the 429 path used to) double-skips: with A(10) rate limited and excluded, the highest
 // remaining tier is B(5), which was then skipped in favour of C(0), producing A → C → B.
 //
+// It applies no capacity requirement; the retry loop passes its upstream-413
+// evidence through selectCapacityRetryChannel, which this delegates to.
+//
 // Returns the selected channel, or a wrapped error whose text still carries the
 // selector's "no channels available" / "after exclusions" message so
 // isExpectedChannelSelectionExhaustedError can classify exhaustion.
 func selectRetryChannel(ctx context.Context, group string, originalModel string, failedChannels map[int]bool, policy retrySelectionPolicy) (*dbmodel.Channel, error) {
-	tryLargerMaxTokens := policy == retrySelectLargerMaxTokens
-	channel, err := dbmodel.CacheGetRandomSatisfiedChannelExcludingWithContext(ctx, group, originalModel, false, failedChannels, tryLargerMaxTokens)
-	if err != nil {
-		return nil, errors.Wrapf(err, "select retry channel (policy=%s, excluded=%d)", policy, len(failedChannels))
-	}
-	return channel, nil
+	return selectCapacityRetryChannel(ctx, group, originalModel, failedChannels, policy, dbmodel.NoCapacityFloor)
 }
 
 // RelayNotImplemented writes the unsupported-endpoint response to the request context.

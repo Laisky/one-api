@@ -220,7 +220,7 @@ func finishTerminalWSFixture(t *testing.T, fixture *terminalWSFixture, closeClie
 	for i := int32(0); i < fixture.creates.Load(); i++ {
 		observed := <-fixture.wire
 		require.Equal(t, "/v1/responses", observed.path)
-		require.Equal(t, "model=alias", observed.query)
+		require.Equal(t, "model=gpt-4", observed.query, "the handshake query carries only the mapped billed model, never the caller's alias or other parameters")
 		require.Equal(t, "Bearer upstream-fixture-key", observed.authorization)
 		require.Equal(t, "responses-api=v1", observed.beta)
 		var create map[string]any

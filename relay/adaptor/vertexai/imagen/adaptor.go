@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/Laisky/errors/v2"
+	gmw "github.com/Laisky/gin-middlewares/v7"
+	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
 	"github.com/Laisky/one-api/relay/adaptor"
@@ -77,17 +79,24 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 // ModelList derived from ModelRatios for backward compatibility.
 var ModelList = adaptor.GetModelListFromPricing(ModelRatios)
 
+// Adaptor is the Vertex AI Imagen sub-adaptor.
 type Adaptor struct {
 }
 
+// Init prepares the adaptor for one request; Imagen keeps no per-request state.
 func (a *Adaptor) Init(meta *meta.Meta) {
 	// No initialization needed
 }
 
+// ConvertRequest is unsupported for Imagen and always returns an error.
 func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.GeneralOpenAIRequest) (any, error) {
 	return nil, errors.New("not implemented")
 }
 
+// ConvertImageRequest converts an OpenAI image generation or multipart edit
+// request into an Imagen predict request. It accepts the gin context and the
+// image request, and returns the converted request or an error for an
+// unsupported response format, content type or mode.
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageRequest) (any, error) {
 	meta := meta.GetByContext(c)
 
@@ -115,13 +124,15 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 	}
 }
 
+// DoResponse reads the Imagen predict response with a bounded read and
+// dispatches it by relay mode. It accepts the gin context, the provider
+// response and the relay meta, and returns the usage and the relay error, if any.
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, wrapErr *model.ErrorWithStatusCode) {
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+	respBody, readErr := readImagenResponse(c, resp)
+	if readErr != nil {
+		return nil, readErr
 	}
-	resp.Body.Close()
-	resp.Body = io.NopCloser(bytes.NewBuffer(respBody))
+	resp.Body = io.NopCloser(bytes.NewReader(respBody))
 
 	switch meta.Mode {
 	case relaymode.ImagesEdits:
@@ -133,11 +144,49 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Met
 	}
 }
 
+// readImagenResponse reads and closes an Imagen response body, bounding error
+// bodies to maxErrorBodyBytes and successful bodies to maxSuccessBodyBytes.
+// It accepts the gin context and the provider response, and returns the body
+// (empty for an oversized error body, which then yields a generic message) or
+// a local relay error when the body cannot be read or is oversized.
+func readImagenResponse(c *gin.Context, resp *http.Response) ([]byte, *model.ErrorWithStatusCode) {
+	limit := int64(maxSuccessBodyBytes)
+	if resp.StatusCode != http.StatusOK {
+		limit = maxErrorBodyBytes
+	}
+	respBody, tooLarge, err := readBoundedBody(resp.Body, limit)
+	if resp.Body != nil {
+		if closeErr := resp.Body.Close(); closeErr != nil {
+			gmw.GetLogger(c).Debug("close imagen response body failed", zap.Error(closeErr))
+		}
+	}
+	if err != nil {
+		return nil, openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
+	}
+	if !tooLarge {
+		return respBody, nil
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, nil
+	}
+	return nil, openai.ErrorWrapper(errors.Errorf("imagen response exceeds %d bytes", maxSuccessBodyBytes), "response_body_too_large", http.StatusBadGateway)
+}
+
+// imagenStatusError reports a provider rejection with the provider status and
+// a sanitized message, never the raw body. It accepts the provider status and
+// body, and returns the provider-attributed relay error.
+func imagenStatusError(statusCode int, respBody []byte) *model.ErrorWithStatusCode {
+	return openai.UpstreamErrorWrapper(errors.New(upstreamErrorMessage(respBody, statusCode)), "imagen_api_error", statusCode)
+}
+
+// handleImageGeneration converts a generation response to the OpenAI image
+// format and writes it. It accepts the gin context, the provider response and
+// its body, and returns the relay error, if any.
 func handleImageGeneration(c *gin.Context, resp *http.Response, respBody []byte) *model.ErrorWithStatusCode {
 	var imageResponse CreateImageResponse
 
 	if resp.StatusCode != http.StatusOK {
-		return openai.ErrorWrapper(errors.New(string(respBody)), "imagen_api_error", resp.StatusCode)
+		return imagenStatusError(resp.StatusCode, respBody)
 	}
 
 	err := json.Unmarshal(respBody, &imageResponse)
@@ -172,14 +221,19 @@ func handleImageGeneration(c *gin.Context, resp *http.Response, respBody []byte)
 	return nil
 }
 
+// GetModelList returns the Imagen models this sub-adaptor serves.
 func (a *Adaptor) GetModelList() []string {
 	return ModelList
 }
 
+// GetChannelName returns the sub-adaptor's channel name.
 func (a *Adaptor) GetChannelName() string {
 	return "vertex_ai_imagen"
 }
 
+// convertImageCreateRequest builds an Imagen generation request from the
+// prompt and image count. It accepts the image request and returns the
+// converted request.
 func convertImageCreateRequest(request *model.ImageRequest) (any, error) {
 	return CreateImageRequest{
 		Instances: []createImageInstance{

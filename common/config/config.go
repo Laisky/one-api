@@ -524,6 +524,20 @@ var (
 	// Default: 60 seconds
 	ChannelSuspendSecondsForAuth = time.Second * time.Duration(env.Int("CHANNEL_SUSPEND_SECONDS_FOR_AUTH", 60))
 
+	// ChannelSuspensionSyncInterval controls how often each replica with the memory
+	// cache enabled mirrors the active ability cooldowns (both the fixed and the
+	// adaptive deadline, two indexed range reads in one statement) from the
+	// database. A cooldown, or a lift, persisted by another replica takes effect
+	// here within this interval instead of at the next full cache rebuild
+	// (SYNC_FREQUENCY), which is longer than the adaptive ladder's first rungs
+	// (10s, 30s). The default keeps the average unseen part of the 10s first rung
+	// at 10% (worst case 20%) for one round trip per replica every 2s. Values <= 0
+	// disable the mirror.
+	//
+	// Environment variable: CHANNEL_SUSPENSION_SYNC_SECONDS
+	// Default: 2 seconds
+	ChannelSuspensionSyncInterval = time.Second * time.Duration(env.Int("CHANNEL_SUSPENSION_SYNC_SECONDS", 2))
+
 	// ChannelTestFrequencyRaw retains the raw CHANNEL_TEST_FREQUENCY input for
 	// validation and documentation purposes.
 	//
@@ -1816,12 +1830,15 @@ var (
 	// Default: 0
 	QuotaForInvitee int64 = 0
 
-	// RetryTimes configures default retry attempts for certain background jobs.
+	// RetryTimes configures the base number of relay retries.
 	//
 	// Runtime variable (set via admin UI)
-	// Default: 0 (no retries)
-	RetryTimes = 0
+	// Default: 3; an explicit zero disables ordinary cross-channel retries.
+	RetryTimes = DefaultRetryTimes
 )
+
+// DefaultRetryTimes is the relay retry budget before persisted options load.
+const DefaultRetryTimes = 3
 
 // =============================================================================
 // ROOT USER CONFIGURATION

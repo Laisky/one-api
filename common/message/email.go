@@ -174,16 +174,13 @@ func sendEmailViaResend(subject, receiver, content string) error {
 		return errors.New("Resend API key is not configured")
 	}
 
-	emails := []string{}
-	for email := range strings.SplitSeq(receiver, ";") {
-		email = strings.TrimSpace(email)
-		if email != "" {
-			emails = append(emails, email)
-		}
+	recipients, err := parseEmailRecipients(receiver)
+	if err != nil {
+		return err
 	}
-
-	if len(emails) == 0 {
-		return errors.New("no valid recipient email addresses")
+	emails := make([]string, 0, len(recipients))
+	for _, recipient := range recipients {
+		emails = append(emails, recipient.addrSpec)
 	}
 
 	from, err := resendSenderAddress()
@@ -334,10 +331,23 @@ func dialSMTPClient(ctx context.Context, addr, localName string) (*smtp.Client, 
 }
 
 // SendEmail transmits an HTML email using Resend API or SMTP server.
-// It returns an error when the message cannot be constructed or delivered.
+//
+// Parameters:
+//   - subject: plain-text subject; it is base64 MIME-encoded into the header.
+//   - receiver: one or more bare RFC 5322 addresses separated by ";". Every
+//     entry is parsed and re-serialized by net/mail; an entry with a display
+//     name, a line break, or invalid syntax fails the whole send before any
+//     provider is contacted.
+//   - content: the HTML body. Callers own its markup and must HTML-escape every
+//     untrusted value they interpolate into it.
+//
+// Returns: an error when the configuration, a header value, or delivery fails.
 func SendEmail(subject string, receiver string, content string) error {
 	if receiver == "" {
 		return errors.Errorf("receiver is empty")
+	}
+	if strings.ContainsAny(config.SystemName, "\r\n") {
+		return errors.New("SystemName contains a line break and cannot be used in email headers")
 	}
 
 	// Resolve provider: explicit EmailProvider wins; otherwise fall back to legacy
@@ -362,13 +372,20 @@ func SendEmail(subject string, receiver string, content string) error {
 	if config.SMTPFrom == "" { // for compatibility
 		config.SMTPFrom = config.SMTPAccount
 	}
+	recipients, err := parseEmailRecipients(receiver)
+	if err != nil {
+		return err
+	}
+	sender, err := parseBareEmailAddress(config.SMTPFrom)
+	if err != nil {
+		return errors.Wrap(err, "invalid SMTP sender address")
+	}
 	encodedSubject := fmt.Sprintf("=?UTF-8?B?%s?=", base64.StdEncoding.EncodeToString([]byte(subject)))
 
-	// Extract domain from SMTPFrom with fallback
+	// The sender domain names the Message-ID and the EHLO greeting.
 	domain := "localhost"
-	parts := strings.Split(config.SMTPFrom, "@")
-	if len(parts) > 1 && parts[1] != "" {
-		domain = parts[1]
+	if at := strings.LastIndex(sender.addrSpec, "@"); at >= 0 && at < len(sender.addrSpec)-1 {
+		domain = sender.addrSpec[at+1:]
 	}
 
 	// Generate a unique Message-ID
@@ -378,28 +395,17 @@ func SendEmail(subject string, receiver string, content string) error {
 	}
 	messageId := fmt.Sprintf("<%x@%s>", buf, domain)
 
+	// Header values are rebuilt by net/mail from the parsed addresses, so no
+	// caller- or operator-supplied text can start a new header line.
 	mail := fmt.Appendf(nil, "To: %s\r\n"+
-		"From: %s<%s>\r\n"+
+		"From: %s\r\n"+
 		"Subject: %s\r\n"+
 		"Message-ID: %s\r\n"+
 		"Date: %s\r\n"+
 		"Content-Type: text/html; charset=UTF-8\r\n\r\n%s\r\n",
-		receiver, config.SystemName, config.SMTPFrom, encodedSubject, messageId, time.Now().Format(time.RFC1123Z), content)
+		formatToHeader(recipients), formatFromHeader(config.SystemName, sender), encodedSubject, messageId, time.Now().Format(time.RFC1123Z), content)
 
 	addr := net.JoinHostPort(config.SMTPServer, fmt.Sprintf("%d", config.SMTPPort))
-
-	// Clean up recipient addresses
-	receiverEmails := []string{}
-	for email := range strings.SplitSeq(receiver, ";") {
-		email = strings.TrimSpace(email)
-		if email != "" {
-			receiverEmails = append(receiverEmails, email)
-		}
-	}
-
-	if len(receiverEmails) == 0 {
-		return errors.New("no valid recipient email addresses")
-	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -476,13 +482,14 @@ func SendEmail(subject string, receiver string, content string) error {
 	afterAuth:
 	}
 
-	if err = client.Mail(config.SMTPFrom); err != nil {
+	if err = client.Mail(sender.addrSpec); err != nil {
 		return errors.Wrap(err, "failed to set MAIL FROM")
 	}
 
-	for _, receiver := range receiverEmails {
-		if err = client.Rcpt(receiver); err != nil {
-			return errors.Wrapf(err, "failed to add recipient: %s", receiver)
+	for i, recipient := range recipients {
+		if err = client.Rcpt(recipient.addrSpec); err != nil {
+			// The address itself is not echoed: email addresses are never logged.
+			return errors.Wrapf(err, "failed to add recipient #%d", i+1)
 		}
 	}
 

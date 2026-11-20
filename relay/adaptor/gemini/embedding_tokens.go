@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"net/http"
 	"strings"
 
@@ -156,23 +155,75 @@ func countEmbeddingTokens(ctx context.Context, meta *meta.Meta, contents []ChatC
 		_ = resp.Body.Close()
 	}()
 
-	responseBody, err := io.ReadAll(resp.Body)
+	return ReadCountTokensResponse(resp)
+}
+
+// ReadCountTokensResponse reads and classifies a Gemini API or Vertex AI
+// countTokens HTTP response. The body is untrusted provider data: the read is
+// bounded to relaymodel.MaxUpstreamErrorBodyBytes+1 bytes (OWASP API4:2023), and
+// an error reaches the caller with only the parsed Google message or a generic
+// description, never body bytes (OWASP API8:2023 / API10:2023).
+//
+// Parameters:
+//   - resp: the non-nil countTokens response; the caller closes its body.
+//
+// Returns:
+//   - *CountTokensResponse: the decoded response for a 2xx status without an error object.
+//   - *relaymodel.ErrorWithStatusCode: a Gemini-shaped API error otherwise. A
+//     status of 400 or above is reported as is, whether or not the body decodes;
+//     an unusable 2xx response is reported as 502.
+func ReadCountTokensResponse(resp *http.Response) (*CountTokensResponse, *relaymodel.ErrorWithStatusCode) {
+	responseBody, err := relaymodel.ReadBoundedUpstreamBody(resp.Body)
 	if err != nil {
 		return nil, geminiCountTokensError(http.StatusBadGateway, errors.Wrap(err, "read_count_tokens_response"))
+	}
+	contentType := resp.Header.Get("Content-Type")
+	if resp.StatusCode >= http.StatusBadRequest {
+		return nil, geminiCountTokensAPIError(resp.StatusCode, countTokensErrorFromBody(responseBody),
+			relaymodel.UpstreamErrorBodyMessage(resp.StatusCode, contentType, responseBody))
+	}
+	if len(responseBody) > relaymodel.MaxUpstreamErrorBodyBytes {
+		return nil, geminiCountTokensError(http.StatusBadGateway,
+			errors.Errorf("count_tokens response exceeds the %d-byte limit", relaymodel.MaxUpstreamErrorBodyBytes))
 	}
 
 	var countTokensResp CountTokensResponse
 	if err = json.Unmarshal(responseBody, &countTokensResp); err != nil {
-		return nil, geminiCountTokensError(http.StatusBadGateway, errors.Wrap(err, "unmarshal_count_tokens_response"))
-	}
-	if resp.StatusCode >= http.StatusBadRequest {
-		return nil, geminiCountTokensAPIError(resp.StatusCode, countTokensResp.Error, responseBody)
+		// A decoder error can quote a numeric literal from the body, so the
+		// client sees a fixed description; RawError keeps the cause.
+		apiErr := geminiCountTokensError(http.StatusBadGateway, errors.Wrap(err, "unmarshal_count_tokens_response"))
+		apiErr.Message = "unmarshal_count_tokens_response: countTokens returned an undecodable response"
+		return nil, apiErr
 	}
 	if countTokensResp.Error != nil {
-		return nil, geminiCountTokensAPIError(http.StatusBadGateway, countTokensResp.Error, responseBody)
+		return nil, geminiCountTokensAPIError(http.StatusBadGateway, countTokensResp.Error,
+			relaymodel.UpstreamErrorBodyMessage(resp.StatusCode, contentType, responseBody))
 	}
 
 	return &countTokensResp, nil
+}
+
+// countTokensErrorFromBody decodes the Google error object of a countTokens
+// error body on a best-effort basis.
+//
+// Parameters:
+//   - body: the bounded countTokens error body.
+//
+// Returns:
+//   - *Error: the decoded error object, or nil when the body is oversized, not
+//     a Google error envelope, or carries no error object.
+func countTokensErrorFromBody(body []byte) *Error {
+	if len(body) > relaymodel.MaxUpstreamErrorBodyBytes {
+		return nil
+	}
+	var envelope struct {
+		Error *Error `json:"error"`
+	}
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		// Not a Google error envelope: the caller's generic message describes it.
+		return nil
+	}
+	return envelope.Error
 }
 
 // buildCountTokensURL constructs the Gemini countTokens endpoint for the selected model.
@@ -199,16 +250,17 @@ func geminiCountTokensError(statusCode int, err error) *relaymodel.ErrorWithStat
 }
 
 // geminiCountTokensAPIError converts a Gemini error payload into a normalized API error.
-// Parameters: statusCode is the HTTP status, geminiErr is the parsed Gemini error payload, and rawBody is the raw response body.
+// Parameters: statusCode is the HTTP status to report, geminiErr is the parsed
+// Gemini error payload (nil when absent), and fallbackMessage is the
+// client-safe description of the body (relaymodel.UpstreamErrorBodyMessage)
+// used when the payload carries no message. The raw body is never used.
 // Returns: a Gemini-shaped API error wrapper.
-func geminiCountTokensAPIError(statusCode int, geminiErr *Error, rawBody []byte) *relaymodel.ErrorWithStatusCode {
-	message := strings.TrimSpace(string(rawBody))
+func geminiCountTokensAPIError(statusCode int, geminiErr *Error, fallbackMessage string) *relaymodel.ErrorWithStatusCode {
+	message := fallbackMessage
 	code := any("count_tokens_failed")
-	rawErr := errors.New(message)
 	if geminiErr != nil {
 		if trimmed := strings.TrimSpace(geminiErr.Message); trimmed != "" {
 			message = trimmed
-			rawErr = errors.New(trimmed)
 		}
 		if geminiErr.Code != 0 {
 			code = geminiErr.Code
@@ -220,7 +272,7 @@ func geminiCountTokensAPIError(statusCode int, geminiErr *Error, rawBody []byte)
 			Message:  message,
 			Type:     relaymodel.ErrorTypeGemini,
 			Code:     code,
-			RawError: rawErr,
+			RawError: errors.New(message),
 		},
 		StatusCode: statusCode,
 	}

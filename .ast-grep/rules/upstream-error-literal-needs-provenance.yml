@@ -1,0 +1,101 @@
+id: upstream-error-literal-needs-provenance
+language: go
+severity: error
+message: >-
+  This relay/model Error literal takes its Type from provider data
+  (model.ErrorType(<non-literal>)) but sets no FromUpstream field. Without
+  FromUpstream a provider-supplied "one_api_error" type makes IsOneAPIError()
+  report true, so retry, ability suspension, channel health and delivery
+  attribution treat the provider's failure as one-api's own.
+note: >-
+  Build the error with model.NewUpstreamError(status, message,
+  model.ErrorType(x), code[, model.WithUpstreamErrorParam(p)]), which always sets
+  FromUpstream and RawError=errors.New(message). If a field must differ from what
+  the constructor sets (for example a proof-carrying RawError or a RetryAfter),
+  keep the literal and set FromUpstream explicitly. See relay/model/upstream_error.go.
+# Scope: every package that builds relay errors -- adaptors (relay/adaptor), the
+# relay controllers and envelope decoder (relay/controller), the HTTP controllers
+# and middleware. Errors decoded from JSON are already marked by
+# (*model.Error).UnmarshalJSON; any other code that rebuilds an Error from wire
+# or provider fields (for example the tolerant envelope decoder) must state its
+# provenance, which this rule checks.
+#
+# Matches a composite literal of type <alias>.Error, for every import alias the
+# adaptors use for relay/model (model, rmodel, relaymodel, relayModel), whose
+# keyed `Type:` element is a direct <alias>.ErrorType(...) conversion whose
+# argument is not a string literal, and whose body has no keyed `FromUpstream:`
+# element (any explicit value, including false, is a deliberate choice and is
+# accepted).
+#
+# KNOWN LIMITATIONS (ast-grep is syntactic and has no type information):
+#   - A provider-derived type that reaches the literal through a variable
+#     (`errType := model.ErrorType(x)` ... `Type: errType`) is not matched; that
+#     needs data-flow analysis. Such sites are kept on NewUpstreamError by review.
+#   - A conversion of a named string constant (`model.ErrorType(someConst)`) is
+#     indistinguishable from a provider field and is flagged; use the typed
+#     model.ErrorType* constant or a string literal instead.
+#   - Field assignments after construction (`e.Type = model.ErrorType(x)`) are not
+#     composite literals and are not matched.
+files:
+  - "relay/**/*.go"
+  - "controller/**/*.go"
+  - "middleware/**/*.go"
+ignores:
+  - "**/*_test.go"
+rule:
+  kind: composite_literal
+  all:
+    # The literal's type is <relay/model alias>.Error.
+    - has:
+        field: type
+        kind: qualified_type
+        all:
+          - has:
+              field: package
+              regex: "^(model|rmodel|relaymodel|relayModel)$"
+          - has:
+              field: name
+              regex: "^Error$"
+    # Its Type element is <alias>.ErrorType(<argument that is not a string literal>).
+    - has:
+        field: body
+        kind: literal_value
+        has:
+          kind: keyed_element
+          all:
+            - has:
+                field: key
+                regex: "^Type$"
+            - has:
+                field: value
+                has:
+                  kind: call_expression
+                  all:
+                    - has:
+                        field: function
+                        kind: selector_expression
+                        all:
+                          - has:
+                              field: operand
+                              regex: "^(model|rmodel|relaymodel|relayModel)$"
+                          - has:
+                              field: field
+                              regex: "^ErrorType$"
+                    - has:
+                        field: arguments
+                        kind: argument_list
+                        not:
+                          has:
+                            any:
+                              - kind: interpreted_string_literal
+                              - kind: raw_string_literal
+    # ...and it records no provenance decision.
+    - not:
+        has:
+          field: body
+          kind: literal_value
+          has:
+            kind: keyed_element
+            has:
+              field: key
+              regex: "^FromUpstream$"

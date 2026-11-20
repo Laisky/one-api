@@ -1,0 +1,78 @@
+id: upstream-error-literal-needs-provenance
+valid:
+  # The canonical constructor always sets FromUpstream.
+  - |
+    func ok1(resp *http.Response, body providerError) *model.ErrorWithStatusCode {
+        return model.NewUpstreamError(resp.StatusCode, body.Message, model.ErrorType(body.Type), body.Code)
+    }
+  # A literal that keeps a field the constructor cannot set records provenance explicitly.
+  - |
+    func ok2(status int, envelope claudeEnvelope) *model.ErrorWithStatusCode {
+        return &model.ErrorWithStatusCode{StatusCode: status, Error: model.Error{
+            Type: model.ErrorType(envelope.Error.Type), Message: envelope.Error.Message,
+            FromUpstream: true, RawError: errors.WithStack(&admissionRejectionError{}),
+        }}
+    }
+  # An explicit FromUpstream value, even false, is a deliberate decision.
+  - |
+    func ok3(x string) rmodel.Error {
+        return rmodel.Error{Type: rmodel.ErrorType(x), FromUpstream: false}
+    }
+  # A string-literal conversion is a one-api constant, not provider data.
+  - |
+    func ok4(message string) model.Error {
+        return model.Error{Message: message, Type: model.ErrorType("cohere_rerank_error")}
+    }
+  # A typed one-api constant is not provider data.
+  - |
+    func ok5(err error) *rmodel.ErrorWithStatusCode {
+        return &rmodel.ErrorWithStatusCode{Error: rmodel.Error{Message: err.Error(), Type: rmodel.ErrorTypeOneAPI, RawError: err}}
+    }
+  # An Error type from another package is out of scope.
+  - |
+    func ok6(x string) other.Error {
+        return other.Error{Type: other.ErrorType(x)}
+    }
+  # A provider type reached through a variable is a known limitation (no data flow).
+  - |
+    func ok7(x string) model.Error {
+        errType := model.ErrorType(x)
+        return model.Error{Type: errType}
+    }
+  # A raw-string-literal conversion is likewise a constant.
+  - |
+    func ok8() relaymodel.Error {
+        return relaymodel.Error{Type: relaymodel.ErrorType(`fixed_error`)}
+    }
+invalid:
+  # Provider field converted into Type with no provenance (the PaLM/Cohere shape).
+  - |
+    func bad1(resp *http.Response, palmResponse ChatResponse) (*model.ErrorWithStatusCode, *model.Usage) {
+        return &model.ErrorWithStatusCode{
+            Error: model.Error{
+                Message:  palmResponse.Error.Message,
+                Type:     model.ErrorType(palmResponse.Error.Status),
+                Code:     palmResponse.Error.Code,
+                RawError: errors.New(palmResponse.Error.Message),
+            },
+            StatusCode: resp.StatusCode,
+        }, nil
+    }
+  # The rmodel alias, with RawError but no FromUpstream.
+  - |
+    func bad2(status int, envelope claudeEnvelope) *rmodel.ErrorWithStatusCode {
+        return &rmodel.ErrorWithStatusCode{StatusCode: status, Error: rmodel.Error{
+            Type: rmodel.ErrorType(envelope.Error.Type), Code: envelope.Error.Type,
+            RawError: errors.WithStack(&admissionRejectionError{}),
+        }}
+    }
+  # A computed argument is still provider-derived.
+  - |
+    func bad3(t string) model.Error {
+        return model.Error{Type: model.ErrorType(strings.TrimSpace(t)), Message: "rejected"}
+    }
+  # The relaymodel alias and an address-of literal.
+  - |
+    func bad4(code int) *relaymodel.Error {
+        return &relaymodel.Error{Type: relaymodel.ErrorType(strconv.Itoa(code))}
+    }

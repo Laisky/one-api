@@ -14,14 +14,35 @@ import (
 
 	"github.com/Laisky/one-api/common/client"
 	"github.com/Laisky/one-api/common/helper"
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
 	"github.com/Laisky/one-api/relay/model"
 )
 
+// ImageHandler creates a DashScope image task from resp, waits for it and
+// writes the OpenAI-format image response to the client.
+//
+// A non-2xx task-creation answer (for example 429 Throttling.RateQuota) is the
+// provider's refusal: it is returned with the provider's HTTP status and marked
+// FromUpstream, so the relay applies the provider failure policy (cooldown,
+// failover, channel health) and the image helper's 4xx refund. The raw body is
+// never echoed; only the parsed DashScope message, code and request id are.
+//
+// Parameters:
+//   - c: the request context; its Authorization header carries the task key.
+//   - resp: the DashScope task-creation response; its body is consumed and closed.
+//
+// Returns:
+//   - *model.ErrorWithStatusCode: the failure, or nil after a delivered response.
+//   - *model.Usage: always nil; the image helper bills per image.
 func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	apiKey := c.Request.Header.Get("Authorization")
 	apiKey = strings.TrimPrefix(apiKey, "Bearer ")
 	responseFormat := c.GetString("response_format")
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return aliImageStatusError(resp), nil
+	}
 
 	var aliTaskResponse TaskResponse
 	responseBody, err := io.ReadAll(resp.Body)
@@ -38,26 +59,32 @@ func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCo
 	}
 
 	if aliTaskResponse.Message != "" {
-		// Let ErrorWrapper handle the logging to avoid duplicate logging
-		return openai.ErrorWrapper(errors.Errorf("ali async task failed: %s", aliTaskResponse.Message), "ali_async_task_failed", http.StatusInternalServerError), nil
+		// A 2xx answer that carries an error message is still the provider's
+		// failure. Without a task id no task exists, so no image can be billed:
+		// mark the receipt rejected so the image helper refunds and may fail over.
+		if aliTaskResponse.Output.TaskId == "" {
+			c.Set(adaptor.ImageReceiptRejectedKey, true)
+		}
+		return openai.UpstreamErrorWrapper(errors.Errorf("ali async task failed: %s", aliTaskResponse.Message), "ali_async_task_failed", http.StatusInternalServerError), nil
 	}
 
 	aliResponse, _, err := asyncTaskWait(aliTaskResponse.Output.TaskId, apiKey)
 	if err != nil {
+		// A non-2xx poll answer is the provider's failure and keeps its status;
+		// the accepted task's settlement is unchanged. Transport and read
+		// failures prove nothing about the provider and stay local.
+		var pollRefusal *aliTaskPollStatusError
+		if errors.As(err, &pollRefusal) {
+			return pollRefusal.failure, nil
+		}
 		return openai.ErrorWrapper(err, "ali_async_task_wait_failed", http.StatusInternalServerError), nil
 	}
 
 	if aliResponse.Output.TaskStatus != "SUCCEEDED" {
-		return &model.ErrorWithStatusCode{
-			Error: model.Error{
-				Message:  aliResponse.Output.Message,
-				Type:     model.ErrorTypeAli,
-				Param:    "",
-				Code:     aliResponse.Output.Code,
-				RawError: errors.New(aliResponse.Output.Message),
-			},
-			StatusCode: resp.StatusCode,
-		}, nil
+		// The task outcome is provider data. The accepted task keeps the
+		// existing settlement (charged) until DashScope's billing for failed
+		// tasks is verified; only the provenance is recorded here.
+		return model.NewUpstreamError(resp.StatusCode, aliResponse.Output.Message, model.ErrorTypeAli, aliResponse.Output.Code), nil
 	}
 
 	fullTextResponse := responseAli2OpenAIImage(aliResponse, responseFormat)
@@ -77,6 +104,21 @@ func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCo
 	return nil, nil
 }
 
+// asyncTask polls the DashScope task endpoint once for taskID.
+//
+// A non-2xx poll answer is returned as an *aliTaskPollStatusError carrying a
+// provider-marked error with the poll's status and only the parsed DashScope
+// message, code and request id; the raw body is never echoed. Transport, read,
+// close and decode failures are returned as plain wrapped errors.
+//
+// Parameters:
+//   - taskID: the DashScope task id from the creation answer.
+//   - key: the DashScope API key; it is sent only in the Authorization header.
+//
+// Returns:
+//   - *TaskResponse: the decoded task status, or an empty response on failure.
+//   - error: the failure, or nil.
+//   - []byte: the raw 2xx poll body, or nil on failure.
 func asyncTask(taskID string, key string) (*TaskResponse, error, []byte) {
 	url := fmt.Sprintf("https://dashscope.aliyuncs.com/api/v1/tasks/%s", taskID)
 
@@ -95,9 +137,19 @@ func asyncTask(taskID string, key string) (*TaskResponse, error, []byte) {
 		// no request context here
 		return &aliResponse, errors.WithStack(err), nil
 	}
-	defer resp.Body.Close()
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		// aliImageStatusError consumes and closes the body.
+		return &aliResponse, errors.WithStack(&aliTaskPollStatusError{failure: aliImageStatusError(resp)}), nil
+	}
 
-	responseBody, err := io.ReadAll(resp.Body)
+	responseBody, readErr := io.ReadAll(resp.Body)
+	closeErr := resp.Body.Close()
+	if readErr != nil {
+		return &aliResponse, errors.Wrap(readErr, "read DashScope task poll response"), nil
+	}
+	if closeErr != nil {
+		return &aliResponse, errors.Wrap(closeErr, "close DashScope task poll response"), nil
+	}
 
 	var response TaskResponse
 	err = json.Unmarshal(responseBody, &response)

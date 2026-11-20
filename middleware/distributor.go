@@ -405,6 +405,7 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 
 	c.Set(ctxkey.Channel, channel.Type)
 	c.Set(ctxkey.ChannelId, channel.Id)
+	c.Set(ctxkey.ChannelUpstreamRevision, channel.UpstreamRevision)
 	c.Set(ctxkey.ChannelUUID, channel.UUID)
 	c.Set(ctxkey.ChannelName, channel.Name)
 	// Rebind so every later log line of this request carries channel_id +

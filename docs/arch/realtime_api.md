@@ -70,6 +70,17 @@ Key principles:
   OpenAI accepts an unchanged model and silently ignores a changed one, so denying every
   frame that merely mentions a model only broke conformant clients.
 
+- Upstream query policy: the gateway builds the provider's handshake query from its own
+  decisions only. `/v1/realtime` forwards the mapped `model` and one normalized `intent`
+  (`transcription` when requested); every other caller query parameter is dropped, including
+  `call_id` (attaching to an existing WebRTC/SIP call that this gateway never authorized or
+  billed) and Azure-style `deployment` / `api-version` (the channel configuration decides
+  those). A client that relied on `call_id` sideband attach through one-api therefore gets a
+  fresh session. The Responses WebSocket proxy forwards only a `model` hint rewritten to the
+  mapped model. Every provider WebSocket URL (OpenAI realtime, Responses WebSocket, Gemini
+  Live) is validated before dialing: `ws`/`wss` only, no userinfo, no fragment; a malformed
+  channel URL fails with 502 instead of falling back to a default host.
+
 - Transcription sessions (`?intent=transcription`) are forwarded **without** a `model`
   query parameter. The caller still names a model for routing and billing, but the
   upstream rejects the handshake with `invalid_model` ("You must not provide a model

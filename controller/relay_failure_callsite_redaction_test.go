@@ -21,15 +21,18 @@ import (
 const relayRawBodySecret = "SYNTHETIC_PRIVATE_RESPONSE_BODY"
 const relayURLSecret = "SYNTHETIC_PRIVATE_QUERY_VALUE"
 
-// TestRelayFailureExplicitRawBodyRedaction takes t and verifies only complete-body parser fallbacks are redacted in logs while provider reasons and API response bytes remain intact.
+// TestRelayFailureExplicitRawBodyRedaction takes t and verifies that unparseable
+// and unrecognized provider bodies reach neither the API caller nor the logs:
+// both see the same generic message, while a structured provider reason is
+// passed through unchanged. A message explicitly flagged MessageContainsRawBody
+// is still redacted in logs.
 func TestRelayFailureExplicitRawBodyRedaction(t *testing.T) {
 	for _, scenario := range []struct {
 		name, body, message string
-		raw                 bool
 	}{
-		{"invalid_json", "<html>" + relayRawBodySecret + "</html>", "failed to unmarshal response body: invalid character '<' looking for beginning of value\n\n<html>" + relayRawBodySecret + "</html>", true},
-		{"unrecognized_json", `{"private_payload":"` + relayRawBodySecret + `"}`, `bad response [502] {"private_payload":"` + relayRawBodySecret + `"}`, true},
-		{"structured_reason", `{"error":{"message":"synthetic provider rejected max_tokens=0","type":"upstream_error","code":"synthetic_parameter"}}`, "synthetic provider rejected max_tokens=0", false},
+		{"invalid_json", "<html>" + relayRawBodySecret + "</html>", "upstream returned HTTP 502 with an unrecognized error body (44 bytes)"},
+		{"unrecognized_json", `{"private_payload":"` + relayRawBodySecret + `"}`, "upstream returned HTTP 502 with an unrecognized error body (53 bytes)"},
+		{"structured_reason", `{"error":{"message":"synthetic provider rejected max_tokens=0","type":"upstream_error","code":"synthetic_parameter"}}`, "synthetic provider rejected max_tokens=0"},
 	} {
 		for _, withContext := range []bool{false, true} {
 			name := scenario.name + "/plain"
@@ -45,7 +48,8 @@ func TestRelayFailureExplicitRawBodyRedaction(t *testing.T) {
 					response.Body = io.NopCloser(strings.NewReader(scenario.body))
 					parsed = relaycontroller.RelayErrorHandlerWithContext(c, response)
 				}
-				require.Equal(t, scenario.message, parsed.Message, "privacy policy must not alter the provider response returned to the API caller")
+				require.Equal(t, scenario.message, parsed.Message, "the API caller sees the parsed reason or a generic message, never the raw body")
+				require.False(t, parsed.MessageContainsRawBody)
 				before, err := json.Marshal(parsed)
 				require.NoError(t, err)
 				var public map[string]any
@@ -55,11 +59,7 @@ func TestRelayFailureExplicitRawBodyRedaction(t *testing.T) {
 				processChannelRelayError(fixture.ctx, fixture.params)
 				records := fixture.logs.FilterMessage("relay error").All()
 				require.Len(t, records, 1)
-				if scenario.raw {
-					require.Equal(t, "[REDACTED]", records[0].ContextMap()["upstream_error"])
-				} else {
-					require.Equal(t, scenario.message, records[0].ContextMap()["upstream_error"])
-				}
+				require.Equal(t, scenario.message, records[0].ContextMap()["upstream_error"])
 				for _, record := range fixture.logs.All() {
 					buffer, err := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()).EncodeEntry(record.Entry, record.Context)
 					require.NoError(t, err)
@@ -70,12 +70,26 @@ func TestRelayFailureExplicitRawBodyRedaction(t *testing.T) {
 				after, err := json.Marshal(parsed)
 				require.NoError(t, err)
 				require.Equal(t, before, after, "logging must not mutate API errors")
-				if scenario.raw {
-					require.Contains(t, string(after), relayRawBodySecret, "client API behavior remains unchanged")
-				}
+				require.NotContains(t, string(after), relayRawBodySecret, "the API caller must not receive the raw provider body")
 			})
 		}
 	}
+	t.Run("explicit_raw_body_flag", func(t *testing.T) {
+		fixture := newSuspension5XXFixture(t, nil)
+		fixture.params.Err.Message = "synthetic fallback " + relayRawBodySecret
+		fixture.params.Err.MessageContainsRawBody = true
+		processChannelRelayError(fixture.ctx, fixture.params)
+		records := fixture.logs.FilterMessage("relay error").All()
+		require.Len(t, records, 1)
+		require.Equal(t, "[REDACTED]", records[0].ContextMap()["upstream_error"])
+		for _, record := range fixture.logs.All() {
+			buffer, err := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()).EncodeEntry(record.Entry, record.Context)
+			require.NoError(t, err)
+			rendered := buffer.String()
+			buffer.Free()
+			require.NotContains(t, rendered, relayRawBodySecret)
+		}
+	})
 }
 
 // TestRelayFailureExplicitURLSanitization takes t and verifies request URL diagnostics retain endpoint context with visible markers for removed credential-bearing components.
@@ -135,10 +149,12 @@ func TestRelayFailureNumericJSONErrorRedaction(t *testing.T) {
 					response.Body = io.NopCloser(strings.NewReader(body))
 					parsed = relaycontroller.RelayErrorHandlerWithContext(c, response)
 				}
-				// No readable message: the client keeps the raw-body fallback, and the
-				// unrepresentable optional code no longer turns into a decoder error.
-				require.Contains(t, parsed.Message, literal)
-				require.True(t, parsed.MessageContainsRawBody)
+				// No readable message: the client receives the generic message, never
+				// the raw body, and the unrepresentable optional code no longer turns
+				// into a decoder error.
+				require.Contains(t, parsed.Message, "unrecognized error body")
+				require.NotContains(t, parsed.Message, literal)
+				require.False(t, parsed.MessageContainsRawBody)
 				require.NotContains(t, parsed.RawError.Error(), literal)
 				var overflow struct {
 					Code float64 `json:"code"`
@@ -152,7 +168,7 @@ func TestRelayFailureNumericJSONErrorRedaction(t *testing.T) {
 				processChannelRelayError(fixture.ctx, fixture.params)
 				records := fixture.logs.FilterMessage("relay error").All()
 				require.Len(t, records, 1)
-				require.Equal(t, "[REDACTED]", records[0].ContextMap()["upstream_error"])
+				require.Equal(t, parsed.Message, records[0].ContextMap()["upstream_error"])
 				for _, record := range fixture.logs.All() {
 					buffer, err := zapcore.NewJSONEncoder(zap.NewProductionEncoderConfig()).EncodeEntry(record.Entry, record.Context)
 					require.NoError(t, err)

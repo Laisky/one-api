@@ -30,11 +30,7 @@ func ChatHandler(c *gin.Context, resp *http.Response) (
 	)
 
 	if resp.StatusCode != http.StatusCreated {
-		payload, _ := io.ReadAll(resp.Body)
-		return openai.ErrorWrapper(
-				errors.Errorf("bad_status_code [%d]%s", resp.StatusCode, string(payload)),
-				"bad_status_code", http.StatusInternalServerError),
-			nil
+		return replicateStatusError(resp), nil
 	}
 
 	respBody, err := io.ReadAll(resp.Body)
@@ -64,9 +60,7 @@ func ChatHandler(c *gin.Context, resp *http.Response) (
 			defer taskResp.Body.Close()
 
 			if taskResp.StatusCode != http.StatusOK {
-				payload, _ := io.ReadAll(taskResp.Body)
-				return errors.Errorf("bad status code [%d]%s",
-					taskResp.StatusCode, string(payload))
+				return replicateStatusFailure(taskResp, "get task")
 			}
 
 			taskBody, err := io.ReadAll(taskResp.Body)
@@ -146,7 +140,7 @@ func ChatHandler(c *gin.Context, resp *http.Response) (
 				continue
 			}
 
-			return openai.ErrorWrapper(err, "chat_task_failed", http.StatusInternalServerError), nil
+			return replicateTaskError(err, "chat_task_failed"), nil
 		}
 
 		break
@@ -179,8 +173,7 @@ func chatStreamHandler(c *gin.Context, streamUrl string) (responseText string, e
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		payload, _ := io.ReadAll(resp.Body)
-		return "", errors.Errorf("bad status code [%d]%s", resp.StatusCode, string(payload))
+		return "", replicateStatusFailure(resp, "request stream")
 	}
 
 	lineReader := commonsse.NewLineReader(resp.Body, commonsse.DefaultLineBufferSize)

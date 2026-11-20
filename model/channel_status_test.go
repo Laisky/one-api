@@ -30,7 +30,10 @@ func TestSetChannelStatusPreservesConfiguration(t *testing.T) {
 			var original []Ability
 			require.NoError(t, db.Where("channel_id = ?", channel.Id).Order("model").Find(&original).Error)
 			require.NotEmpty(t, original)
+			enabled := initial == ChannelStatusEnabled
 			for _, status := range []int{ChannelStatusEnabled, ChannelStatusEnabled, ChannelStatusManuallyDisabled, ChannelStatusManuallyDisabled} {
+				reenabled := status == ChannelStatusEnabled && !enabled
+				enabled = status == ChannelStatusEnabled
 				require.NoError(t, SetChannelStatusWithContext(context.Background(), channel.Id, status))
 				var after Channel
 				require.NoError(t, db.First(&after, channel.Id).Error)
@@ -44,8 +47,16 @@ func TestSetChannelStatusPreservesConfiguration(t *testing.T) {
 					require.Equal(t, status == ChannelStatusEnabled, abilities[i].Enabled)
 					abilities[i].Enabled = original[i].Enabled
 					abilities[i].UpdatedAt = original[i].UpdatedAt
+					if reenabled {
+						// Only a disabled-to-enabled transition restarts the adaptive
+						// cooldown: it advances the fence and the revision once.
+						require.Greater(t, abilities[i].CooldownConfigChangedAt, original[i].CooldownConfigChangedAt)
+						require.Equal(t, original[i].CooldownRevision+1, abilities[i].CooldownRevision)
+						original[i].CooldownConfigChangedAt = abilities[i].CooldownConfigChangedAt
+						original[i].CooldownRevision = abilities[i].CooldownRevision
+					}
 				}
-				require.Equal(t, original, abilities)
+				require.Equal(t, original, abilities, "a status change must not touch configuration or, except on re-enable, cooldown state")
 				var untouched Channel
 				require.NoError(t, db.First(&untouched, other.Id).Error)
 				require.Equal(t, ChannelStatusEnabled, untouched.Status)

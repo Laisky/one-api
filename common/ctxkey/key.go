@@ -53,6 +53,9 @@ const (
 	// Set in: middleware/distributor (or from explicit selection).
 	// Read widely for billing, logging, and meta.
 	ChannelId = "channel_id"
+	// ChannelUpstreamRevision is the routed channel snapshot's UpstreamRevision
+	// (int64). Cooldown outcomes are recorded only against that revision.
+	ChannelUpstreamRevision = "channel_upstream_revision"
 
 	// ChannelUUID is the external UUID of the selected channel.
 	// Set in: middleware/distributor after the channel row is selected.

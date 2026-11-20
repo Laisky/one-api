@@ -39,6 +39,23 @@ func realtimeUpstreamURL(modelName string) string {
 // API key. Returns: a business error on handshake/connect failures and the
 // parsed usage after the session closes.
 func RealtimeHandler(c *gin.Context, meta *meta.Meta) (*model.ErrorWithStatusCode, *model.Usage) {
+	return realtimeHandlerAt(c, meta, realtimeUpstreamURL(meta.ActualModelName))
+}
+
+// realtimeHandlerAt runs the GLM-Realtime proxy against endpoint. RealtimeHandler
+// always passes the fixed GLM-Realtime URL; tests pass a loopback provider so the
+// handshake contract is exercised without contacting Zhipu.
+//
+// Parameters:
+//   - c: the gin context of the authenticated realtime request.
+//   - meta: the channel identity and API key.
+//   - endpoint: the upstream WebSocket URL, including the model query.
+//
+// Returns:
+//   - *model.ErrorWithStatusCode: a business error when the session could not
+//     start (invalid mode, downstream upgrade or upstream handshake failure).
+//   - *model.Usage: the parsed usage after a started session closes.
+func realtimeHandlerAt(c *gin.Context, meta *meta.Meta, endpoint string) (*model.ErrorWithStatusCode, *model.Usage) {
 	lg := gmw.GetLogger(c)
 	if meta.Mode != relaymode.Realtime {
 		return &model.ErrorWithStatusCode{
@@ -72,13 +89,28 @@ func RealtimeHandler(c *gin.Context, meta *meta.Meta) (*model.ErrorWithStatusCod
 	requestHeader.Set("Authorization", "Bearer "+meta.APIKey)
 
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second, Proxy: http.ProxyFromEnvironment}
-	upstreamConn, _, derr := dialer.Dial(realtimeUpstreamURL(meta.ActualModelName), requestHeader)
+	upstreamConn, handshake, derr := dialer.Dial(endpoint, requestHeader)
 	if derr != nil {
-		_ = clientConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream connect failed"))
-		lg.Error("zhipu realtime upstream connect failed", zap.Error(derr))
+		if werr := clientConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream connect failed")); werr != nil {
+			lg.Debug("write zhipu realtime upstream-connect close frame failed", zap.Error(werr))
+		}
+		// The client is already upgraded, so it only sees the close frame above;
+		// the returned error serves relay accounting, which logs it with the
+		// channel context, so it is returned rather than also logged here. A
+		// provider that refused the handshake with 400..599 (for example 401,
+		// 429 or 503) is attributed to the channel with its own status; a dial or
+		// transport failure without a provider status stays one-api's own 502.
+		// The message never includes the provider's handshake body: gorilla
+		// reports every refused upgrade as "websocket: bad handshake".
+		status, fromUpstream := openai.WebSocketHandshakeFailureStatus(lg, handshake)
+		errorType := model.ErrorTypeOneAPI
+		if fromUpstream {
+			errorType = model.ErrorTypeUpstream
+		}
 		return &model.ErrorWithStatusCode{
-			Error:      model.Error{Message: "upstream realtime connect failed: " + derr.Error(), Type: model.ErrorTypeUpstream, Code: "upstream_connect_failed", RawError: derr},
-			StatusCode: http.StatusBadGateway,
+			Error: model.Error{Message: "upstream realtime connect failed: " + derr.Error(), Type: errorType,
+				Code: "upstream_connect_failed", RawError: errors.Wrap(derr, "dial zhipu realtime websocket"), FromUpstream: fromUpstream},
+			StatusCode: status,
 		}, nil
 	}
 	defer func() { _ = upstreamConn.Close() }()

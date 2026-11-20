@@ -6,7 +6,16 @@ import (
 	"github.com/Laisky/one-api/common/config"
 )
 
-// EmailTemplate 生成美观的 HTML 邮件内容
+// EmailTemplate renders the shared HTML email layout.
+//
+// Parameters:
+//   - title: plain text shown as the heading; it is HTML-escaped here.
+//   - content: the body as trusted HTML markup. Callers own this markup and must
+//     HTML-escape (EscapeHTML) every untrusted value they interpolate
+//     into it, such as provider error text, user input, or channel names.
+//
+// Returns: the complete HTML document. The operator's SystemName in the footer
+// is HTML-escaped as text.
 func EmailTemplate(title, content string) string {
 	return fmt.Sprintf(`
 <!DOCTYPE html>
@@ -30,5 +39,5 @@ func EmailTemplate(title, content string) string {
     </div>
 </body>
 </html>
-`, title, content, config.SystemName)
+`, EscapeHTML(title), content, EscapeHTML(config.SystemName))
 }

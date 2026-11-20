@@ -1,0 +1,38 @@
+id: upstream-status-error-needs-provenance
+language: go
+severity: error
+message: >-
+  This ErrorWrapper call reports the provider's HTTP status (<resp>.StatusCode)
+  but ErrorWrapper marks the error as one-api's own. The relay then treats a
+  provider 5xx as a one-api internal error (no ability cooldown) and a provider
+  429 as a non-provider failure (legacy fixed cooldown instead of the adaptive
+  ladder), and 401/403 one_api_error codes can be mistaken for caller faults.
+note: >-
+  Use UpstreamErrorWrapper (relay/adaptor/openai or
+  relay/adaptor/openai_compatible) for a failure the provider reported with its
+  own HTTP status. It keeps the same client-visible JSON and only sets the
+  server-side FromUpstream provenance. Keep ErrorWrapper for failures one-api
+  produced itself, including transport failures that carry no provider status.
+# Scope: every package that builds relay errors.
+#
+# The receiver must be named like an *http.Response (constraints below), so a
+# local struct's StatusCode field (for example a websocket admission funding
+# error) is not mistaken for a provider status.
+#
+# KNOWN LIMITATIONS (ast-grep is syntactic): a provider status copied into a
+# variable first (`status := resp.StatusCode` ... `ErrorWrapper(err, code,
+# status)`) is not matched; such sites (Gemini speech, Gemini Live) are kept on
+# UpstreamErrorWrapper by review and covered by behavioral tests.
+files:
+  - "relay/**/*.go"
+  - "controller/**/*.go"
+  - "middleware/**/*.go"
+ignores:
+  - "**/*_test.go"
+rule:
+  any:
+    - pattern: ErrorWrapper($ERR, $CODE, $RESP.StatusCode)
+    - pattern: $PKG.ErrorWrapper($ERR, $CODE, $RESP.StatusCode)
+constraints:
+  RESP:
+    regex: "^(resp|response|res|httpResp|httpResponse|upstreamResp|upstreamResponse|providerResp|providerResponse)$"

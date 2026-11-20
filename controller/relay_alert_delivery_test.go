@@ -93,7 +93,7 @@ func TestRelayAlertSenderToDelivery(t *testing.T) {
 		{"write_failed", "write_failed", "failed", 37 * time.Second},
 		{"missing_ability", "missing", "failed", 37 * time.Second},
 		{"synthesized_500_after_http_200", "body_reset", "not_attempted", 37 * time.Second},
-		{"raw_body_explicitly_redacted", "raw_body", "persisted", 37 * time.Second},
+		{"raw_body_reported_generically", "raw_body", "persisted", 37 * time.Second},
 		{"ordinary_reason_preserved", "reason", "persisted", 37 * time.Second},
 		{"zero_configured_duration", "provider", "persisted", 0},
 		{"negative_configured_duration", "provider", "persisted", -time.Second},
@@ -121,7 +121,7 @@ func TestRelayAlertSenderToDelivery(t *testing.T) {
 				response := &http.Response{StatusCode: http.StatusBadGateway, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}
 				fixture.params.Err = *relaycontroller.RelayErrorHandler(response)
 				if scenario.mode == "raw_body" {
-					require.Contains(t, fixture.params.Err.Message, relayDeliveryPrivate, "the client-facing provider response remains unchanged")
+					require.NotContains(t, fixture.params.Err.Message, relayDeliveryPrivate, "the client-facing message must not echo the raw provider body")
 				}
 			}
 			lg, deliveries := relayDeliveryLogger(t)
@@ -170,8 +170,8 @@ func TestRelayAlertSenderToDelivery(t *testing.T) {
 				require.NotContains(t, got, "suspension_duration_ms")
 			}
 			if scenario.mode == "raw_body" {
-				require.Equal(t, "[REDACTED]", got["upstream_error"])
-				require.Contains(t, fixture.params.Err.Message, relayDeliveryPrivate)
+				require.Equal(t, fixture.params.Err.Message, got["upstream_error"], "the generic message carries no body bytes and needs no redaction")
+				require.Contains(t, fixture.params.Err.Message, "unrecognized error body")
 			}
 			if scenario.mode == "reason" {
 				require.Equal(t, "synthetic provider rejected max_tokens=0", got["upstream_error"])

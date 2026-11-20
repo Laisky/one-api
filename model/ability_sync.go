@@ -2,8 +2,11 @@ package model
 
 import (
 	"crypto/subtle"
+	"encoding/json"
+	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Laisky/errors/v2"
 	"github.com/Laisky/zap"
@@ -132,9 +135,13 @@ func syncAbilitiesWithDB(db *gorm.DB, channel *Channel, liftSuspensions bool) er
 		}
 	}
 	lifted := int64(0)
+	newEpoch := time.Now().UTC().UnixNano()
 	if liftSuspensions {
-		result := db.Model(&Ability{}).Where("channel_id = ? AND suspend_until IS NOT NULL", channel.Id).
-			Update("suspend_until", nil)
+		// Any existing ability can have an attempt still in flight against the
+		// old upstream. Fence those attempts even if there is no current deadline.
+		lift := abilityCooldownRestartColumns(newEpoch)
+		lift["suspend_until"] = nil
+		result := db.Model(&Ability{}).Where("channel_id = ?", channel.Id).Updates(lift)
 		if result.Error != nil {
 			return identity.Tag(errors.Wrapf(result.Error, "lift suspensions of channel %d", channel.Id), channel.Ref())
 		}
@@ -143,6 +150,7 @@ func syncAbilitiesWithDB(db *gorm.DB, channel *Channel, liftSuspensions bool) er
 	missing := make([]Ability, 0, len(desired))
 	for _, ability := range desired {
 		if _, ok := present[abilityKey{group: ability.Group, model: ability.Model}]; !ok {
+			ability.CooldownConfigChangedAt = newEpoch
 			missing = append(missing, ability)
 		}
 	}
@@ -158,9 +166,33 @@ func syncAbilitiesWithDB(db *gorm.DB, channel *Channel, liftSuspensions bool) er
 				zap.Int("added", len(missing)),
 				zap.Int("removed", removed),
 				zap.Bool("routing_flags_updated", flagsDrifted),
-				zap.Int64("suspensions_lifted", lifted))...)
+				zap.Int64("cooldowns_restarted", lifted))...)
 	}
 	return nil
+}
+
+// abilityCooldownRestartColumns returns the ability column updates that start a
+// new adaptive cooldown streak: the failure history, streak, latest failure,
+// recovery watermark and adaptive deadline are cleared, the revision advances,
+// and the configuration fence moves forward to epoch (never backward) so an
+// outcome of an attempt dispatched before the restart is discarded. The fixed
+// legacy suspend_until is not included; callers decide whether to lift it.
+//
+// Parameters:
+//   - epoch: the restart time in UTC Unix nanoseconds.
+//
+// Returns:
+//   - map[string]any: a fresh column map the caller may extend.
+func abilityCooldownRestartColumns(epoch int64) map[string]any {
+	return map[string]any{
+		"adaptive_suspend_until":     nil,
+		"cooldown_config_changed_at": gorm.Expr("CASE WHEN cooldown_config_changed_at < ? THEN ? ELSE cooldown_config_changed_at END", epoch, epoch),
+		"cooldown_recovery":          0,
+		"cooldown_history":           "",
+		"cooldown_failures":          0,
+		"cooldown_last_failure":      0,
+		"cooldown_revision":          gorm.Expr("cooldown_revision + 1"),
+	}
 }
 
 // sameAbilityUpstream reports whether two snapshots of one channel call the same upstream
@@ -176,9 +208,60 @@ func syncAbilitiesWithDB(db *gorm.DB, channel *Channel, liftSuspensions bool) er
 func sameAbilityUpstream(before, after *Channel) bool {
 	return before.Type == after.Type &&
 		subtle.ConstantTimeCompare([]byte(before.Key), []byte(after.Key)) == 1 &&
-		before.Config == after.Config &&
+		sameUpstreamConfig(before.Config, after.Config) &&
 		sameOptionalString(before.BaseURL, after.BaseURL) &&
 		sameOptionalString(before.Other, after.Other) &&
 		sameOptionalString(before.ModelMapping, after.ModelMapping) &&
 		sameOptionalString(before.InferenceProfileArnMap, after.InferenceProfileArnMap)
+}
+
+// gatewayOnlyChannelConfigKeys are ChannelConfig JSON keys that configure one-api
+// itself (tool policy, endpoint advertisement), not which upstream account or
+// endpoint is called. Every other key, including ones added later, counts as
+// upstream identity, so an unknown change errs toward restarting the cooldown.
+var gatewayOnlyChannelConfigKeys = []string{"tooling", "mcp_tool_blacklist", "supported_endpoints"}
+
+// sameUpstreamConfig reports whether two channel config JSON documents describe
+// the same upstream: they are equal after dropping gatewayOnlyChannelConfigKeys
+// and ignoring key order and whitespace. A document that is not a JSON object is
+// compared verbatim.
+//
+// Parameters:
+//   - before, after: the stored channel config strings.
+//
+// Returns:
+//   - bool: true when no upstream-identifying config field changed.
+func sameUpstreamConfig(before, after string) bool {
+	if before == after {
+		return true
+	}
+	beforeFields, beforeOK := upstreamConfigFields(before)
+	afterFields, afterOK := upstreamConfigFields(after)
+	if !beforeOK || !afterOK {
+		return false
+	}
+	return reflect.DeepEqual(beforeFields, afterFields)
+}
+
+// upstreamConfigFields decodes a channel config into its upstream-identifying
+// fields. An empty config is an empty object.
+//
+// Parameters:
+//   - config: the stored channel config string.
+//
+// Returns:
+//   - map[string]any: the decoded fields without gateway-only keys.
+//   - bool: false when config is not a JSON object.
+func upstreamConfigFields(config string) (map[string]any, bool) {
+	fields := map[string]any{}
+	if strings.TrimSpace(config) == "" {
+		return fields, true
+	}
+	if err := json.Unmarshal([]byte(config), &fields); err != nil || fields == nil {
+		return nil, false
+	}
+	for _, key := range gatewayOnlyChannelConfigKeys {
+		delete(fields, key)
+	}
+	return fields, true
 }

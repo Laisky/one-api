@@ -277,16 +277,10 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 		return openai.ErrorWrapper(errors.WithStack(err), "unmarshal_response_body_failed", http.StatusInternalServerError), nil
 	}
 	if cohereResponse.ResponseID == "" {
-		return &model.ErrorWithStatusCode{
-			Error: model.Error{
-				Message:  cohereResponse.Message,
-				Type:     model.ErrorType(cohereResponse.Message),
-				Param:    "",
-				Code:     resp.StatusCode,
-				RawError: errors.New(cohereResponse.Message),
-			},
-			StatusCode: resp.StatusCode,
-		}, nil
+		// Cohere's answer carries no response: its message describes the
+		// provider's failure, so the error is provider-marked.
+		return model.NewUpstreamError(resp.StatusCode, cohereResponse.Message,
+			model.ErrorType(cohereResponse.Message), resp.StatusCode), nil
 	}
 	fullTextResponse := ResponseCohere2OpenAI(c, &cohereResponse)
 	fullTextResponse.Model = modelName

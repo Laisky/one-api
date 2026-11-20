@@ -11,6 +11,7 @@ import (
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
 
+	applog "github.com/Laisky/one-api/common/logger"
 	"github.com/Laisky/one-api/relay/model"
 )
 
@@ -100,10 +101,12 @@ func attributeDeliveryFailure(c *gin.Context, tracker *deliveryTracker, failure 
 	if isClientContextCancel(failure.StatusCode, failure.RawError) || !errors.Is(failure.RawError, tracker.err) {
 		return failure
 	}
+	// The adaptor error code may be provider-controlled; log it only when it is
+	// vocabulary-shaped.
+	fields := []zap.Field{zap.String("delivery_code", code)}
+	fields = append(fields, applog.UntrustedIdentifierFields("adaptor_error_code", errorCodeString(failure))...)
 	gmw.GetLogger(c).Debug("relay failure caused by a downstream write re-attributed to delivery",
-		zap.String("delivery_code", code),
-		zap.String("adaptor_error_code", strings.TrimSpace(errorCodeString(failure))),
-		zap.Int("adaptor_status_code", failure.StatusCode))
+		append(fields, zap.Int("adaptor_status_code", failure.StatusCode))...)
 	return model.NewDeliveryError(failure.RawError, code)
 }
 

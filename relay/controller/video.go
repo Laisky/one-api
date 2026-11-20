@@ -50,9 +50,11 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	lg := gmw.GetLogger(c)
 	meta := metalib.GetByContext(c)
 
-	videoRequest := &relaymodel.VideoRequest{}
-	if err := common.UnmarshalBodyReusable(c, videoRequest); err != nil {
-		return openai.ErrorWrapper(errors.Wrap(err, "parse video request"), "invalid_video_request", http.StatusBadRequest)
+	// Duration aliases accept the documented string form and the legacy number;
+	// invalid or conflicting durations are refused here, before any reservation.
+	videoRequest, decodeErr := decodeVideoRequest(c)
+	if decodeErr != nil {
+		return decodeErr
 	}
 
 	originalRequestedModel := strings.TrimSpace(videoRequest.Model)

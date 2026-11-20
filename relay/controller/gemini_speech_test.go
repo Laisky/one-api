@@ -45,6 +45,8 @@ func TestGeminiSpeechHTTP(t *testing.T) {
 		{name: "stream", status: 200, body: good, charge: 12, channel: channeltype.Gemini, balance: 10000, stream: true},
 		{name: "partial_stream", status: 200, body: strings.Replace(good, `"STOP"`, `""`, 1), charge: 12, channel: channeltype.Gemini, balance: 10000, stream: true},
 		{name: "refused", status: 400, body: `{"error":{"message":"private-input"}}`, channel: channeltype.Gemini, balance: 10000},
+		{name: "rate_limited", status: http.StatusTooManyRequests, body: `{"error":{"message":"private-input"}}`, channel: channeltype.Gemini, balance: 10000},
+		{name: "provider_unavailable", status: http.StatusServiceUnavailable, body: `{"error":{"message":"private-input"}}`, channel: channeltype.Gemini, balance: 10000},
 		{name: "malformed", status: 200, body: `{"candidates":[]}`, channel: channeltype.Gemini, balance: 10000},
 		{name: "low_balance", status: 200, body: good, channel: channeltype.Gemini, balance: 1},
 		{name: "override", status: 200, body: good, charge: 40, channel: channeltype.Gemini, balance: 50000, local: &model.ModelConfigLocal{Ratio: 2, CompletionRatio: 8, CachedInputRatio: -1, Audio: &model.AudioPricingLocal{PromptRatio: 1, CompletionRatio: 6}}},
@@ -92,6 +94,7 @@ func TestGeminiSpeechHTTP(t *testing.T) {
 			}
 			if tc.balance == 1 {
 				require.NotNil(t, apiErr)
+				require.False(t, apiErr.FromUpstream)
 				require.Zero(t, calls.Load())
 				return
 			}
@@ -120,6 +123,11 @@ func TestGeminiSpeechHTTP(t *testing.T) {
 			if tc.status != 200 || tc.writeFail || tc.name == "malformed" || tc.name == "partial_stream" {
 				require.NotNil(t, apiErr)
 				require.NotContains(t, apiErr.Message, "private-input")
+				require.Equal(t, tc.status != http.StatusOK, apiErr.FromUpstream)
+				if tc.status != http.StatusOK {
+					require.Equal(t, tc.status, apiErr.StatusCode)
+					require.Equal(t, "gemini_speech_upstream_error", apiErr.Code)
+				}
 			} else {
 				require.Nil(t, apiErr)
 				if tc.stream {

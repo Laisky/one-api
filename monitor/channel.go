@@ -32,6 +32,28 @@ func resolveChannelRef(channelId int, channelName string) identity.ChannelRef {
 	return ref
 }
 
+// announcedChannelRef returns the channel identity rendered into root
+// notifications. It is read from the channel store by primary key only, never
+// from request-scoped identity or a caller-supplied name, so an announcement
+// names the channel exactly as persisted even when the request context
+// described a different (retried or renamed) channel.
+//
+// Parameters:
+//   - channelId: channel primary key.
+//
+// Return values:
+//   - identity.ChannelRef: the stored id, uuid and name, or the id alone when
+//     the row cannot be read (the lookup failure is logged at DEBUG).
+func announcedChannelRef(channelId int) identity.ChannelRef {
+	channel, err := model.GetChannelById(channelId, false)
+	if err != nil {
+		logger.Logger.Debug("channel announcement falls back to the channel id",
+			zap.Int("channel_id", channelId), zap.Error(err))
+		return identity.NewChannelRef(channelId, "", "")
+	}
+	return channel.Ref()
+}
+
 func notifyRootUser(subject string, content string) {
 	if config.MessagePusherAddress != "" {
 		err := message.SendMessage(subject, content, content)
@@ -102,7 +124,8 @@ func DisableChannel(channelId int, channelName string, reason string) {
 // Parameters:
 //   - channelId: the disabled channel.
 //   - channelName: its name, used when the channel snapshot cannot resolve it.
-//   - reason: why the channel was disabled.
+//   - reason: why the channel was disabled. It may quote provider error text,
+//     so it is HTML-escaped (like the channel label) before it enters the body.
 //
 // Return values: none; delivery failures are logged.
 func NotifyChannelDisabled(channelId int, channelName string, reason string) {
@@ -117,7 +140,7 @@ func NotifyChannelDisabled(channelId int, channelName string, reason string) {
             <p><strong>%s</strong> has been disabled.</p>
             <p>Reason for disabling:</p>
             <p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px;">%s</p>
-        `, ref.String(), reason),
+        `, message.EscapeHTML(announcedChannelRef(channelId).String()), message.EscapeHTML(reason)),
 	)
 	notifyRootUser(subject, content)
 }
@@ -145,7 +168,7 @@ func MetricDisableChannel(channelId int, successRate float64) {
             <p><strong>%s</strong> has been automatically disabled by the system.</p>
             <p>Reason for disabling:</p>
             <p style="background-color: #f8f8f8; padding: 10px; border-radius: 4px;">In the last %d calls, the success rate of this channel was <strong>%.2f%%</strong>, which is below the system threshold of <strong>%.2f%%</strong>.</p>
-        `, ref.String(), config.MetricQueueSize, successRate*100, config.MetricSuccessRateThreshold*100),
+        `, message.EscapeHTML(announcedChannelRef(channelId).String()), config.MetricQueueSize, successRate*100, config.MetricSuccessRateThreshold*100),
 	)
 	notifyRootUser(subject, content)
 }
@@ -184,7 +207,7 @@ func NotifyChannelEnabled(channelId int, channelName string) {
             <p>Hello!</p>
             <p><strong>%s</strong> has been re-enabled.</p>
             <p>You can now continue using this channel.</p>
-        `, ref.String()),
+        `, message.EscapeHTML(announcedChannelRef(channelId).String())),
 	)
 	notifyRootUser(subject, content)
 }

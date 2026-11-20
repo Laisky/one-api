@@ -35,6 +35,12 @@ func VideoHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCo
 		}
 	}
 	if len(body) > limit {
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			// The provider answered with an error status; only its body is too
+			// large. Keep the provider status and provenance (so 429/5xx reach
+			// the ability cooldown) without parsing or echoing the oversized body.
+			return openai.UpstreamErrorWrapper(errors.Errorf("BigModel video upstream returned HTTP %d", resp.StatusCode), "upstream_video_error", resp.StatusCode), nil
+		}
 		return openai.ErrorWrapper(errors.New("video response exceeds limit"), "invalid_video_response", http.StatusBadGateway), nil
 	}
 	// Preserve the provider's actionable code/message for both HTTP failures
@@ -55,10 +61,12 @@ func VideoHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCo
 		if codeErr := json.Unmarshal(providerError.Error.Code, &codeText); codeErr == nil {
 			code = codeText
 		}
-		return &model.ErrorWithStatusCode{Error: model.Error{Message: providerError.Error.Message, Type: model.ErrorTypeZhipu, Code: code}, StatusCode: status}, nil
+		// The code and message come from BigModel, so the failure is the
+		// provider's: FromUpstream lets relay policy attribute it to the channel.
+		return &model.ErrorWithStatusCode{Error: model.Error{Message: providerError.Error.Message, Type: model.ErrorTypeZhipu, Code: code, FromUpstream: true}, StatusCode: status}, nil
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return openai.ErrorWrapper(errors.Errorf("BigModel video upstream returned HTTP %d", resp.StatusCode), "upstream_video_error", resp.StatusCode), nil
+		return openai.UpstreamErrorWrapper(errors.Errorf("BigModel video upstream returned HTTP %d", resp.StatusCode), "upstream_video_error", resp.StatusCode), nil
 	}
 	var payload struct {
 		ID         string          `json:"id"`

@@ -251,9 +251,11 @@ func handleClaudeHTTPJSON(c *gin.Context, resp *http.Response, modelName string,
 		// Clean read, JSON decoding, receipt validation, and Close all succeeded.
 		// Only this narrow proof can release a forwarded request's reservation.
 		admissionRejected = true
+		// Provider-marked like the error envelope below; the literal is kept
+		// because RawError must carry the private admission proof.
 		return &model.ErrorWithStatusCode{StatusCode: status, Error: model.Error{
 			Type: model.ErrorType(envelope.Error.Type), Code: envelope.Error.Type, Message: envelope.Error.Message,
-			RawError: errors.WithStack(&admissionRejectionError{}),
+			FromUpstream: true, RawError: errors.WithStack(&admissionRejectionError{}),
 		}}, nil
 	}
 	if envelope.Error.Type != "" {

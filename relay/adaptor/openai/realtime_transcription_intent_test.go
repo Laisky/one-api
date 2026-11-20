@@ -34,10 +34,12 @@ func TestRealtimeTranscriptionIntentDropsModelParameter(t *testing.T) {
 			wantQuery:   url.Values{"intent": {"transcription"}},
 		},
 		{
-			name:        "transcription_intent_is_case_insensitive",
+			// The provider receives the canonical value the gateway metered
+			// the session as, so it cannot open a different session type.
+			name:        "transcription_intent_is_case_insensitive_and_canonicalized",
 			clientQuery: "model=gpt-4o-transcribe&intent=Transcription",
 			model:       "gpt-4o-transcribe",
-			wantQuery:   url.Values{"intent": {"Transcription"}},
+			wantQuery:   url.Values{"intent": {"transcription"}},
 		},
 		{
 			name:        "conversation_keeps_mapped_model",
@@ -52,15 +54,18 @@ func TestRealtimeTranscriptionIntentDropsModelParameter(t *testing.T) {
 			wantQuery:   url.Values{"model": {"gpt-realtime"}, "intent": {"conversation"}},
 		},
 		{
-			name:        "unrelated_query_preserved",
+			// Undocumented caller parameters are not relayed to the provider;
+			// see realtimeWebSocketUpstreamURL for the documented allowlist.
+			name:        "undocumented_query_dropped",
 			clientQuery: "model=my-voice&trace=abc",
 			model:       "gpt-realtime",
-			wantQuery:   url.Values{"model": {"gpt-realtime"}, "trace": {"abc"}},
+			wantQuery:   url.Values{"model": {"gpt-realtime"}},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			raw := realtimeWebSocketUpstreamURL(&rmeta.Meta{ActualModelName: tc.model}, tc.clientQuery)
+			raw, _, err := realtimeWebSocketUpstreamURL(&rmeta.Meta{ActualModelName: tc.model}, tc.clientQuery)
+			require.NoError(t, err)
 			parsed, err := url.Parse(raw)
 			require.NoError(t, err)
 			require.Equal(t, "wss", parsed.Scheme)

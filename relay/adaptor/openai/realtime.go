@@ -42,10 +42,36 @@ func realtimeSessionsUpstreamURL(m *rmeta.Meta) string {
 // realtimeWebSocketUpstreamURL returns the upstream WebSocket URL for the realtime
 // connect surface (/v1/realtime). A per-endpoint "realtime" URL override fully
 // specifies the upstream host and path (its scheme is normalized to ws/wss); when
-// absent, the channel BaseURL is used with the canonical /v1/realtime path. The
-// mapped model name is applied as the `model` query parameter while preserving
-// other client query parameters.
-func realtimeWebSocketUpstreamURL(m *rmeta.Meta, clientRawQuery string) string {
+// absent, the channel BaseURL is used with the canonical /v1/realtime path.
+//
+// The caller's query is never relayed. OpenAI documents three handshake query
+// parameters for GET /v1/realtime: `model`, `intent` (realtime|transcription)
+// and `call_id` (https://developers.openai.com/api/reference/resources/realtime/methods/connect).
+// The provider query is rebuilt from gateway decisions only:
+//   - `model` is the mapped model the session is routed and billed as, and is
+//     omitted for transcription sessions, which the provider rejects with a model;
+//   - `intent` is the single value the gateway metered the session as
+//     (canonical "transcription", or the caller's first value trimmed);
+//   - `call_id` is dropped: it attaches the channel credential to an existing
+//     WebRTC/SIP call, and this gateway never creates calls (client secrets and
+//     /v1/realtime/calls are not routed), so a caller-held call ID can only name
+//     a session the gateway neither created nor priced;
+//   - every other key (case variants such as `Model`, Azure-style `deployment`
+//     or `api-version`, credentials such as `api-key`) is dropped.
+//
+// Parameters:
+//   - m: relay metadata carrying the channel BaseURL, override and mapped model.
+//   - clientRawQuery: the caller's raw query string.
+//
+// Returns:
+//   - string: the provider handshake URL, validated by ValidateProviderWebSocketURL.
+//   - int: how many caller query parameters were dropped or rewritten, for
+//     DEBUG diagnostics only.
+//   - error: ErrInvalidProviderWebSocketURL (wrapped) when the configured base
+//     URL or override does not yield a valid provider WebSocket URL. A
+//     malformed configuration fails closed instead of sending the channel
+//     credential to a default host.
+func realtimeWebSocketUpstreamURL(m *rmeta.Meta, clientRawQuery string) (string, int, error) {
 	base := m.BaseURL
 	if base == "" {
 		base = "https://api.openai.com" // fallback
@@ -57,8 +83,10 @@ func realtimeWebSocketUpstreamURL(m *rmeta.Meta, clientRawQuery string) string {
 	}
 
 	u, err := url.Parse(base)
-	if err != nil || u == nil {
-		u = &url.URL{Scheme: "wss", Host: "api.openai.com"}
+	if err != nil {
+		// The parse error quotes the configured URL; it is handled by reporting
+		// the policy violation without it.
+		return "", 0, errors.Wrap(ErrInvalidProviderWebSocketURL, "channel realtime URL does not parse")
 	}
 
 	u.Scheme = strings.Replace(u.Scheme, "http", "ws", 1) // http->ws, https->wss
@@ -76,21 +104,39 @@ func realtimeWebSocketUpstreamURL(m *rmeta.Meta, clientRawQuery string) string {
 		u.Path = "/v1/realtime"
 	}
 
-	q, _ := url.ParseQuery(clientRawQuery)
-	switch {
-	case isRealtimeTranscriptionIntent(q):
-		// A transcription session selects its model inside
-		// `session.audio.input.transcription`, and the upstream rejects the
-		// handshake outright with "You must not provide a model parameter for
-		// transcription sessions" (verified 2026-09-18). The caller still has to
-		// name a model in its own query so one-api can route and bill it, so the
-		// routing model is dropped here rather than forwarded.
-		q.Del("model")
-	case m.ActualModelName != "":
-		q.Set("model", m.ActualModelName)
+	caller := parseCallerHandshakeQuery(clientRawQuery)
+	forwarded := url.Values{}
+	if intent := realtimeForwardedIntent(caller.values); intent != "" {
+		forwarded.Set("intent", intent)
 	}
-	u.RawQuery = q.Encode()
-	return u.String()
+	// A transcription session selects its model inside
+	// `session.audio.input.transcription`, and the upstream rejects the
+	// handshake outright with "You must not provide a model parameter for
+	// transcription sessions" (verified 2026-09-18). The caller still has to
+	// name a model in its own query so one-api can route and bill it, so the
+	// routing model is not forwarded for transcription.
+	if !isRealtimeTranscriptionIntent(caller.values) && m.ActualModelName != "" {
+		forwarded.Set("model", m.ActualModelName)
+	}
+	u.RawQuery = forwarded.Encode()
+	u.Fragment, u.RawFragment = "", ""
+	validated, err := ValidateProviderWebSocketURL(u.String())
+	if err != nil {
+		return "", 0, err
+	}
+	return validated, caller.unforwarded(forwarded), nil
+}
+
+// realtimeForwardedIntent returns the single `intent` value forwarded to the
+// provider, so the provider opens exactly the session type the gateway meters.
+// Parameters: query is the caller's parsed query. Returns: "transcription" when
+// the gateway treats the session as transcription, otherwise the caller's first
+// intent value with surrounding whitespace removed ("" when absent).
+func realtimeForwardedIntent(query url.Values) string {
+	if isRealtimeTranscriptionIntent(query) {
+		return "transcription"
+	}
+	return strings.TrimSpace(query.Get("intent"))
 }
 
 // isRealtimeTranscriptionIntent reports whether a handshake opens a
@@ -186,8 +232,10 @@ func RealtimeSessionsHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWit
 
 	// If upstream returned a non-2xx status, surface it as a business error
 	if resp.StatusCode >= 400 {
+		// The provider answered with this status: mark provenance so channel
+		// policy attributes 429/5xx to the provider.
 		return &rmodel.ErrorWithStatusCode{
-			Error:      rmodel.Error{Message: string(respBody), Type: rmodel.ErrorTypeUpstream, Code: resp.StatusCode},
+			Error:      rmodel.Error{Message: string(respBody), Type: rmodel.ErrorTypeUpstream, Code: resp.StatusCode, FromUpstream: true},
 			StatusCode: resp.StatusCode,
 		}, writeErr
 	}
@@ -207,6 +255,22 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 			Error:      rmodel.Error{Message: "invalid mode for realtime handler", Type: rmodel.ErrorTypeOneAPI, Code: "invalid_mode", RawError: errors.New("invalid mode for realtime handler")},
 			StatusCode: http.StatusBadRequest,
 		}, nil
+	}
+
+	// Build upstream URL (honoring any per-endpoint "realtime" override) before
+	// upgrading, so a channel URL that fails the provider URL policy is reported
+	// as a plain HTTP error. The provider query carries only gateway decisions
+	// (mapped model, metered intent).
+	wsURL, droppedParams, urlErr := realtimeWebSocketUpstreamURL(meta, c.Request.URL.RawQuery)
+	if urlErr != nil {
+		return &rmodel.ErrorWithStatusCode{
+			Error:      rmodel.Error{Message: "resolve upstream url failed", Type: rmodel.ErrorTypeOneAPI, Code: "upstream_url_resolve_failed", RawError: urlErr},
+			StatusCode: http.StatusBadGateway,
+		}, nil
+	}
+	if droppedParams > 0 {
+		lg.Debug("realtime handshake did not forward caller query parameters",
+			zap.Int("dropped_or_rewritten_params", droppedParams))
 	}
 
 	// Upgrade downstream connection.
@@ -229,10 +293,6 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	// Ensure close on exit
 	defer func() { _ = clientConn.Close() }()
 
-	// Build upstream URL (honoring any per-endpoint "realtime" override).
-	// Preserves client query while forcing the mapped model name.
-	wsURL := realtimeWebSocketUpstreamURL(meta, c.Request.URL.RawQuery)
-
 	// Prepare headers and subprotocols
 	requestHeader := http.Header{}
 	// Forward only the non-auth subprotocols. Browser clients cannot set headers
@@ -254,17 +314,59 @@ func RealtimeHandler(c *gin.Context, meta *rmeta.Meta) (*rmodel.ErrorWithStatusC
 	requestHeader.Set("Authorization", "Bearer "+meta.APIKey)
 
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second, Proxy: http.ProxyFromEnvironment}
-	upstreamConn, _, derr := dialer.Dial(wsURL, requestHeader)
+	upstreamConn, handshake, derr := dialer.Dial(wsURL, requestHeader)
 	if derr != nil {
-		_ = clientConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream connect failed"))
+		if werr := clientConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseTryAgainLater, "upstream connect failed")); werr != nil {
+			lg.Debug("write realtime upstream-connect close frame failed", zap.Error(werr))
+		}
+		// The client is already upgraded, so it only sees the close frame above;
+		// the returned status and provenance serve relay accounting. A provider
+		// that refused the handshake with 400..599 (for example 401, 429 or 503)
+		// is attributed to the channel with its own status; a dial or transport
+		// failure without a provider status stays one-api's own 502. The message
+		// never includes the provider's handshake body.
+		status, fromUpstream := WebSocketHandshakeFailureStatus(lg, handshake)
 		return &rmodel.ErrorWithStatusCode{
-			Error:      rmodel.Error{Message: "upstream realtime connect failed: " + derr.Error(), Type: rmodel.ErrorTypeOneAPI, Code: "upstream_connect_failed", RawError: derr},
-			StatusCode: http.StatusBadGateway,
+			Error: rmodel.Error{Message: "upstream realtime connect failed: " + derr.Error(), Type: rmodel.ErrorTypeOneAPI,
+				Code: "upstream_connect_failed", RawError: errors.Wrap(derr, "dial upstream realtime websocket"), FromUpstream: fromUpstream},
+			StatusCode: status,
 		}, nil
 	}
 	defer func() { _ = upstreamConn.Close() }()
 
 	return nil, meteredRealtimePump(clientConn, upstreamConn, lg, meta.ActualModelName, meta.OriginModelName, isRealtimeTranscriptionIntent(c.Request.URL.Query()))
+}
+
+// WebSocketHandshakeFailureStatus releases the handshake response a failed
+// gorilla/websocket dial returned and reports the status to attribute the
+// failure with. Gorilla returns that response when the provider answered the
+// upgrade request without switching protocols; its body is a bounded copy that
+// is closed here and never read, so provider bodies are not echoed or logged.
+// A close failure is logged at DEBUG with the request-scoped logger.
+//
+// Parameters:
+//   - lg: the request-scoped logger used only for the close diagnostic.
+//   - response: the handshake response from the failed dial; nil when the dial
+//     failed before the provider answered (DNS, connect, TLS or timeout).
+//
+// Returns:
+//   - int: the provider status when it is 400..599, otherwise 502.
+//   - bool: true only when the provider answered with that 400..599 status, so
+//     the caller marks the error FromUpstream; false keeps it one-api's own.
+func WebSocketHandshakeFailureStatus(lg glog.Logger, response *http.Response) (int, bool) {
+	if response == nil {
+		return http.StatusBadGateway, false
+	}
+	if response.Body != nil {
+		if closeErr := response.Body.Close(); closeErr != nil {
+			lg.Debug("close upstream websocket handshake response body failed",
+				zap.Int("status", response.StatusCode), zap.Error(closeErr))
+		}
+	}
+	if response.StatusCode >= http.StatusBadRequest && response.StatusCode <= 599 {
+		return response.StatusCode, true
+	}
+	return http.StatusBadGateway, false
 }
 
 // RealtimeBidirectionalPump relays frames between the client and upstream

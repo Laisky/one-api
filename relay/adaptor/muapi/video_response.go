@@ -35,11 +35,14 @@ func (a *Adaptor) handleVideoResponse(c *gin.Context, resp *http.Response) (*mod
 	if closeErr != nil {
 		return nil, openai_compatible.ErrorWrapper(errors.Wrap(closeErr, "close MuAPI video response"), "invalid_video_response", http.StatusBadGateway)
 	}
+	// Check the provider status before the size bound: an oversized error body
+	// is still the provider's failure and keeps its status and provenance. The
+	// body is never parsed or echoed on this path.
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, openai_compatible.UpstreamErrorWrapper(errors.Errorf("MuAPI video request returned HTTP %d", resp.StatusCode), "upstream_video_error", resp.StatusCode)
+	}
 	if len(body) > maxMuAPIVideoResponseBytes {
 		return nil, openai_compatible.ErrorWrapper(errors.New("MuAPI video response exceeds JSON size limit"), "invalid_video_response", http.StatusBadGateway)
-	}
-	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return nil, openai_compatible.ErrorWrapper(errors.Errorf("MuAPI video request returned HTTP %d", resp.StatusCode), "upstream_video_error", resp.StatusCode)
 	}
 
 	var payload struct {

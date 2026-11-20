@@ -33,7 +33,7 @@ func (a *Adaptor) handleVideoResponse(c *gin.Context, resp *http.Response) (*mod
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Do not echo arbitrary upstream bodies: they may contain credentials or
 		// reflected input. HTTP status still distinguishes auth/quota failures.
-		return nil, openai_compatible.ErrorWrapper(errors.Errorf("xAI video request returned HTTP %d", resp.StatusCode), "upstream_video_error", resp.StatusCode)
+		return nil, openai_compatible.UpstreamErrorWrapper(errors.Errorf("xAI video request returned HTTP %d", resp.StatusCode), "upstream_video_error", resp.StatusCode)
 	}
 	if len(body) > maxVideoResponseBytes {
 		return nil, openai_compatible.ErrorWrapper(errors.New("xAI video response exceeds JSON size limit"), "invalid_video_response", http.StatusBadGateway)

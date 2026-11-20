@@ -160,6 +160,10 @@ func main() {
 		model.StartBackgroundWorker(workerCtx, func(ctx context.Context) {
 			model.SyncChannelCacheContext(ctx, config.SyncFrequency)
 		})
+		// Mirror cooldowns persisted by other replicas between full rebuilds.
+		model.StartBackgroundWorker(workerCtx, func(ctx context.Context) {
+			model.SyncAbilitySuspensionsContext(ctx, config.ChannelSuspensionSyncInterval)
+		})
 	}
 	if config.IsMasterNode {
 		model.StartBackgroundWorker(workerCtx, model.RunQuotaRefundRecovery)
