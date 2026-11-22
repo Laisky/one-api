@@ -107,17 +107,18 @@ func TestNovemberAlibabaRequestCompatibility(t *testing.T) {
 			meta.Set2Context(c, m)
 			a := &openai.Adaptor{ChannelType: channeltype.AliBailian}
 			// The expectation is an independent literal: ConvertRequest returns
-			// and may rewrite the request it receives. The remote image uses a
-			// reserved .invalid host (RFC 2606), so inlining deterministically
-			// fails without network access and the URL part is preserved.
+			// and may rewrite the request it receives. The remote media uses a
+			// .localhost host, which the user-content URL validator rejects
+			// before any DNS lookup, so inlining fails locally and the URL part
+			// is preserved regardless of the resolver (including fake-IP DNS).
 			expected := `[{"role":"user","content":"Hello"}]`
 			if id == "qwen4-max" || id == "MiniMax/MiniMax-M3.1-Flash" {
 				req.Messages[0].Content = []any{
 					map[string]any{"type": "text", "text": "Describe these."},
-					map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://media.example.invalid/image.png"}},
-					map[string]any{"type": "video_url", "video_url": map[string]any{"url": "https://media.example.invalid/video.mp4"}},
+					map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://media.localhost/image.png"}},
+					map[string]any{"type": "video_url", "video_url": map[string]any{"url": "https://media.localhost/video.mp4"}},
 				}
-				expected = `[{"role":"user","content":[{"type":"text","text":"Describe these."},{"type":"image_url","image_url":{"url":"https://media.example.invalid/image.png"}},{"type":"video_url","video_url":{"url":"https://media.example.invalid/video.mp4"}}]}]`
+				expected = `[{"role":"user","content":[{"type":"text","text":"Describe these."},{"type":"image_url","image_url":{"url":"https://media.localhost/image.png"}},{"type":"video_url","video_url":{"url":"https://media.localhost/video.mp4"}}]}]`
 			}
 			const pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aO4sAAAAASUVORK5CYII="
 			if id == "kimi-k3.1-pro" || id == "kimi-k3.1-pro-prime" {
