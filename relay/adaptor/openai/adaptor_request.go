@@ -359,11 +359,13 @@ func (a *Adaptor) applyRequestTransformations(meta *meta.Meta, request *model.Ge
 			request.TopP = nil
 		}
 
-		// Preserve historical Chat-only reasoning semantics (notably o1), but
-		// keep native GPT-6 system instructions for the Responses converter. It
-		// moves the leading system message into the upstream instructions field.
-		_, publishedGPT6 := gpt6ModelRatios[normalizedModelName(actualModel)]
-		if !publishedGPT6 || meta.ChannelType != channeltype.OpenAI || !shouldForceResponseAPI(meta) {
+		// Preserve historical Chat-route reasoning semantics, but keep system
+		// messages on every Responses-converted route (native OpenAI, Azure and
+		// OpenAI-compatible Responses channels): the converter moves the leading
+		// system message into the upstream instructions field, which the
+		// Responses API accepts for every model it serves. Only the legacy
+		// o1-preview/o1-mini snapshots reject system and developer roles.
+		if !shouldForceResponseAPI(meta) || legacyReasoningRejectsSystemRole(actualModel) {
 			request.Messages = func(raw []model.Message) (filtered []model.Message) {
 				for i := range raw {
 					if raw[i].Role != "system" {

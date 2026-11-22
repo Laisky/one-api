@@ -106,18 +106,26 @@ func TestNovemberAlibabaRequestCompatibility(t *testing.T) {
 			c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
 			meta.Set2Context(c, m)
 			a := &openai.Adaptor{ChannelType: channeltype.AliBailian}
+			// The expectation is an independent literal: ConvertRequest returns
+			// and may rewrite the request it receives. The remote image uses a
+			// reserved .invalid host (RFC 2606), so inlining deterministically
+			// fails without network access and the URL part is preserved.
+			expected := `[{"role":"user","content":"Hello"}]`
 			if id == "qwen4-max" || id == "MiniMax/MiniMax-M3.1-Flash" {
 				req.Messages[0].Content = []any{
 					map[string]any{"type": "text", "text": "Describe these."},
-					map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://example.com/image.png"}},
-					map[string]any{"type": "video_url", "video_url": map[string]any{"url": "https://example.com/video.mp4"}},
+					map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://media.example.invalid/image.png"}},
+					map[string]any{"type": "video_url", "video_url": map[string]any{"url": "https://media.example.invalid/video.mp4"}},
 				}
+				expected = `[{"role":"user","content":[{"type":"text","text":"Describe these."},{"type":"image_url","image_url":{"url":"https://media.example.invalid/image.png"}},{"type":"video_url","video_url":{"url":"https://media.example.invalid/video.mp4"}}]}]`
 			}
+			const pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aO4sAAAAASUVORK5CYII="
 			if id == "kimi-k3.1-pro" || id == "kimi-k3.1-pro-prime" {
 				req.Messages[0].Content = []any{
 					map[string]any{"type": "text", "text": "Describe this image."},
-					map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aO4sAAAAASUVORK5CYII="}},
+					map[string]any{"type": "image_url", "image_url": map[string]any{"url": pixel}},
 				}
+				expected = `[{"role":"user","content":[{"type":"text","text":"Describe this image."},{"type":"image_url","image_url":{"url":"` + pixel + `"}}]}]`
 			}
 			converted, err = a.ConvertRequest(c, relaymode.ChatCompletions, req)
 			require.NoError(t, err)
@@ -126,7 +134,9 @@ func TestNovemberAlibabaRequestCompatibility(t *testing.T) {
 			var got model.GeneralOpenAIRequest
 			require.NoError(t, json.Unmarshal(encoded, &got))
 			require.Equal(t, id, got.Model)
-			require.Equal(t, req.Messages, got.Messages)
+			var wire map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(encoded, &wire))
+			require.JSONEq(t, expected, string(wire["messages"]))
 			require.NotNil(t, got.MaxCompletionTokens)
 			require.Equal(t, 2048, *got.MaxCompletionTokens)
 			url, err := a.GetRequestURL(m)

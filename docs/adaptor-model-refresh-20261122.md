@@ -258,6 +258,31 @@ preserved. Regression coverage includes prepared payloads, implicit writes,
 opt-outs, unsupported TTLs and host isolation. Native GPT-6.2 also has HTTP/SQLite
 settlement coverage through the three supported client formats.
 
+### Review follow-ups
+
+- **Native OpenAI flat overrides:** the same complete-admission predicate now
+  also qualifies native OpenAI GPT-5.6+ models whose implicit 30-minute writes
+  are metered (`openai.ImplicitPromptCacheWrites`). A flat `model_configs`
+  override previously skipped cache-write funding, so a 100,000-token
+  `gpt-6.2-astra` request was held at 402,020 quota and could settle at
+  500,020. Flat overrides stay flat, explicit opt-outs and breakpoints keep
+  their meaning, and the existing GPT-6 Cyber long-context pinning applies
+  unchanged.
+- **Tool definitions in prompt estimates:** Chat estimates now count tool,
+  function and `response_format` schemas plus replayed assistant tool-call
+  fields, and Responses estimates count tools (once, without the nested
+  compatibility copy) and text formats. The change applies to initial
+  admission, every MCP round quote and WebSocket frames. The Claude-to-Responses
+  path no longer counts its tools twice. Settlement from provider receipts is
+  unchanged; usage-less fallbacks now include the tool input.
+- **Responses system instructions:** every route that converts Chat or Claude
+  ingress to Responses (Azure, native OpenAI and OpenAI-compatible Responses
+  channels) now sends the leading system message as `instructions` for
+  reasoning models. Only `o1-preview` and `o1-mini`, which never accepted
+  system or developer roles, keep the historical removal, and Chat-routed
+  requests are unchanged. An empty leading system message no longer consumes
+  the following user turn.
+
 ## Deferred and unknown contracts
 
 The source reports explicitly retain these boundaries:

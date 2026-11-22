@@ -75,6 +75,11 @@ func maybeHandleRealtime(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	return nil
 }
 
+// getPromptTokens estimates the prompt tokens of a relay request for its mode.
+// Parameters: ctx carries the request logger, textRequest is the parsed request
+// and relayMode selects which fields form the prompt. Chat requests count every
+// provider-visible prompt field, including tool and response schemas (see
+// chatPromptTokens). It returns the estimate, or 0 for an unhandled mode.
 func getPromptTokens(ctx context.Context, textRequest *relaymodel.GeneralOpenAIRequest, relayMode int) int {
 	switch relayMode {
 	case relaymode.ChatCompletions:
@@ -85,7 +90,7 @@ func getPromptTokens(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 		}
 
 		// text request
-		return openai.CountTokenMessages(ctx, textRequest.Messages, textRequest.Model)
+		return chatPromptTokens(ctx, textRequest, textRequest.Model)
 	case relaymode.Completions:
 		return openai.CountTokenInput(textRequest.Prompt, textRequest.Model)
 	case relaymode.Moderations:

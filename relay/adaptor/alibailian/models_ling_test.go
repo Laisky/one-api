@@ -66,8 +66,10 @@ func TestLingCompatibleRequestPreservesPublishedID(t *testing.T) {
 	var got model.GeneralOpenAIRequest
 	require.NoError(t, json.Unmarshal(encoded, &got))
 	require.Equal(t, id, got.Model)
-	require.Equal(t, req.Messages, got.Messages)
-	require.Equal(t, req.ResponseFormat, got.ResponseFormat)
+	// ConvertRequest returns the input pointer on this route, so compare with
+	// independent literals rather than the request it may have rewritten.
+	require.Equal(t, []model.Message{{Role: "user", Content: "Return a JSON object."}}, got.Messages)
+	require.Equal(t, &model.ResponseFormat{Type: "json_object"}, got.ResponseFormat)
 	url, err := a.GetRequestURL(m)
 	require.NoError(t, err)
 	require.Equal(t, m.BaseURL+"/compatible-mode/v1/chat/completions", url)

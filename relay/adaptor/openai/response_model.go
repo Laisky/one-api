@@ -336,8 +336,12 @@ func ConvertChatCompletionToResponseAPI(request *model.GeneralOpenAIRequest) *Re
 
 	// Convert messages to input - Response API expects messages directly in the input array
 	toolNameByID := make(map[string]string)
+	// leadingSystemItem records whether the leading system message produced an
+	// input item; an empty system message produces none and must not consume
+	// the following turn when it moves to instructions.
+	leadingSystemItem := false
 
-	for _, message := range request.Messages {
+	for index, message := range request.Messages {
 		switch message.Role {
 		case "assistant":
 			if convertedMsg := convertMessageToResponseAPIFormat(message); convertedMsg != nil {
@@ -387,6 +391,7 @@ func ConvertChatCompletionToResponseAPI(request *model.GeneralOpenAIRequest) *Re
 		default:
 			if convertedMsg := convertMessageToResponseAPIFormat(message); convertedMsg != nil {
 				responseReq.Input = append(responseReq.Input, convertedMsg)
+				leadingSystemItem = leadingSystemItem || (index == 0 && message.Role == "system")
 			}
 		}
 	}
@@ -569,7 +574,9 @@ func ConvertChatCompletionToResponseAPI(request *model.GeneralOpenAIRequest) *Re
 		responseReq.Instructions = &systemContent
 
 		// Remove system message from input since it's now in instructions
-		responseReq.Input = responseReq.Input[1:]
+		if leadingSystemItem {
+			responseReq.Input = responseReq.Input[1:]
+		}
 	}
 
 	return responseReq
