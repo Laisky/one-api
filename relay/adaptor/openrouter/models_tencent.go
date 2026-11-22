@@ -56,33 +56,13 @@ func tencentModels() map[string]adaptor.ModelConfig {
 			Description:                 "tencent/hy-mt2-7b on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
 		"tencent/hy3": {
-			Ratio:            nativeRate(0.132),
-			CompletionRatio:  (0.33 * 1.0) / 0.0825,
-			CachedInputRatio: nativeRate(0.033),
-			TimeWindows: []adaptor.TimeWindow{
-				{
-					Name:     "openrouter-1",
-					TimeZone: "UTC",
-					Ranges:   []adaptor.ClockRange{{Start: "00:00", End: "16:00"}},
-					Overlay: adaptor.ModelConfig{
-						Ratio:            nativeRate(0.132),
-						CompletionRatio:  (0.528 * 1.0) / 0.132,
-						CachedInputRatio: nativeRate(0.033),
-					},
-				},
-				{
-					Name:     "openrouter-2",
-					TimeZone: "UTC",
-					Ranges:   []adaptor.ClockRange{{Start: "16:00", End: "00:00"}},
-					Overlay: adaptor.ModelConfig{
-						Ratio:            nativeRate(0.0825),
-						CompletionRatio:  (0.33 * 1.0) / 0.0825,
-						CachedInputRatio: nativeRate(0.020625),
-					},
-				},
-			},
+			Ratio:            nativeRate(0.14),
+			CompletionRatio:  0.58 / 0.14,
+			CachedInputRatio: nativeRate(0.035),
+			// The 2026-11-22 listing has no UTC override for Hy3. Its current
+			// flat quote must not retain the older host's off-peak discount.
 			ContextLength:               262144,
-			MaxOutputTokens:             128000,
+			MaxOutputTokens:             235929,
 			InputModalities:             []string{"text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning"},
@@ -90,7 +70,7 @@ func tencentModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"high", "low", "none"},
 			DefaultReasoningEffort:      "high",
 			HuggingFaceID:               "tencent/Hy3",
-			Description:                 "tencent/hy3 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
+			Description:                 "tencent/hy3 on OpenRouter; public routing-default token tariff and published host limits checked 2026-11-22. Provider selection and separately metered tools can change charges.",
 		},
 		"tencent/hy3-preview": {
 			Ratio:                       nativeRate(0.18),

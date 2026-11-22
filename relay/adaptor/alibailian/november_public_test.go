@@ -38,6 +38,7 @@ func TestNovemberAlibabaProviderDefaults(t *testing.T) {
 				"qwen4-max":                       {10, .5, 30},
 				"MiniMax/MiniMax-M3.1-Flash":      {1, .1, 4},
 				"kimi-k3.1-pro":                   {13, 1.3, 68},
+				"kimi-k3.1-pro-prime":             {26, 1.3, 136},
 				"kimi/kimi-k3.1-pro":              {13, 1.3, 68},
 				"kimi/kimi-k3.1-pro-highspeed":    {26, 1.3, 136},
 				"glm-5.3-prime":                   {16, 4, 56},
@@ -88,7 +89,7 @@ func TestNovemberAlibabaProviderDefaults(t *testing.T) {
 // compatible multimodal preservation for the new IDs using t. It returns nothing.
 func TestNovemberAlibabaRequestCompatibility(t *testing.T) {
 	t.Parallel()
-	for _, id := range []string{"qwen4-max", "MiniMax/MiniMax-M3.1-Flash", "kimi-k3.1-pro", "kimi/kimi-k3.1-pro", "kimi/kimi-k3.1-pro-highspeed", "glm-5.3-prime", "xiaomi/mimo-v2.6-pro-ultraspeed", "deepseek-v4.1-flash-1017"} {
+	for _, id := range []string{"qwen4-max", "MiniMax/MiniMax-M3.1-Flash", "kimi-k3.1-pro", "kimi-k3.1-pro-prime", "kimi/kimi-k3.1-pro", "kimi/kimi-k3.1-pro-highspeed", "glm-5.3-prime", "xiaomi/mimo-v2.6-pro-ultraspeed", "deepseek-v4.1-flash-1017"} {
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()
 			native := &ali.Adaptor{}
@@ -112,6 +113,12 @@ func TestNovemberAlibabaRequestCompatibility(t *testing.T) {
 					map[string]any{"type": "video_url", "video_url": map[string]any{"url": "https://example.com/video.mp4"}},
 				}
 			}
+			if id == "kimi-k3.1-pro" || id == "kimi-k3.1-pro-prime" {
+				req.Messages[0].Content = []any{
+					map[string]any{"type": "text", "text": "Describe this image."},
+					map[string]any{"type": "image_url", "image_url": map[string]any{"url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aO4sAAAAASUVORK5CYII="}},
+				}
+			}
 			converted, err = a.ConvertRequest(c, relaymode.ChatCompletions, req)
 			require.NoError(t, err)
 			encoded, err := json.Marshal(converted)
@@ -129,5 +136,9 @@ func TestNovemberAlibabaRequestCompatibility(t *testing.T) {
 		})
 	}
 	require.Equal(t, []string{"text", "image"}, alibailian.ModelRatios["kimi-k3.1-pro"].InputModalities)
+	require.Equal(t, []string{"text", "image"}, alibailian.ModelRatios["kimi-k3.1-pro-prime"].InputModalities)
+	require.EqualValues(t, 1_048_576, alibailian.ModelRatios["kimi-k3.1-pro-prime"].ContextLength)
+	require.EqualValues(t, 1_048_576, alibailian.ModelRatios["kimi-k3.1-pro-prime"].MaxOutputTokens)
 	require.NotSame(t, &ali.ModelRatios["qwen4-max"].InputModalities[0], &alibailian.ModelRatios["qwen4-max"].InputModalities[0])
+	require.NotSame(t, &ali.ModelRatios["kimi-k3.1-pro-prime"].InputModalities[0], &alibailian.ModelRatios["kimi-k3.1-pro-prime"].InputModalities[0])
 }

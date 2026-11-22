@@ -56,12 +56,15 @@ func TestModelBillingPolicyPredicates(t *testing.T) {
 		unpricedWriteFrom                               int
 	}
 	terra := expectation{declared: true, pinned: true, httpOnly: true}
+	gpt62 := expectation{declared: true, pinned: true, httpOnly: true, capture: true, nativeOnly: true}
 	cyber := expectation{declared: true, pinned: true, httpOnly: true, capture: true, nativeOnly: true,
 		unpricedWriteFrom: gpt6CyberLongContextTier.InputTokenThreshold}
 	modelCases := []struct {
 		model string
 		want  expectation
 	}{
+		{"gpt-6.2-astra", gpt62},
+		{" GPT-6.2-SOL ", gpt62},
 		{"gpt-6.1-terra", terra},
 		{" GPT-6.1-Terra ", terra},
 		{"gpt-6-cyber", cyber},
@@ -70,6 +73,7 @@ func TestModelBillingPolicyPredicates(t *testing.T) {
 		{"gpt-6.1-sol", expectation{}},
 		{"gpt-5.6-cyber", expectation{}},
 		{"gpt-6-cyber-preview", expectation{}},
+		{"gpt-6.2-sol-2026-11-17", expectation{}},
 		{"", expectation{}},
 	}
 	channelCases := []struct {
@@ -152,6 +156,9 @@ func TestModelBillingPolicyServiceTierRequestScope(t *testing.T) {
 		wantTier    *string
 		wantErr     bool
 	}{
+		{"native_astra62_omitted", channeltype.OpenAI, "gpt-6.2-astra", nil, stringRef("default"), false},
+		{"native_sol62_fast", channeltype.OpenAI, "gpt-6.2-sol", stringRef("fast"), nil, true},
+		{"azure_astra62_fast", channeltype.Azure, "gpt-6.2-astra", stringRef("fast"), stringRef("fast"), false},
 		{"native_terra_omitted", channeltype.OpenAI, " GPT-6.1-TERRA ", nil, stringRef("default"), false},
 		{"native_cyber_upper_default", channeltype.OpenAI, "gpt-6-cyber", stringRef(" DEFAULT "), stringRef("default"), false},
 		{"native_cyber_fast", channeltype.OpenAI, "GPT-6-Cyber", stringRef("fast"), nil, true},

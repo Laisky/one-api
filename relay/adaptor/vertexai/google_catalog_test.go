@@ -14,8 +14,10 @@ import (
 	dbmodel "github.com/Laisky/one-api/model"
 	nativegemini "github.com/Laisky/one-api/relay/adaptor/gemini"
 	"github.com/Laisky/one-api/relay/adaptor/geminiOpenaiCompatible"
+	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/model"
+	"github.com/Laisky/one-api/relay/pricing"
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
@@ -27,6 +29,12 @@ func TestVertexGoogleNativeControls(t *testing.T) {
 		tokens             int
 		invalid            bool
 	}{
+		{"gemini-4-neon", "", "HIGH", false, 32768, false},
+		{"gemini-4-neon", "xhigh", "XHIGH", true, 32768, false},
+		{"gemini-4-neon", "minimal", "", false, 100, true},
+		{"gemini-4-neon", "none", "", false, 100, true},
+		{"gemini-4-neon", "high", "", false, 32769, true},
+		{"gemini-4-neon", "xhigh", "", true, 32769, true},
 		{"gemini-4-hydrogen", "", "HIGH", false, 65536, false},
 		{"gemini-4-hydrogen", "xhigh", "XHIGH", true, 65536, false},
 		{"gemini-4-hydrogen", "minimal", "", false, 100, true},
@@ -39,6 +47,8 @@ func TestVertexGoogleNativeControls(t *testing.T) {
 		{"gemini-4-carbon", "xhigh", "", false, 100, true},
 		{"gemini-4-carbon-cyber-permissive", "", "HIGH", false, 100, false},
 		{"gemini-4-argon-cyber-permissive", "", "HIGH", false, 100, false},
+		{"gemini-4-argon-cyber-permissive", "high", "HIGH", true, 32768, false},
+		{"gemini-4-argon-cyber-permissive", "high", "", true, 32769, true},
 		{"gemini-3.8-flash-cyber", "medium", "MEDIUM", false, 65536, false},
 	} {
 		t.Run(tc.name+tc.effort+tc.want+strconv.Itoa(tc.tokens), func(t *testing.T) {
@@ -97,12 +107,32 @@ func TestVertexGoogleRejectBudgetAndHonorCompletionLimit(t *testing.T) {
 	require.ErrorContains(t, err, "nil")
 }
 
+// TestVertexNewTariffForegroundBoundaries prevents omitted and alternate token
+// controls from bypassing the qualified 32K paid-usage boundary. Parameter t asserts.
+func TestVertexNewTariffForegroundBoundaries(t *testing.T) {
+	for _, name := range []string{"gemini-4-neon", argonCyberModel} {
+		for _, stream := range []bool{false, true} {
+			converted := &nativegemini.ChatRequest{}
+			require.NoError(t, configureVertexGoogleRequest(name, &model.GeneralOpenAIRequest{Stream: stream}, converted))
+			require.Equal(t, 32768, converted.GenerationConfig.MaxOutputTokens)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Set(ctxkey.Meta, &meta.Meta{ActualModelName: name})
+			limit := 32769
+			request := &model.GeneralOpenAIRequest{Model: "alias", Stream: stream, MaxCompletionTokens: &limit,
+				Messages: []model.Message{{Role: "user", Content: "Hello"}}}
+			_, err := (&Adaptor{}).ConvertRequest(c, relaymode.ChatCompletions, request)
+			require.ErrorContains(t, err, "foreground output limit is 32768")
+			require.Equal(t, 32769, *request.MaxCompletionTokens)
+		}
+	}
+}
+
 // TestVertexGoogleIndependentCatalog verifies routing, independent metadata, and Developer isolation.
 func TestVertexGoogleIndependentCatalog(t *testing.T) {
 	for _, name := range vertexGoogleModels {
 		require.NotNil(t, GetAdaptor(name))
 		switch name {
-		case geminiOpenaiCompatible.Gemini4CarbonModel, geminiOpenaiCompatible.Gemini4HydrogenModel:
+		case geminiOpenaiCompatible.Gemini4CarbonModel, geminiOpenaiCompatible.Gemini4HydrogenModel, geminiOpenaiCompatible.Gemini4NeonModel:
 			require.Contains(t, geminiOpenaiCompatible.ModelRatios, name, "published Developer IDs remain shared")
 		case "gemini-3.8-flash-cyber":
 			// Preserve the existing exception: Developer discovery is managed independently.
@@ -120,21 +150,37 @@ func TestVertexGoogleIndependentCatalog(t *testing.T) {
 	require.Equal(t, "low", VertexGoogleModelConfigs()["gemini-4-hydrogen"].SupportedReasoningEfforts[0])
 	require.Equal(t, "low", geminiOpenaiCompatible.ModelRatios[geminiOpenaiCompatible.Gemini4HydrogenModel].SupportedReasoningEfforts[0], "Vertex metadata mutations must not affect the Developer catalogue")
 	_, found := (&Adaptor{}).GetDefaultModelPricing()["gemini-4-argon-cyber-permissive"]
-	require.False(t, found)
+	require.True(t, found, "Cloud now publishes an independent Argon Cyber Standard tariff")
 }
 
-// TestVertexArgonCyberExplicitPricing rejects unknown bundled prices and preserves operator data.
-func TestVertexArgonCyberExplicitPricing(t *testing.T) {
+// TestVertexArgonCyberProviderPricing verifies the published host tariff takes
+// effect without deleting or overriding a channel's existing prices. Parameter t asserts.
+func TestVertexArgonCyberProviderPricing(t *testing.T) {
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())
 	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
-	m := &meta.Meta{ActualModelName: "gemini-4-argon-cyber-permissive", OriginModelName: "alias", StartTime: time.Now()}
-	require.ErrorContains(t, (&Adaptor{}).ValidateRequestPricing(c, m), "explicit")
-	raw := `{"gemini-4-argon-cyber-permissive":{"ratio":7,"completion_ratio":3}}`
+	m := &meta.Meta{ActualModelName: argonCyberModel, OriginModelName: "alias", StartTime: time.Now()}
+	a := &Adaptor{}
+	require.False(t, a.RequiresOperatorTariff(argonCyberModel))
+	require.True(t, a.RequiresOperatorTariff("claude-fable-5-2"))
+	require.True(t, a.RequiresOperatorTariff("gemini-3.8-live"))
+	require.NoError(t, a.ValidateRequestPricing(c, m))
+	require.NoError(t, a.ValidateOperatorTariffSupplement(argonCyberModel, nil, m.StartTime))
+	base, found := pricing.ResolveModelConfig(argonCyberModel, nil, a, m.StartTime)
+	require.True(t, found)
+	require.InDelta(t, 4, base.Ratio/ratio.MilliTokensUsd, 1e-12)
+	require.InDelta(t, 20, base.Ratio*base.CompletionRatio/ratio.MilliTokensUsd, 1e-12)
+	require.InDelta(t, .20, base.CachedInputRatio/ratio.MilliTokensUsd, 1e-12)
+	require.EqualValues(t, 32768, base.MaxOutputTokens)
+	require.Empty(t, base.TimeWindows, "Cyber variants receive no promotional credits")
+	raw := `{"gemini-4-argon-cyber-permissive":{"ratio":7,"completion_ratio":3,"cached_input_ratio":0.3}}`
 	ch := &dbmodel.Channel{ModelConfigs: &raw}
 	c.Set(ctxkey.ChannelModel, ch)
-	require.ErrorContains(t, (&Adaptor{}).ValidateRequestPricing(c, m), "cache")
-	raw = `{"gemini-4-argon-cyber-permissive":{"ratio":7,"completion_ratio":3,"cached_input_ratio":0.3}}`
-	require.NoError(t, (&Adaptor{}).ValidateRequestPricing(c, m))
+	require.NoError(t, a.ValidateRequestPricing(c, m))
+	custom, found := pricing.ResolveModelConfig(argonCyberModel, ch.GetModelPriceConfigs(), a, m.StartTime)
+	require.True(t, found)
+	require.Equal(t, 7.0, custom.Ratio)
+	require.Equal(t, 3.0, custom.CompletionRatio)
+	require.Equal(t, .3, custom.CachedInputRatio)
 	require.Equal(t, raw, *ch.ModelConfigs)
 }
 

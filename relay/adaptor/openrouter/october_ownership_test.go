@@ -14,10 +14,10 @@ func TestOctoberOpenRouterOwnership(t *testing.T) {
 	first["meta/muse-wonder"].SupportedReasoningEfforts[0] = "changed"
 	first["anthropic/claude-haiku-5.5"].Tiers[0].Ratio = 99
 	first["google/gemini-3.8-flash"].Audio.PromptRatio = 99
-	first["tencent/hy3"].TimeWindows[0].Ranges[0].Start = "12:00"
+	first["tencent/hy4-preview"].TimeWindows[0].Ranges[0].Start = "12:00"
 	require.Equal(t, "text", second["meta/muse-wonder"].InputModalities[0])
 	require.Equal(t, "max", second["meta/muse-wonder"].SupportedReasoningEfforts[0])
 	require.NotEqualValues(t, 99, second["anthropic/claude-haiku-5.5"].Tiers[0].Ratio)
 	require.EqualValues(t, 1, second["google/gemini-3.8-flash"].Audio.PromptRatio)
-	require.Equal(t, "00:00", second["tencent/hy3"].TimeWindows[0].Ranges[0].Start)
+	require.Equal(t, "00:00", second["tencent/hy4-preview"].TimeWindows[0].Ranges[0].Start)
 }

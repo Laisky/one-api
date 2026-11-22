@@ -198,7 +198,7 @@ func estimatePreConsumedQuota(
 }
 
 // estimatePreConsumedQuotaWithCachePolicy is estimatePreConsumedQuota that also
-// returns the tiered prompt-cache admission decision the dispatch must apply.
+// returns the complete prompt-cache admission decision the dispatch must apply.
 // Parameters match estimatePreConsumedQuota. Returns: the quote (-1 for an
 // unpriceable request), the cache-write decision, and an admission refusal
 // error that callers surface to the client.
@@ -249,7 +249,8 @@ func estimatePreConsumedQuotaWithCachePolicy(
 
 	if meta != nil {
 		cfg, _ := pricing.ResolveModelConfigRatioOnly(textRequest.Model, channelModelConfigs, resolvePricingAdaptor(meta), meta.StartTime)
-		if len(cfg.Tiers) > 0 {
+		includeFlatTariff := includeFlatPromptCacheTariff(meta, textRequest.Model)
+		if len(cfg.Tiers) > 0 || includeFlatTariff {
 			maxOutput := textRequest.MaxTokens
 			if textRequest.MaxCompletionTokens != nil && *textRequest.MaxCompletionTokens > 0 {
 				maxOutput = *textRequest.MaxCompletionTokens
@@ -271,7 +272,7 @@ func estimatePreConsumedQuotaWithCachePolicy(
 				ChannelModelRatio: channelModelRatio, GroupRatio: groupRatio,
 				ChannelModelConfigs: channelModelConfigs, ChannelCompletionRatio: channelCompletionRatio,
 				PricingAdaptor: resolvePricingAdaptor(meta), RequestTime: meta.StartTime,
-			}, maxOutput, config.PreConsumedQuota, quotautil.AdmissionOptions{CacheWrite5m: cache.write5m, CacheWrite1h: cache.write1h, OutputCount: count})
+			}, maxOutput, config.PreConsumedQuota, quotautil.AdmissionOptions{CacheWrite5m: cache.write5m, CacheWrite1h: cache.write1h, OutputCount: count, IncludeFlatTariff: includeFlatTariff})
 			if applies {
 				if err != nil {
 					return -1, promptCacheAdmission{}, nil

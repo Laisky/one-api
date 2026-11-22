@@ -100,10 +100,10 @@ func TestOpenRouterGrokLatestCacheWritesBillAtInput(t *testing.T) {
 	}
 }
 
-// TestOpenRouterGLMFlashOutputQuote pins the 2026-11-18 14:16 UTC
-// /api/v1/models quote for `z-ai/glm-5.3-flash` ($0.15 input, $0.03 cache read,
-// $0.50 output per million), which its `~z-ai/glm-flash-latest` alias also
-// bills because the alias routes to the same model. The completion ratio must
+// TestOpenRouterGLMFlashOutputQuote pins the 2026-11-22 /api/v1/models quote
+// for `z-ai/glm-5.3-flash` ($0.0399 input, $0.03 cache read, $0.0784 output
+// per million). The independently published `~z-ai/glm-flash-latest` quote
+// currently matches the snapshot. The completion ratio must
 // be the exact quotient of the published prices rather than a truncated
 // 15-digit printout. It accepts t and returns no values.
 func TestOpenRouterGLMFlashOutputQuote(t *testing.T) {
@@ -111,8 +111,8 @@ func TestOpenRouterGLMFlashOutputQuote(t *testing.T) {
 	for _, id := range []string{"z-ai/glm-5.3-flash", "~z-ai/glm-flash-latest"} {
 		cfg, exists := openrouter.ModelRatios[id]
 		require.True(t, exists, id)
-		require.InDelta(t, 0.15, cfg.Ratio/ratio.MilliTokensUsd, 1e-12, id)
+		require.InDelta(t, 0.0399, cfg.Ratio/ratio.MilliTokensUsd, 1e-12, id)
 		require.InDelta(t, 0.03, cfg.CachedInputRatio/ratio.MilliTokensUsd, 1e-12, id)
-		require.Equal(t, 0.5/0.15, cfg.CompletionRatio, id)
+		require.Equal(t, 0.0784/0.0399, cfg.CompletionRatio, id)
 	}
 }

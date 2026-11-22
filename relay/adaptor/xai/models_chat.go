@@ -12,6 +12,7 @@ import (
 // https://docs.x.ai/developers/models/grok-4.5
 // https://docs.x.ai/developers/models/grok-build-0.1
 // https://docs.x.ai/developers/model-capabilities/text/reasoning
+// https://docs.x.ai/developers/release-notes (Build 0.1 retirement checked 2026-11-22)
 func chatModels() map[string]adaptor.ModelConfig {
 	models := map[string]adaptor.ModelConfig{
 		"grok-2-vision-1212": {
@@ -210,7 +211,7 @@ func chatModels() map[string]adaptor.ModelConfig {
 			InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 			SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
 			SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
-			Description: "Grok Build 0.1 — fast agentic coding model (256K context, vision input); $1.00 in / $0.20 cached / $2.00 out. Aliases: grok-code-fast-1, grok-code-fast, grok-code-fast-1-0825.",
+			Description: "Grok Build 0.1 — RETIRED November 19, 2026; no longer served on the public API. Historical ID, 256K limits and $1.00 input / $0.20 cached / $2.00 output per million token tariff retained for existing configurations. No replacement route is inferred.",
 		},
 		"grok-code-fast-1": {
 			Ratio: 1.0 * ratio.MilliTokensUsd, CompletionRatio: 2.0 / 1.0, CachedInputRatio: 0.2 * ratio.MilliTokensUsd,
@@ -221,7 +222,7 @@ func chatModels() map[string]adaptor.ModelConfig {
 			InputModalities: grokVisionInputs, OutputModalities: grokTextOutputs,
 			SupportedFeatures: grokFeaturesReasoning, SupportedSamplingParameters: grokReasoningSamplingParams,
 			SupportedReasoningEfforts: grokFullReasoningEfforts, DefaultReasoningEffort: "low",
-			Description: "Grok Code Fast 1 — RETIRED May 15, 2026; auto-redirects to grok-build-0.1 ($1.00 in / $0.20 cached / $2.00 out, 256K context).",
+			Description: "Grok Code Fast 1 — RETIRED May 15, 2026; its documented redirect target grok-build-0.1 reached end of life on November 19, 2026. Historical target pricing and 256K limits are retained; no new redirect destination is published.",
 		},
 	}
 
@@ -271,6 +272,9 @@ func chatModels() map[string]adaptor.ModelConfig {
 		}
 		cfg = cfg.Clone()
 		cfg.Description = "Official SpaceXAI alias for " + canonical + "."
+		if canonical == "grok-build-0.1" {
+			cfg.Description += " The documented target reached end of life on November 19, 2026. Historical configuration and tariff retained; no new redirect destination is inferred."
+		}
 		models[alias] = cfg
 	}
 	return models

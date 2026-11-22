@@ -11,6 +11,8 @@ import (
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/adaptor/openrouter"
+	"github.com/Laisky/one-api/relay/channeltype"
 	metalib "github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/pricing"
 )
@@ -29,9 +31,9 @@ type promptCacheAdmission struct {
 
 // decideTierAdmissionCacheWrites computes the cache-write buckets a tiered
 // admission must fund for one prepared dispatch without changing request
-// state. It merges structural cache_control controls with OpenAI's native
-// GPT-5.6+ prompt-cache contract, under which OpenAI writes the prompt cache
-// implicitly unless the request disables it. For a catalog tier without a
+// state. It merges structural cache_control controls with the independently
+// documented native OpenAI and OpenRouter GPT-5.6+ automatic write contracts.
+// For a native catalog tier without a
 // published cache-write price (for example GPT-6 Cyber above 272,000 input
 // tokens) and no explicit operator tier, it refuses explicit client cache
 // writes and otherwise requires prompt_cache_options.mode="explicit", so the
@@ -47,6 +49,16 @@ func decideTierAdmissionCacheWrites(m *metalib.Meta, modelName string, payload a
 		return promptCacheAdmission{}, err
 	}
 	decision := promptCacheAdmission{write5m: write5m, write1h: write1h}
+	if m != nil && m.ChannelType == channeltype.OpenRouter && openrouter.ImplicitPromptCacheWrites(modelName) {
+		writes, err := inspectOpenRouterPromptCacheWrites(payload)
+		if err != nil {
+			return promptCacheAdmission{}, errors.Wrap(err, "inspect OpenRouter prompt-cache controls")
+		}
+		// OpenRouter translates cache_control into an OpenAI breakpoint but
+		// drops its Anthropic TTL. All permitted writes use the 30m tariff,
+		// stored in the legacy 5m bucket. Native pinning does not apply here.
+		return promptCacheAdmission{write5m: write5m || write1h || writes}, nil
+	}
 	if m == nil || !openai.ImplicitPromptCacheWrites(m.ChannelType, modelName) {
 		return decision, nil
 	}

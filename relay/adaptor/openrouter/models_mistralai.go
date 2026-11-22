@@ -276,13 +276,13 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			// input_cache_read price, so cached prompt tokens bill at the input rate
 			// instead of the former unpublished $0.01 discount.
 			ContextLength:               256000,
-			MaxOutputTokens:             26214,
+			MaxOutputTokens:             16384,
 			InputModalities:             []string{"image", "text"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "logprobs"},
 			SupportedSamplingParameters: []string{"frequency_penalty", "logit_bias", "logprobs", "max_tokens", "min_p", "presence_penalty", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
 			HuggingFaceID:               "mistralai/Mistral-Small-3.2-24B-Instruct-2506",
-			Description:                 "mistralai/mistral-small-3.2-24b-instruct on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
+			Description:                 "mistralai/mistral-small-3.2-24b-instruct on OpenRouter; public routing-default token tariff and published host limits checked 2026-11-22. Provider selection and separately metered tools can change charges.",
 		},
 		"mistralai/mixtral-8x22b-instruct": {
 			Ratio:                       nativeRate(2),
@@ -321,6 +321,17 @@ func mistralaiModels() map[string]adaptor.ModelConfig {
 			Description:                 "mistralai/voxtral-small-24b-2507 on OpenRouter; public routing-default token tariff and metadata checked 2026-11-16. Provider selection and separately metered tools can change charges.",
 			MaxOutputTokens:             26214,
 			Audio:                       &adaptor.AudioPricingConfig{PromptRatio: 1000},
+		},
+		"mistralai/pixtral-large-2502": {
+			Ratio:                       nativeRate(2),
+			CompletionRatio:             6 / 2,
+			ContextLength:               128000,
+			MaxOutputTokens:             102400,
+			InputModalities:             []string{"text", "image"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{},
+			SupportedSamplingParameters: []string{"max_tokens", "stop", "temperature", "top_k", "top_p"},
+			Description:                 "mistralai/pixtral-large-2502 on OpenRouter; published host tariff, limits and capabilities checked 2026-11-22. Provider routing and separately metered tools can change charges.",
 		},
 	}
 }

@@ -170,11 +170,11 @@ func RelayResponseAPIHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	outputRatio := ratio * completionRatio
 	backgroundEnabled := responseAPIRequest.Background != nil && *responseAPIRequest.Background
 
-	// Tiered native requests quote and dispatch the same normalized bytes.
-	// Flat pricing retains its existing preparation and reservation order.
+	// Tiered requests and qualified OpenRouter cache-write contracts quote and
+	// dispatch the same normalized bytes. Other flat pricing retains its order.
 	var preparedBody []byte
 	tierConfig, _ := pricing.ResolveModelConfigRatioOnly(responseAPIRequest.Model, channelModelConfigs, pricingAdaptor, meta.StartTime)
-	if len(tierConfig.Tiers) > 0 {
+	if len(tierConfig.Tiers) > 0 || includeFlatPromptCacheTariff(meta, responseAPIRequest.Model) {
 		preparedBody, err = prepareResponseTierBody(c, meta, responseAPIRequest, requestAdaptor)
 		if err != nil {
 			return wrapConvertRequestError(err)

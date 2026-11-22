@@ -7,6 +7,16 @@ import "github.com/Laisky/one-api/relay/adaptor"
 // Source: https://docs.together.ai/docs/serverless/models
 func qwenModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
+		"Qwen/Qwen4-Max": {
+			Ratio:             nativeRate(1.425),
+			CompletionRatio:   4.275 / 1.425,
+			CachedInputRatio:  nativeRate(0.07125),
+			ContextLength:     1000000,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs"},
+			Description:       "Qwen4 Max on Together Standard serverless; host tariff, context, vision, tools and structured-output support checked 2026-11-22. Unpublished output limits, quantization and reasoning controls remain unspecified.",
+		},
 		"Qwen/Qwen-Image": {
 			Ratio:           0,
 			CompletionRatio: 1,

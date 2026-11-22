@@ -16,7 +16,7 @@ import (
 
 // TestOctoberOpenRouterPublishedRates checks host-specific token defaults through
 // both public channel surfaces using the November 16 API quotes; rows whose
-// listing moved were re-quoted from the 2026-11-18 14:16 UTC fetch. It performs no I/O.
+// listing moved were re-quoted from the 2026-11-22 fetch. It performs no I/O.
 func TestOctoberOpenRouterPublishedRates(t *testing.T) {
 	t.Parallel()
 	a := &openrouter.Adaptor{}
@@ -29,7 +29,7 @@ func TestOctoberOpenRouterPublishedRates(t *testing.T) {
 		{"stepfun/step-5-preview", 1, 0.1, 2.7},
 		{"anthropic/claude-haiku-5.5", 0.1, 0.01, 0.5},
 		{"mistralai/mistral-large-4-0", 0.7, 0.07, 2.1},
-		{"inclusionai/ling-3.1-flash", 0.045, 0.009, 0.135},
+		{"inclusionai/ling-3.1-flash", 0.06, 0.012, 0.18},
 		{"apodex/apodex-1.1-mini:free", 0, 0, 0},
 		{"unbiased/pareto-26.10-preview", 0.8, 0.03, 3.2},
 		{"anthropic/claude-sonnet-5.5", 2, 0.1, 10},
@@ -41,29 +41,29 @@ func TestOctoberOpenRouterPublishedRates(t *testing.T) {
 		{"~deepseek/deepseek-flash-latest", 0.036, 0.01, 0.5},
 		{"~openai/gpt-sol-latest", 2, 0.1, 10},
 		{"inclusionai/ling-3.0-flash-vl", 0.06, 0.012, 0.18},
-		{"deepseek/deepseek-v4.1-flash", 0.0507, 0.001014, 0.2028},
+		{"deepseek/deepseek-v4.1-flash", 0.0498, 0.000996, 0.1992},
 		{"inclusionai/ling-3.0-flash-sante", 0.042, 0.0084, 0.1232},
 		{"google/gemini-3.8-flash", 0.825, 0.0825, 4.125},
 		{"tencent/hy4-preview", 0.834, 0.042, 2.501},
 		{"inclusionai/ling-3.0-flash-fin", 0.042, 0.0084, 0.1232},
-		{"~z-ai/glm-flash-latest", 0.15, 0.03, 0.5},
-		{"z-ai/glm-5.3-flash", 0.15, 0.03, 0.5},
-		{"deepseek/deepseek-v4-flash-vision-exp", 0.44, 0.014, 1.32},
+		{"~z-ai/glm-flash-latest", 0.0399, 0.03, 0.0784},
+		{"z-ai/glm-5.3-flash", 0.0399, 0.03, 0.0784},
+		{"deepseek/deepseek-v4-flash-vision-exp", 0.2156, 0.00686, 0.6468},
 		{"~z-ai/glm-latest", 0.0699, 0.0689, 1.4},
 		{"z-ai/glm-5.3", 0.0699, 0.0689, 1.4},
-		{"qwen/qwen3.8-27b", 0.06, 0.059, 2.2},
+		{"qwen/qwen3.8-27b", 0.035, 0.0175, 1.5},
 		{"google/gemini-3.7-flash", 0.75, 0.075, 3.75},
-		{"deepseek/deepseek-v4-pro-0813", 0.111, 0.097, 4.44},
+		{"deepseek/deepseek-v4-pro-0813", 1.32, 0.044, 3.96},
 		{"nvidia/nemotron-3.5-lightning", 0.07, 0.04, 0.2},
-		{"~deepseek/deepseek-v4-flash-latest", 0.0434, 0.035, 0.3},
-		{"deepseek/deepseek-v4-flash-0731", 0.06, 0.015, 0.18},
+		{"~deepseek/deepseek-v4-flash-latest", 0.044, 0.0014, 0.132},
+		{"deepseek/deepseek-v4-flash-0731", 0.0443, 0.035, 0.3},
 		{"google/gemini-3.6-flash", 0.75, 0.075, 3.75},
 		{"google/gemini-3.5-flash-lite", 0.3, 0.03, 2.5},
 		{"moonshotai/kimi-k3", 0.192, 0.182, 16},
 		{"~x-ai/grok-latest", 2, 0.5, 6},
-		{"tencent/hy3", 0.132, 0.033, 0.528},
-		{"z-ai/glm-5.2", 0.007, 0.006, 6.8},
-		{"moonshotai/kimi-k2.7-code", 0.7, 0.17, 3.75},
+		{"tencent/hy3", 0.14, 0.035, 0.58},
+		{"z-ai/glm-5.2", 0.62, 0.14, 2.42},
+		{"moonshotai/kimi-k2.7-code", 0.6, 0.12, 3},
 		{"~anthropic/claude-haiku-latest", 0.1, 0.01, 0.5},
 		{"~google/gemini-pro-latest", 2, 0.1, 10},
 		{"~moonshotai/kimi-latest", 0.1824, 0.18, 11.0055},
@@ -71,12 +71,12 @@ func TestOctoberOpenRouterPublishedRates(t *testing.T) {
 		{"~anthropic/claude-sonnet-latest", 2, 0.1, 10},
 		{"qwen/qwen3.6-35b-a3b", 0.1, 0.025, 0.9},
 		{"qwen/qwen3.6-27b", 0.32, 0, 3.2},
-		{"deepseek/deepseek-v4-pro", 0.9, 0.25, 1.5},
+		{"deepseek/deepseek-v4-pro", 0.9, 0.2, 1.5},
 		{"deepseek/deepseek-v4-flash", 0.09, 0.018, 0.18},
 		{"moonshotai/kimi-k2.6", 0.65, 0.15, 3.41},
-		{"minimax/minimax-m2.7", 0.21, 0.042, 0.84},
+		{"minimax/minimax-m2.7", 0.6, 0, 1.8},
 		{"qwen/qwen3.5-35b-a3b", 0.14, 0.05, 1},
-		{"qwen/qwen3.5-27b", 0.3, 0, 2.4},
+		{"qwen/qwen3.5-27b", 0.26, 0, 2.6},
 		{"google/gemini-3.1-pro-preview-customtools", 2, 0.2, 12},
 		{"google/gemini-3.1-pro-preview", 2, 0.2, 12},
 		{"moonshotai/kimi-k2.5", 0.5, 0.15, 2.5},
@@ -87,8 +87,8 @@ func TestOctoberOpenRouterPublishedRates(t *testing.T) {
 		{"qwen/qwen3-vl-30b-a3b-thinking", 0.29, 0, 1},
 		{"qwen/qwen3-vl-30b-a3b-instruct", 0.15, 0, 0.6},
 		{"z-ai/glm-4.6", 0.5, 0.1, 2},
-		{"openai/gpt-oss-120b", 0.15, 0.075, 0.6},
-		{"openai/gpt-oss-20b", 0.018, 0.009, 0.09},
+		{"openai/gpt-oss-120b", 0.09, 0, 0.36},
+		{"openai/gpt-oss-20b", 0.017, 0.0085, 0.085},
 		{"qwen/qwen3-30b-a3b-instruct-2507", 0.1, 0.1, 0.3},
 		{"qwen/qwen3-235b-a22b-thinking-2507", 0.45, 0, 3.5},
 		{"qwen/qwen3-235b-a22b-2507", 0.14, 0.05, 0.8},
@@ -97,7 +97,7 @@ func TestOctoberOpenRouterPublishedRates(t *testing.T) {
 		{"google/gemini-2.5-pro-preview", 1.25, 0.125, 10},
 		{"meta-llama/llama-4-maverick", 0.35, 0.17, 1},
 		{"meta-llama/llama-4-scout", 0.1, 0, 0.3},
-		{"deepseek/deepseek-chat-v3-0324", 0.29, 0.11, 1.14},
+		{"deepseek/deepseek-chat-v3-0324", 0.25, 0, 1},
 		{"meta-llama/llama-3.3-70b-instruct", 0.71, 0.71, 0.71},
 		{"mistralai/mistral-nemo", 0.029, 0, 0.03},
 	} {
@@ -139,22 +139,22 @@ func TestOctoberOpenRouterHaikuTier(t *testing.T) {
 }
 
 // TestOctoberOpenRouterClockRates checks UTC boundaries and timezone invariance
-// for Tencent and the retired DeepSeek schedules. Current DeepSeek defaults stay
-// flat at these times because their November API entries no longer publish overrides.
+// for Tencent and the retired schedules of the two listed DeepSeek IDs. Those
+// DeepSeek defaults stay flat because their 2026-11-22 API entries have no overrides.
 func TestOctoberOpenRouterClockRates(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		id, at                string
 		input, cached, output float64
 	}{
-		{"deepseek/deepseek-v4.1-flash", "2026-11-16T00:59:59Z", 0.0507, 0.001014, 0.2028},
-		{"deepseek/deepseek-v4.1-flash", "2026-11-16T01:00:00Z", 0.0507, 0.001014, 0.2028},
-		{"deepseek/deepseek-v4.1-flash", "2026-11-16T04:00:00Z", 0.0507, 0.001014, 0.2028},
-		{"deepseek/deepseek-v4-pro-0813", "2026-11-16T06:00:00Z", 0.111, 0.097, 4.44},
-		{"deepseek/deepseek-v4-pro-0813", "2026-11-16T10:00:00Z", 0.111, 0.097, 4.44},
-		{"deepseek/deepseek-v4-pro-0813", "2026-11-15T06:00:00Z", 0.111, 0.097, 4.44},
-		{"tencent/hy3", "2026-10-12T15:59:59Z", 0.132, 0.033, 0.528},
-		{"tencent/hy3", "2026-10-12T16:00:00Z", 0.0825, 0.020625, 0.33},
+		{"deepseek/deepseek-v4.1-flash", "2026-11-16T00:59:59Z", 0.0498, 0.000996, 0.1992},
+		{"deepseek/deepseek-v4.1-flash", "2026-11-16T01:00:00Z", 0.0498, 0.000996, 0.1992},
+		{"deepseek/deepseek-v4.1-flash", "2026-11-16T04:00:00Z", 0.0498, 0.000996, 0.1992},
+		{"deepseek/deepseek-v4-pro-0813", "2026-11-16T06:00:00Z", 1.32, 0.044, 3.96},
+		{"deepseek/deepseek-v4-pro-0813", "2026-11-16T10:00:00Z", 1.32, 0.044, 3.96},
+		{"deepseek/deepseek-v4-pro-0813", "2026-11-15T06:00:00Z", 1.32, 0.044, 3.96},
+		{"tencent/hy3", "2026-10-12T15:59:59Z", 0.14, 0.035, 0.58},
+		{"tencent/hy3", "2026-10-12T16:00:00Z", 0.14, 0.035, 0.58},
 		{"tencent/hy4-preview", "2026-10-12T15:59:59Z", 0.834, 0.042, 2.501},
 		{"tencent/hy4-preview", "2026-10-12T16:00:00Z", 0.7506, 0.0378, 2.2509},
 	} {

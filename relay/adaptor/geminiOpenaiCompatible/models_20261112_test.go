@@ -22,6 +22,7 @@ func TestGeminiNovember12Catalog(t *testing.T) {
 	}{
 		{"gemini-4-carbon", "medium", 32_768, []string{"low", "medium", "high"}},
 		{"gemini-4-hydrogen", "high", 65_536, []string{"low", "medium", "high", "xhigh"}},
+		{"gemini-4-neon", "high", 65_536, []string{"low", "medium", "high", "xhigh"}},
 		{"gemini-4-argon", "medium", 32_768, []string{"low", "medium", "high"}},
 	} {
 		t.Run(tc.model, func(t *testing.T) {
@@ -140,10 +141,10 @@ func TestGemini4ConfigIsolation(t *testing.T) {
 	}
 	require.Empty(t, hydrogen.TimeWindows, "Hydrogen has no published promotional expiry")
 	require.Equal(t, "low", secondHydrogen.SupportedReasoningEfforts[0])
-	for _, name := range []string{"gemini-4-argon", "Gemini-4-Carbon", "GEMINI-4-HYDROGEN"} {
+	for _, name := range []string{"gemini-4-argon", "Gemini-4-Carbon", "GEMINI-4-HYDROGEN", "Gemini-4-Neon"} {
 		require.True(t, IsGemini4Model(name))
 	}
-	for _, name := range []string{"gemini-4-carbon-cyber-permissive", "gemini-4-carbon-preview", "gemini-4-unknown", "gemini-3.8-flash"} {
+	for _, name := range []string{"gemini-4-carbon-cyber-permissive", "gemini-4-carbon-preview", "gemini-4-neon-preview", "gemini-4-unknown", "gemini-3.8-flash"} {
 		require.False(t, IsGemini4Model(name), "do not guess an unknown model's contract")
 	}
 }

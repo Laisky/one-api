@@ -94,5 +94,20 @@ func thinkingmachinesModels() map[string]adaptor.ModelConfig {
 			HuggingFaceID:               "thinkingmachines/Inkling",
 			Description:                 "thinkingmachines/inkling:free on openrouter; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
+		"thinkingmachines/inkling-2-mini": {
+			Ratio:                       nativeRate(0.075),
+			CompletionRatio:             0.3 / 0.075,
+			CachedInputRatio:            nativeRate(0.015),
+			ContextLength:               1048576,
+			MaxOutputTokens:             65536,
+			InputModalities:             []string{"text", "image"},
+			OutputModalities:            []string{"text"},
+			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
+			SupportedSamplingParameters: []string{"frequency_penalty", "include_reasoning", "logprobs", "max_completion_tokens", "max_tokens", "min_p", "presence_penalty", "reasoning", "reasoning_effort", "repetition_penalty", "response_format", "seed", "stop", "structured_outputs", "temperature", "tool_choice", "tools", "top_k", "top_logprobs", "top_p"},
+			SupportedReasoningEfforts:   []string{"max", "high", "medium", "low", "minimal", "none"},
+			DefaultReasoningEffort:      "high",
+			HuggingFaceID:               "thinkingmachines/Inkling-2-Mini",
+			Description:                 "thinkingmachines/inkling-2-mini on OpenRouter; published host tariff, limits and capabilities checked 2026-11-22. Provider routing and separately metered tools can change charges.",
+		},
 	}
 }

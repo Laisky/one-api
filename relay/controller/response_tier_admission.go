@@ -36,11 +36,12 @@ func prepareResponseTierBody(c *gin.Context, meta *metalib.Meta, request *openai
 	return data, nil
 }
 
-// quoteResponseTierAdmission prices only active tier contracts against the
-// actual prepared native request. Parameters: c and meta supply effective
-// pricing, request and promptTokens retain standalone helper compatibility, and
-// prepared optionally supplies exact provider bytes. Returns: a complete tier
-// allowance, whether tiers apply, or a wrapped invalid-pricing/body error.
+// quoteResponseTierAdmission prices active tier contracts and qualified flat
+// OpenRouter cache-write contracts against the actual prepared native request.
+// Parameters: c and meta supply effective pricing, request and promptTokens
+// retain standalone helper compatibility, and prepared optionally supplies exact
+// provider bytes. Returns: a complete allowance, whether a qualified contract
+// applies, or a wrapped invalid-pricing/body error.
 func quoteResponseTierAdmission(c *gin.Context, meta *metalib.Meta, request *openai.ResponseAPIRequest, promptTokens int, prepared []byte) (int64, bool, error) {
 	if c == nil || meta == nil || request == nil {
 		return 0, false, errors.WithStack(errors.New("Responses tier quote requires request metadata"))
@@ -54,7 +55,8 @@ func quoteResponseTierAdmission(c *gin.Context, meta *metalib.Meta, request *ope
 	}
 	provider := resolvePricingAdaptor(meta)
 	cfg, known := pricing.ResolveModelConfigRatioOnly(request.Model, configs, provider, meta.StartTime)
-	if !known || len(cfg.Tiers) == 0 {
+	includeFlatTariff := includeFlatPromptCacheTariff(meta, request.Model)
+	if !known || (len(cfg.Tiers) == 0 && !includeFlatTariff) {
 		return 0, false, nil
 	}
 	quoted := request
@@ -99,7 +101,7 @@ func quoteResponseTierAdmission(c *gin.Context, meta *metalib.Meta, request *ope
 		ModelRatio: modelRatio, ChannelModelRatio: channelRatios, GroupRatio: groupRatio,
 		ChannelModelConfigs: configs, ChannelCompletionRatio: completionRatios,
 		PricingAdaptor: provider, RequestTime: meta.StartTime,
-	}, maxOutput, 0, quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h})
+	}, maxOutput, 0, quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h, IncludeFlatTariff: includeFlatTariff})
 	if err != nil {
 		return 0, applies, errors.Wrap(err, "quote complete Responses tier allowance")
 	}

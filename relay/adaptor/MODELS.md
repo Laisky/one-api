@@ -40,7 +40,7 @@ Do not replace a provider's tariff with the model creator's price or infer that 
 unpublished price is zero. Do not turn catalog metadata into account restrictions.
 
 Source URLs remain next to the provider definitions. The
-[November 16, 2026 catalogue review](../../docs/adaptor-model-refresh-20261116.md)
+[November 22, 2026 catalogue review](../../docs/adaptor-model-refresh-20261122.md)
 records every adaptor directory's disposition, source-backed updates, provider
 checkpoints, qualification evidence, and explicit exclusions. Directory coverage
 is not live-provider certification: account-specific tariffs, historical IDs,

@@ -88,6 +88,8 @@ func TestGetModelListIsSorted(t *testing.T) {
 	t.Parallel()
 
 	models := (&Adaptor{}).GetModelList()
-	require.Len(t, models, 205)
+	require.Len(t, models, 207)
+	require.Contains(t, models, "RadixArk/DaisyRose-27B")
+	require.Contains(t, models, "tencent/Hy4")
 	require.True(t, sort.StringsAreSorted(models))
 }

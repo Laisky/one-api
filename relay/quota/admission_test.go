@@ -8,6 +8,7 @@ import (
 
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
+	"github.com/Laisky/one-api/relay/adaptor/openrouter"
 	relaymodel "github.com/Laisky/one-api/relay/model"
 	"github.com/Laisky/one-api/relay/pricing"
 	"github.com/stretchr/testify/require"
@@ -179,4 +180,97 @@ func TestTierAdmissionOmittedOutputUsesProviderBound(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, withoutCap, required,
 		"quote must fund the provider-visible limit when the client did not send max_output_tokens")
+}
+
+// TestTierAdmissionFlatTariffOptIn verifies that opting in funds configured cache
+// writes, output choices, and the existing buffer without reviving provider
+// context tiers. Parameter t owns assertions; the test returns no value.
+func TestTierAdmissionFlatTariffOptIn(t *testing.T) {
+	const name = "openai/gpt-6.2-astra"
+	input := quota.ComputeInput{
+		ModelName: name, ModelRatio: 3, GroupRatio: 1.5,
+		PricingAdaptor: &openrouter.Adaptor{},
+		ChannelModelConfigs: map[string]model.ModelConfigLocal{name: {
+			Ratio: 3, CompletionRatio: 2, CachedInputRatio: .1, CacheWrite5mRatio: 7,
+		}},
+	}
+	provider, known := pricing.ResolveModelConfigRatioOnly(name, nil, input.PricingAdaptor, time.Time{})
+	require.True(t, known)
+	require.NotEmpty(t, provider.Tiers, "the fixture must exercise an override of a tiered provider tariff")
+
+	for _, prompt := range []int{100_000, 272_000, 272_001} {
+		input.Usage = &relaymodel.Usage{PromptTokens: prompt}
+		quote, applies, err := quota.EstimateTierAdmission(input, 2, 10, quota.AdmissionOptions{CacheWrite5m: true, OutputCount: 3})
+		require.NoError(t, err)
+		require.False(t, applies, "existing callers must retain flat-pricing behavior")
+		require.Zero(t, quote)
+
+		quote, applies, err = quota.EstimateTierAdmission(input, 2, 10, quota.AdmissionOptions{
+			CacheWrite5m: true, OutputCount: 3, IncludeFlatTariff: true,
+		})
+		require.NoError(t, err)
+		require.True(t, applies)
+		want := int64(math.Ceil((float64(prompt)*7 + 6*6 + 10*3) * 1.5))
+		require.Equal(t, want, quote, "flat channel rates remain authoritative across the provider's 272K boundary")
+		settlement := input
+		settlement.Usage = &relaymodel.Usage{PromptTokens: prompt, CompletionTokens: 6, CacheWrite5mTokens: prompt}
+		require.GreaterOrEqual(t, quote, quota.Compute(settlement).TotalQuota)
+
+		withoutWrites, applies, err := quota.EstimateTierAdmission(input, 2, 10, quota.AdmissionOptions{
+			OutputCount: 3, IncludeFlatTariff: true,
+		})
+		require.NoError(t, err)
+		require.True(t, applies)
+		require.Equal(t, int64(math.Ceil((float64(prompt)*3+6*6+10*3)*1.5)), withoutWrites,
+			"opting in does not itself invent cache-write intent")
+	}
+}
+
+// TestTierAdmissionFlatTariffBounds verifies that opted-in flat pricing still
+// uses published output limits and refuses unbounded or unknown tariffs.
+// Parameter t owns assertions; the test returns no value.
+func TestTierAdmissionFlatTariffBounds(t *testing.T) {
+	const name = "openai/gpt-6.2-astra"
+	provider := &openrouter.Adaptor{}
+	metadata, known := pricing.ResolveModelMetadata(name, provider, time.Time{})
+	require.True(t, known)
+	outputLimit := max(int(metadata.MaxTokens), int(metadata.MaxOutputTokens))
+	require.Greater(t, outputLimit, 20)
+	input := quota.ComputeInput{
+		Usage: &relaymodel.Usage{PromptTokens: 100}, ModelName: name,
+		ModelRatio: 3, GroupRatio: 1, PricingAdaptor: provider,
+		ChannelModelConfigs: map[string]model.ModelConfigLocal{name: {
+			Ratio: 3, CompletionRatio: 2, CacheWrite5mRatio: 7, MaxTokens: 20,
+		}},
+	}
+	options := quota.AdmissionOptions{CacheWrite5m: true, IncludeFlatTariff: true}
+	quote, applies, err := quota.EstimateTierAdmission(input, 0, 0, options)
+	require.NoError(t, err)
+	require.True(t, applies)
+	require.Equal(t, int64(100*7+outputLimit*6), quote,
+		"the channel estimate cannot reduce the upstream output bound")
+
+	input.ModelName = "unknown-flat-admission-fixture"
+	input.PricingAdaptor = nil
+	input.ChannelModelConfigs = nil
+	quote, applies, err = quota.EstimateTierAdmission(input, 10, 0, options)
+	require.NoError(t, err)
+	require.False(t, applies, "opting in cannot qualify an unknown tariff")
+	require.Zero(t, quote)
+
+	input.ChannelModelConfigs = map[string]model.ModelConfigLocal{input.ModelName: {
+		Ratio: 3, CompletionRatio: 2, CacheWrite5mRatio: 7,
+	}}
+	_, applies, err = quota.EstimateTierAdmission(input, 0, 0, options)
+	require.True(t, applies)
+	require.ErrorContains(t, err, "no bounded output limit")
+	input.GroupRatio = 0
+	quote, applies, err = quota.EstimateTierAdmission(input, 0, 0, options)
+	require.NoError(t, err)
+	require.True(t, applies)
+	require.Zero(t, quote, "an authoritative free group needs no generation allowance")
+	input.GroupRatio = math.MaxFloat64
+	_, applies, err = quota.EstimateTierAdmission(input, 1, 0, options)
+	require.True(t, applies)
+	require.Error(t, err, "flat admission must retain checked arithmetic")
 }

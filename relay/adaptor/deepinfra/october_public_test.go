@@ -47,14 +47,14 @@ func TestOctoberDeepInfraPublishedPrices(t *testing.T) {
 }
 
 // TestOctoberDeepInfraDiscountPreservation pins November discounted prices and
-// the ended GLM Flash promotion so neither stale nor doubled discounts are used.
+// the current GLM Flash 33% discount so neither stale nor doubled discounts are used.
 func TestOctoberDeepInfraDiscountPreservation(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		id                    string
 		input, cached, output float64
 	}{
-		{"zai-org/GLM-5.3-Flash", 0.15, 0.03, 0.5},
+		{"zai-org/GLM-5.3-Flash", 0.1005, 0.0201, 0.335},
 		{"deepseek-ai/DeepSeek-V4.1-Flash", 0.14, 0.0042, 0.42},
 		{"Qwen/Qwen3.8-27B", 0.15, 0.0375, 1.875},
 		{"zai-org/GLM-5.3", 0.5625, 0.125, 2.5},

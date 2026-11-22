@@ -7,6 +7,33 @@ import "github.com/Laisky/one-api/relay/adaptor"
 // Source: https://api.deepinfra.com/models/list
 func otherModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
+		// Sources: https://api.deepinfra.com/models/RadixArk/DaisyRose-27B and
+		// https://deepinfra.com/RadixArk/DaisyRose-27B, checked 2026-11-22.
+		"RadixArk/DaisyRose-27B": {
+			Ratio:             nativeRate(0.15),
+			CompletionRatio:   1.875 / 0.15,
+			CachedInputRatio:  nativeRate(0.0375),
+			ContextLength:     262144,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			Quantization:      "fp8",
+			HuggingFaceID:     "RadixArk/DaisyRose-27B",
+			Description:       "DaisyRose 27B on DeepInfra; the published 25% discount is applied once to input, cached input and output. No expiry, hosted output ceiling or complete reasoning-effort vocabulary is published. FP8 serving is stated on the provider model card. Checked 2026-11-22.",
+		},
+		// Source: https://api.deepinfra.com/models/tencent/Hy4, checked 2026-11-22.
+		"tencent/Hy4": {
+			Ratio:             nativeRate(0.834),
+			CompletionRatio:   2.501 / 0.834,
+			CachedInputRatio:  nativeRate(0.04199999814),
+			ContextLength:     1048576,
+			MaxOutputTokens:   131072,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "json_mode", "structured_outputs", "reasoning"},
+			Quantization:      "fp4",
+			Description:       "Tencent Hy4 on DeepInfra; published host limits and token tariff checked 2026-11-22. The cached-input price preserves the API multiplier 0.05035971. No complete reasoning-effort vocabulary is published.",
+		},
 		"Audio8/Audio8-TTS-Preview-0.6b": {
 			Ratio:            nativeRate(5),
 			CompletionRatio:  1,

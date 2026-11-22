@@ -7,15 +7,19 @@ import (
 	"github.com/Laisky/one-api/relay/adaptor"
 )
 
-// nativeOnlyModelIDs lists OpenAI models whose availability and tariff were
-// verified only for OpenAI's first-party API in the 2026-11-16 audit. Hosts that
-// inherit OpenAI's catalog (Azure AI Foundry, the AIProxy library API) publish
-// no contract for them, so those hosts neither advertise nor price them: a
+// nativeOnlyModelIDs lists models whose bundled tariff is verified only for
+// OpenAI's first-party API, reviewed 2026-11-22. Azure publishes GPT-6.2
+// availability, but its retrieved pricing table contains no numeric quote.
+// Hosts inheriting OpenAI's catalog (Azure AI Foundry, the AIProxy library API)
+// therefore neither advertise nor price these IDs automatically: a
 // deployment is billable only through an operator-configured channel tariff.
 // Sources:
 //   - https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/models-sold-directly-by-azure
+//   - https://azure.microsoft.com/en-us/pricing/details/azure-openai/
 //   - https://docs.aiproxy.io/dev/library
 var nativeOnlyModelIDs = map[string]struct{}{
+	"gpt-6.2-astra":          {},
+	"gpt-6.2-sol":            {},
 	"gpt-6-cyber":            {},
 	"gpt-image-2.6-sunburst": {},
 	"gpt-image-2.6-flare":    {},
@@ -28,7 +32,7 @@ var inheritedModelRatios = buildInheritedModelRatios()
 // inheritedModelList is the discovery list derived from inheritedModelRatios.
 var inheritedModelList = adaptor.GetModelListFromPricing(inheritedModelRatios)
 
-// IsNativeOnlyModel reports whether name is published only for OpenAI's
+// IsNativeOnlyModel reports whether name has a bundled tariff only for OpenAI's
 // first-party API. Parameters: name is a requested or mapped model ID; matching
 // ignores case and surrounding whitespace so a respelled deployment cannot
 // escape the policy. Returns: true when an inheriting host needs an operator tariff.

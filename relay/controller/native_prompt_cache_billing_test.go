@@ -24,6 +24,8 @@ import (
 //   - gpt-6-cyber short context: input $20 (10), 30m write $25 (12.5), output $100 (50).
 //   - gpt-6-cyber above 272,000 input: input $40 (20), output $150 (75), write unpublished.
 //   - gpt-6.1-terra short context: input $1 (0.5), 30m write $1.25 (0.625), output $5 (2.5).
+//   - gpt-6.2-astra short context: input $8 (4), 30m write $10 (5), output $40 (20).
+//   - gpt-6.2-sol short context: input $2 (1), 30m write $2.5 (1.25), output $10 (5).
 
 // implicitCacheObservation records what the fake OpenAI upstream received and
 // the balance it observed while the admission hold was outstanding.
@@ -171,9 +173,12 @@ func TestNativePromptCacheImplicitWriteReservation(t *testing.T) {
 	for _, tc := range []struct {
 		model             string
 		writeRate, output float64
+		exact             int64
 	}{
-		{model: "gpt-6-cyber", writeRate: 12.5, output: 50},
+		{model: "gpt-6-cyber", writeRate: 12.5, output: 50, exact: 31_400},
 		{model: "gpt-6.1-terra", writeRate: 0.625, output: 2.5},
+		{model: "gpt-6.2-astra", writeRate: 5, output: 20, exact: 12_560},
+		{model: "gpt-6.2-sol", writeRate: 1.25, output: 5, exact: 3_140},
 	} {
 		for _, protocol := range []string{"chat", "responses", "messages"} {
 			t.Run(tc.model+"/"+protocol, func(t *testing.T) {
@@ -193,8 +198,8 @@ func TestNativePromptCacheImplicitWriteReservation(t *testing.T) {
 				highest := int64(float64(result.promptTokens)*tc.writeRate + 128*tc.output)
 				require.GreaterOrEqual(t, reserved, highest,
 					"the hold must cover implicit 30m cache writes of the whole admitted prompt")
-				if tc.model == "gpt-6-cyber" {
-					requireExactSettlement(t, result, 2_000*25/2+128*50)
+				if tc.exact > 0 {
+					requireExactSettlement(t, result, tc.exact)
 				}
 			})
 		}

@@ -25,14 +25,15 @@ func TestPricingCatalogsAreDisjoint(t *testing.T) {
 
 	a := &Adaptor{}
 	merged := a.GetDefaultModelPricing()
-	// The November native additions have no independently verified Foundry
-	// contract. Their deliberate exclusion must not mask any other lost entry.
-	for _, name := range []string{"gpt-6-cyber", "gpt-image-2.6-sunburst", "gpt-image-2.6-flare"} {
+	// These native additions have no independently verified numeric Foundry
+	// tariff. Their deliberate exclusion must not mask any other lost entry.
+	excluded := []string{"gpt-6.2-astra", "gpt-6.2-sol", "gpt-6-cyber", "gpt-image-2.6-sunburst", "gpt-image-2.6-flare"}
+	for _, name := range excluded {
 		require.Contains(t, openai.ModelRatios, name)
 		require.NotContains(t, merged, name)
 	}
-	require.Equal(t, len(openai.ModelRatios)+len(anthropic.ModelRatios)-3, len(merged),
-		"merged pricing must retain both catalogs except the three unverified native-only additions")
+	require.Equal(t, len(openai.ModelRatios)+len(anthropic.ModelRatios)-len(excluded), len(merged),
+		"merged pricing must retain both catalogs except the explicitly unverified host tariffs")
 }
 
 // TestEveryAdvertisedModelBillsAtItsFamilyRate quantifies billing correctness for

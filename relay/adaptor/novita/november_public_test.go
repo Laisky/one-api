@@ -23,7 +23,7 @@ func TestNovemberNovitaPublishedCatalog(t *testing.T) {
 		input, cached, output float64
 		context, maxOutput    int32
 	}{
-		{"tencent/hy4-flash", 0.07, 0.003, 0.281, 1000000, 64000},
+		{"tencent/hy4-flash", 0.035, 0.0015, 0.1405, 1000000, 64000},
 		{"tencent/hy4", 0.417, 0.021, 1.2505, 1000000, 64000},
 		{"deepseek/deepseek-v4.1-flash-1017", 0.3, 0.006, 1.2, 1048576, 393216},
 		{"zai-org/glm-5.3-flashX", 0.37, 0.075, 1.25, 1048576, 131072},

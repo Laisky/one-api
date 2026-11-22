@@ -43,7 +43,10 @@ var gpt6CyberLongContextTier = adaptor.ModelRatioTier{
 // Only published model IDs are listed;
 // account provisioning remains the channel administrator's responsibility.
 //
-// Sources verified through 2026-10-26:
+// Sources verified through 2026-11-22:
+//   - https://developers.openai.com/api/docs/models/gpt-6.2-astra
+//   - https://developers.openai.com/api/docs/models/gpt-6.2-sol
+//   - https://developers.openai.com/api/docs/guides/deployment-checklist
 //   - https://developers.openai.com/api/docs/models/gpt-6-astra
 //   - https://developers.openai.com/api/docs/models/gpt-6-sol
 //   - https://developers.openai.com/api/docs/models/gpt-6-luna
@@ -53,6 +56,52 @@ var gpt6CyberLongContextTier = adaptor.ModelRatioTier{
 //
 // Cyber source verified 2026-11-16: https://developers.openai.com/api/docs/models/gpt-6-cyber
 var gpt6ModelRatios = map[string]adaptor.ModelConfig{
+	"gpt-6.2-astra": {
+		Ratio:             8.0 * ratio.MilliTokensUsd,
+		CompletionRatio:   40.0 / 8.0,
+		CachedInputRatio:  0.4 * ratio.MilliTokensUsd,
+		CacheWrite5mRatio: 10.0 * ratio.MilliTokensUsd, // Legacy field name; OpenAI uses 30m.
+		Tiers: []adaptor.ModelRatioTier{{
+			Ratio:               16.0 * ratio.MilliTokensUsd,
+			CompletionRatio:     60.0 / 16.0,
+			CachedInputRatio:    0.8 * ratio.MilliTokensUsd,
+			CacheWrite5mRatio:   20.0 * ratio.MilliTokensUsd,
+			InputTokenThreshold: 272_001,
+		}},
+		ContextLength:               1_050_000,
+		MaxOutputTokens:             128_000,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           []string{"reasoning", "streaming", "tools", "structured_outputs", "web_search", "prompt_caching"},
+		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   []string{"low", "medium", "high", "xhigh", "max"},
+		DefaultReasoningEffort:      "medium",
+		Description: "GPT-6.2 Astra: reasoning for complex coding and professional work. Maximum input is 922,000 tokens; tools require Responses. " +
+			"Standard HTTP pricing with 30m cache writes; inputs over 272K use the full-request long-context tier. 12h caching and other service tiers are not supported by this tariff.",
+	},
+	"gpt-6.2-sol": {
+		Ratio:             2.0 * ratio.MilliTokensUsd,
+		CompletionRatio:   10.0 / 2.0,
+		CachedInputRatio:  0.1 * ratio.MilliTokensUsd,
+		CacheWrite5mRatio: 2.5 * ratio.MilliTokensUsd, // Legacy field name; OpenAI uses 30m.
+		Tiers: []adaptor.ModelRatioTier{{
+			Ratio:               4.0 * ratio.MilliTokensUsd,
+			CompletionRatio:     15.0 / 4.0,
+			CachedInputRatio:    0.2 * ratio.MilliTokensUsd,
+			CacheWrite5mRatio:   5.0 * ratio.MilliTokensUsd,
+			InputTokenThreshold: 272_001,
+		}},
+		ContextLength:               1_050_000,
+		MaxOutputTokens:             128_000,
+		InputModalities:             []string{"text", "image"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           []string{"reasoning", "streaming", "tools", "structured_outputs", "web_search", "prompt_caching"},
+		SupportedSamplingParameters: reasoningSamplingParameters(),
+		SupportedReasoningEfforts:   []string{"low", "medium", "high", "xhigh", "max"},
+		DefaultReasoningEffort:      "medium",
+		Description: "GPT-6.2 Sol: reasoning for everyday coding and agent workflows. Maximum input is 922,000 tokens; tools require Responses. " +
+			"Standard HTTP pricing with 30m cache writes; inputs over 272K use the full-request long-context tier. 12h caching and other service tiers are not supported by this tariff.",
+	},
 	"gpt-6-astra": {
 		Ratio:                       10.0 * ratio.MilliTokensUsd,
 		CompletionRatio:             50.0 / 10.0,
