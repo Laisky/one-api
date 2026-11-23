@@ -30,13 +30,20 @@ export const createChannelSchema = (tr?: SchemaTranslationFn) => {
     priority: z.coerce.number<string | number>().int().default(0),
     weight: z.coerce.number<string | number>().int().default(0),
     ratelimit: z.coerce.number<string | number>().int().min(0).default(0),
-    // AWS and Vertex AI specific config
+    // Channel config JSON (Go model.ChannelConfig). The object is loose so stored keys this form
+    // does not edit, including keys added to the backend later, round-trip unchanged on save
+    // instead of being silently stripped.
     config: z
-      .object({
+      .looseObject({
         region: z.string().optional(),
         ak: z.string().optional(),
         sk: z.string().optional(),
         user_id: z.string().optional(),
+        // Typed overrides of the legacy `other` field: api_version (Azure, Xunfei, Gemini),
+        // library_id (AI Proxy Library), and plugin (Ali). The relay prefers them over `other`.
+        api_version: z.string().optional(),
+        library_id: z.string().optional(),
+        plugin: z.string().optional(),
         vertex_ai_project_id: z.string().optional(),
         vertex_ai_adc: z.string().optional(),
         auth_type: z.string().default('personal_access_token'),

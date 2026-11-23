@@ -228,8 +228,52 @@ export const sanitizeJsonField = (jsonString: string): string => {
 
 const isClockHHMM = (value: unknown): value is string => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 
-// Enhanced model configs validation
-export const validateModelConfigs = (configStr: string) => {
+/**
+ * MODEL_CONFIG_RECOGNIZED_KEYS lists the top-level keys of one model_configs entry that the backend
+ * understands: the JSON keys of model.ModelConfigLocal (model/channel_pricing_config.go). An entry
+ * may carry any subset of them, including none at all, because every field is optional server-side
+ * (for example `{"image":{"price_per_image_usd":0.2}}`, or the `{}` the legacy image-price migration
+ * writes when the stored legacy price was zero).
+ */
+export const MODEL_CONFIG_RECOGNIZED_KEYS: ReadonlySet<string> = new Set([
+  'per_call',
+  'per_page',
+  'ratio',
+  'completion_ratio',
+  'cached_input_ratio',
+  'cache_write_5m_ratio',
+  'cache_write_1h_ratio',
+  'tiers',
+  'max_tokens',
+  'context_length',
+  'video',
+  'audio',
+  'image',
+  'embedding',
+  'time_windows',
+]);
+
+/**
+ * ModelConfigsValidationResult is the outcome of validateModelConfigs: `error` is the English
+ * message, and `errorKey`/`errorParams`, when present, let the caller localize it under
+ * `channels.edit`.
+ */
+export interface ModelConfigsValidationResult {
+  valid: boolean;
+  error?: string;
+  errorKey?: string;
+  errorParams?: Record<string, string>;
+}
+
+/**
+ * validateModelConfigs checks admin-entered (JSONC) model_configs text before saving. It takes the
+ * raw text and returns `{ valid: true }` or `{ valid: false, error }`. It accepts everything the
+ * backend accepts: an empty entry, or an entry with at least one recognized key
+ * (MODEL_CONFIG_RECOGNIZED_KEYS). It rejects only malformed JSON, non-object entries, invalid
+ * values of the fields it type-checks, and non-empty entries whose keys are all unrecognized,
+ * which are almost always typos that the backend would silently ignore.
+ */
+export const validateModelConfigs = (configStr: string): ModelConfigsValidationResult => {
   if (!configStr || configStr.trim() === '') {
     return { valid: true };
   }
@@ -312,15 +356,14 @@ export const validateModelConfigs = (configStr: string) => {
         }
       }
 
-      const hasPricingField =
-        configObj.ratio !== undefined ||
-        configObj.completion_ratio !== undefined ||
-        configObj.max_tokens !== undefined ||
-        (Array.isArray(configObj.time_windows) && configObj.time_windows.length > 0);
-      if (!hasPricingField) {
+      const entryKeys = Object.keys(configObj);
+      if (entryKeys.length > 0 && !entryKeys.some((key) => MODEL_CONFIG_RECOGNIZED_KEYS.has(key))) {
+        const keys = entryKeys.join(', ');
         return {
           valid: false,
-          error: `Model "${modelName}" must include pricing configuration`,
+          error: `Model "${modelName}" has no recognized configuration keys (unknown: ${keys})`,
+          errorKey: 'validation.model_configs_unrecognized_keys',
+          errorParams: { model: modelName, keys },
         };
       }
     }
@@ -434,6 +477,14 @@ export const validateToolingConfig = (configStr: string) => {
     };
   }
 };
+
+/**
+ * CONFIG_OVERRIDES_OF_OTHER lists the channel config keys that override the legacy `other` field
+ * for specific channel types (Go middleware/distributor.go): api_version for Azure, Xunfei, and
+ * Gemini, library_id for AI Proxy Library, and plugin for Ali. The form does not edit them, so they
+ * round-trip unchanged on save, but changing the channel type clears them together with `other`.
+ */
+export const CONFIG_OVERRIDES_OF_OTHER: readonly string[] = ['api_version', 'library_id', 'plugin'];
 
 /**
  * BuildChannelSubmitPayloadOptions captures all the contextual flags that

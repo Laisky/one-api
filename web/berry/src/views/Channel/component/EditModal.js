@@ -46,6 +46,28 @@ const checkedIcon = <CheckBoxIcon fontSize="small" />;
 const filter = createFilterOptions();
 const isClockHHMM = (value) => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 
+// MODEL_CONFIG_RECOGNIZED_KEYS lists the model_configs entry keys the backend understands: the JSON
+// keys of model.ModelConfigLocal (model/channel_pricing_config.go). Every field is optional
+// server-side, so an entry such as {"image":{"price_per_image_usd":0.2}}, or the {} the legacy
+// image-price migration writes, is valid.
+const MODEL_CONFIG_RECOGNIZED_KEYS = new Set([
+  'per_call',
+  'per_page',
+  'ratio',
+  'completion_ratio',
+  'cached_input_ratio',
+  'cache_write_5m_ratio',
+  'cache_write_1h_ratio',
+  'tiers',
+  'max_tokens',
+  'context_length',
+  'video',
+  'audio',
+  'image',
+  'embedding',
+  'time_windows'
+]);
+
 const validationSchema = Yup.object().shape({
   is_edit: Yup.boolean(),
   name: Yup.string().required('名称 不能为空'),
@@ -141,14 +163,13 @@ const validationSchema = Yup.object().shape({
           }
         }
 
-        // Check if at least one meaningful field is provided
-        if (
-          config.ratio === undefined &&
-          config.completion_ratio === undefined &&
-          config.max_tokens === undefined &&
-          (!Array.isArray(config.time_windows) || config.time_windows.length === 0)
-        ) {
-          return this.createError({ message: `模型"${modelName}"必须至少有一个配置字段（ratio、completion_ratio或max_tokens）` });
+        // Accept an empty entry or one with at least one recognized key; reject only a non-empty
+        // entry whose keys are all unrecognized, which is almost always a typo the backend ignores.
+        const entryKeys = Object.keys(config);
+        if (entryKeys.length > 0 && !entryKeys.some((key) => MODEL_CONFIG_RECOGNIZED_KEYS.has(key))) {
+          return this.createError({
+            message: `Model "${modelName}" has no recognized configuration keys (unknown: ${entryKeys.join(', ')})`
+          });
         }
       }
 

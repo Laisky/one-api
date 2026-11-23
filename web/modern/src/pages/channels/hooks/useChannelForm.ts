@@ -2,13 +2,14 @@ import { useNotifications } from '@/components/ui/notifications';
 import { api } from '@/lib/api';
 import { parseGroupList } from '@/lib/group-name';
 import { zodResolver } from '@/lib/zod-resolver';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CHANNEL_TYPES_WITH_DEDICATED_BASE_URL } from '../constants';
 import {
   buildChannelSubmitPayload,
+  CONFIG_OVERRIDES_OF_OTHER,
   isValidJSON,
   normalizeChannelType,
   parsePrivateChannelJSON,
@@ -20,7 +21,7 @@ import {
   validateModelConfigs,
 } from '../helpers';
 import { createChannelSchema, type ChannelConfigForm, type ChannelForm, type ChannelFormInput, type EndpointInfo } from '../schemas';
-import { fetchChannelPricingGaps, getChannelMappingWarnings, type ChannelPricingGap } from './channelSaveWarnings';
+import { collectChannelSaveWarnings, type ChannelPricingGap, type ChannelSaveWarnings } from './channelSaveWarnings';
 /** useChannelForm manages channel loading, validation, submission, and related UI state, returning the complete page model. */
 export const useChannelForm = () => {
   const params = useParams();
@@ -44,6 +45,8 @@ export const useChannelForm = () => {
   const [allEndpoints, setAllEndpoints] = useState<EndpointInfo[]>([]);
   const [formInitialized, setFormInitialized] = useState(!isEdit);
   const [loadedChannelType, setLoadedChannelType] = useState<number | null>(null);
+  // The channel exactly as loaded for editing; save warnings report only what the edit introduces relative to it.
+  const loadedChannelRef = useRef<ChannelForm | null>(null);
   // State for channel type change confirmation dialog
   const [pendingTypeChange, setPendingTypeChange] = useState<{
     fromType: number;
@@ -299,6 +302,7 @@ export const useChannelForm = () => {
         }
 
         setLoadedChannelType(channelType);
+        loadedChannelRef.current = formData;
         reset(formData);
         await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -398,18 +402,23 @@ export const useChannelForm = () => {
   /**
    * onSubmit intercepts a validated save so admins can review Model Mapping entries that look wrong
    * and supported models that request admission would refuse for missing channel pricing; it takes
-   * the form data and either opens the save warning dialog or submits. The pricing check is
-   * advisory and fails open, so it never blocks saving by itself.
+   * the form data and either opens the save warning dialog or submits. When editing a channel of an
+   * unchanged type, only warnings the edit introduced are shown. The pricing check is advisory and
+   * fails open, so it never blocks saving by itself.
    */
   const onSubmit = async (data: ChannelForm) => {
-    const { unreachableKeys, unknownTargets } = getChannelMappingWarnings(data, modelsCatalog);
-    let pricingGaps: ChannelPricingGap[] = [];
     setIsSubmitting(true);
+    let warnings: ChannelSaveWarnings;
     try {
-      pricingGaps = await fetchChannelPricingGaps(data, { isEdit, watchType: data.type, watchConfig });
+      warnings = await collectChannelSaveWarnings(data, {
+        baseline: isEdit ? loadedChannelRef.current : null,
+        modelsCatalog,
+        payloadOptions: { isEdit, watchType: data.type, watchConfig },
+      });
     } finally {
       setIsSubmitting(false);
     }
+    const { unreachableKeys, unknownTargets, pricingGaps } = warnings;
     if (unreachableKeys.length > 0 || unknownTargets.length > 0 || pricingGaps.length > 0) {
       setPendingSaveConfirmation({
         data,
@@ -443,13 +452,15 @@ export const useChannelForm = () => {
       if (data.model_configs) {
         const validation = validateModelConfigs(data.model_configs);
         if (!validation.valid) {
+          const validationError =
+            validation.errorKey && validation.error ? tr(validation.errorKey, validation.error, validation.errorParams) : validation.error;
           form.setError('model_configs', {
-            message: validation.error || tr('model_configs.invalid', 'Invalid model configs format'),
+            message: validationError || tr('model_configs.invalid', 'Invalid model configs format'),
           });
           notify({
             type: 'error',
             title: tr('validation.model_configs_title', 'Invalid configs'),
-            message: validation.error || tr('validation.model_configs_message', 'Model Configs are invalid.'),
+            message: validationError || tr('validation.model_configs_message', 'Model Configs are invalid.'),
           });
           return;
         }
@@ -624,12 +635,16 @@ export const useChannelForm = () => {
         shouldValidate: true,
         shouldDirty: true,
       });
-      // Clear related fields that may not be compatible with the new type
+      // Clear related fields that may not be compatible with the new type, including the typed
+      // config overrides of `other`, which the relay would otherwise apply to the new type.
       setValue('base_url', '');
       setValue('other', '');
+      const config: Record<string, unknown> = { ...(getValues('config') ?? {}) };
+      CONFIG_OVERRIDES_OF_OTHER.forEach((key) => delete config[key]);
+      setValue('config', config as ChannelFormInput['config']);
       setPendingTypeChange(null);
     }
-  }, [pendingTypeChange, setValue]);
+  }, [pendingTypeChange, setValue, getValues]);
 
   /**
    * Cancels a pending type change and reverts the selection.

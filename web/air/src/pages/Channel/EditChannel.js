@@ -35,6 +35,16 @@ const MODEL_CONFIGS_EXAMPLE = {
 
 const isClockHHMM = (value) => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 
+// MODEL_CONFIG_RECOGNIZED_KEYS lists the model_configs entry keys this editor accepts: the JSON keys
+// of the backend model.ModelConfigLocal (model/channel_pricing_config.go) plus this editor's
+// tool_whitelist/tool_pricing. Every field is optional server-side, so an entry such as
+// {"image":{"price_per_image_usd":0.2}}, or the {} the legacy image-price migration writes, is valid.
+const MODEL_CONFIG_RECOGNIZED_KEYS = new Set([
+    'per_call', 'per_page', 'ratio', 'completion_ratio', 'cached_input_ratio', 'cache_write_5m_ratio',
+    'cache_write_1h_ratio', 'tiers', 'max_tokens', 'context_length', 'video', 'audio', 'image', 'embedding',
+    'time_windows', 'tool_whitelist', 'tool_pricing',
+]);
+
 // Enhanced validation for model configs
 const validateModelConfigs = (configStr) => {
     if (!configStr || configStr.trim() === '') {
@@ -139,13 +149,11 @@ const validateModelConfigs = (configStr) => {
                 }
             }
 
-            // Check if at least one meaningful field is provided
-            const hasPricingField = config.ratio !== undefined || config.completion_ratio !== undefined || config.max_tokens !== undefined ||
-                (Array.isArray(config.time_windows) && config.time_windows.length > 0);
-            const hasToolField = (Array.isArray(config.tool_whitelist) && config.tool_whitelist.length > 0) ||
-                (config.tool_pricing && Object.keys(config.tool_pricing).length > 0);
-            if (!hasPricingField && !hasToolField) {
-                return { valid: false, error: `模型"${modelName}"必须包含价格配置或工具配置` };
+            // Accept an empty entry or one with at least one recognized key; reject only a non-empty
+            // entry whose keys are all unrecognized, which is almost always a typo the backend ignores.
+            const entryKeys = Object.keys(config);
+            if (entryKeys.length > 0 && !entryKeys.some((key) => MODEL_CONFIG_RECOGNIZED_KEYS.has(key))) {
+                return { valid: false, error: `Model "${modelName}" has no recognized configuration keys (unknown: ${entryKeys.join(', ')})` };
             }
         }
 

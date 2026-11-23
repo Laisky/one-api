@@ -408,7 +408,7 @@
         "pricing_description": "このチャンネルのモデル設定で価格を設定するまで、以下のモデルへのリクエストは拒否されます：",
         "pricing_hint": "不足している価格を今すぐ追加するか、このまま保存して、これらのモデルにトラフィックを送る前に価格を設定してください。",
         "pricing_requirement": {
-          "image_price_per_image_usd": "正の image.price_per_image_usd（画像 1 枚あたりの予約価格およびフォールバック価格）を設定してください。",
+          "image_price_per_image_usd": "このモデルの画像出力トークンの価格（ratio と completion_ratio）を設定して画像 1 枚あたりのデフォルト予約額を導出できるようにするか、正の image.price_per_image_usd を設定してください。",
           "live_tariff": "Live の価格を設定してください：ratio、completion_ratio、音声の prompt と completion の倍率、画像の prompt_ratio。",
           "tariff_supplement": "このプロバイダーが必要とするキャッシュ価格を設定してください：cached_input_ratio、および必要に応じて cache_write_5m_ratio と cache_write_1h_ratio。",
           "token_tariff": "正の ratio と completion_ratio を、すべての段階を含めて設定してください。"
@@ -538,6 +538,7 @@
         "mapping_targets_not_recognized": "これらのマッピングターゲットは、このチャンネルのモデルとして認識されません: {{entries}}",
         "model_configs_message": "モデル設定が無効です。",
         "model_configs_title": "無効な設定",
+        "model_configs_unrecognized_keys": "モデル「{{model}}」に認識できる設定キーがありません（不明なキー：{{keys}}）",
         "model_mapping_invalid": "モデルマッピングに無効な JSON が含まれています。",
         "model_mapping_invalid_entries": "これらのモデルマッピング項目は値が空、または文字列ではありません: {{keys}}",
         "model_mapping_parse_error": "モデルマッピングの JSON が無効です: {{error}}",

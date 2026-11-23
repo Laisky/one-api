@@ -408,7 +408,7 @@
         "pricing_description": "Les requêtes vers les modèles suivants seront refusées tant que ce canal ne leur aura pas attribué de prix dans les Configurations de modèle :",
         "pricing_hint": "Ajoutez maintenant les prix manquants, ou enregistrez quand même et tarifez ces modèles avant de leur envoyer du trafic.",
         "pricing_requirement": {
-          "image_price_per_image_usd": "Définissez un image.price_per_image_usd positif (le prix de réservation et de repli par image).",
+          "image_price_per_image_usd": "Tarifez les jetons de sortie image de ce modèle (ratio et completion_ratio) afin que la réservation par image par défaut soit calculée, ou définissez un image.price_per_image_usd positif.",
           "live_tariff": "Définissez les prix Live : ratio, completion_ratio, les ratios prompt et completion audio, et le prompt_ratio image.",
           "tariff_supplement": "Définissez les prix de cache exigés par ce fournisseur : cached_input_ratio et, si nécessaire, cache_write_5m_ratio et cache_write_1h_ratio.",
           "token_tariff": "Définissez un ratio et un completion_ratio positifs, y compris pour chaque palier."
@@ -538,6 +538,7 @@
         "mapping_targets_not_recognized": "Ces cibles de mappage ne sont pas reconnues comme modèles de ce canal : {{entries}}",
         "model_configs_message": "Les configurations de modèle sont invalides.",
         "model_configs_title": "Configurations invalides",
+        "model_configs_unrecognized_keys": "Le modèle « {{model}} » ne contient aucune clé de configuration reconnue (inconnues : {{keys}})",
         "model_mapping_invalid": "Le mappage de modèles contient un JSON invalide.",
         "model_mapping_invalid_entries": "Ces entrées de Model Mapping ont des valeurs vides ou non chaînes : {{keys}}",
         "model_mapping_parse_error": "Le JSON de Model Mapping est invalide : {{error}}",

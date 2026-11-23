@@ -408,7 +408,7 @@
         "pricing_description": "在本渠道的“模型配置”为以下模型定价之前，对它们的请求将被拒绝：",
         "pricing_hint": "请现在补充缺失的价格，或选择“仍然保存”，并在向这些模型发送流量前完成定价。",
         "pricing_requirement": {
-          "image_price_per_image_usd": "设置正数的 image.price_per_image_usd（单张图片的预留与兜底价格）。",
+          "image_price_per_image_usd": "为该模型的图片输出 token 定价（ratio 和 completion_ratio），以便推导默认的单张图片预留价格；或设置正数的 image.price_per_image_usd。",
           "live_tariff": "设置 Live 价格：ratio、completion_ratio、音频 prompt 与 completion 倍率，以及图像 prompt_ratio。",
           "tariff_supplement": "设置该服务商要求的缓存价格：cached_input_ratio，并在需要时设置 cache_write_5m_ratio 和 cache_write_1h_ratio。",
           "token_tariff": "设置正数的 ratio 与 completion_ratio（包括每个分档）。"
@@ -538,6 +538,7 @@
         "mapping_targets_not_recognized": "以下模型映射目标不在该渠道已知的模型列表中：{{entries}}",
         "model_configs_message": "模型配置无效。",
         "model_configs_title": "无效配置",
+        "model_configs_unrecognized_keys": "模型“{{model}}”没有可识别的配置键（未知键：{{keys}}）",
         "model_mapping_invalid": "模型映射包含无效 JSON。",
         "model_mapping_invalid_entries": "以下模型映射条目的值为空或不是字符串：{{keys}}",
         "model_mapping_parse_error": "模型映射 JSON 无效：{{error}}",
