@@ -11,6 +11,7 @@ var gemini4ModelRatios = map[string]adaptor.ModelConfig{
 	"gemini-4-argon":    gemini4ArgonConfig(),
 	"gemini-4-carbon":   gemini4CarbonConfig(),
 	"gemini-4-hydrogen": gemini4HydrogenConfig(),
+	"gemini-4-neon":     gemini4NeonConfig(),
 }
 
 const (
@@ -18,6 +19,8 @@ const (
 	Gemini4CarbonModel = "gemini-4-carbon"
 	// Gemini4HydrogenModel is the stable Gemini 4 Hydrogen upstream model ID.
 	Gemini4HydrogenModel = "gemini-4-hydrogen"
+	// Gemini4NeonModel is the stable Gemini 4 Neon upstream model ID.
+	Gemini4NeonModel = "gemini-4-neon"
 )
 
 // gemini4ArgonConfig returns independently owned Gemini 4 Argon defaults. It
@@ -80,7 +83,7 @@ func gemini4ArgonConfig() adaptor.ModelConfig {
 // model, matching case-insensitively without extending the contract to unknown IDs.
 func IsGemini4Model(model string) bool {
 	switch strings.ToLower(model) {
-	case "gemini-4-argon", Gemini4CarbonModel, Gemini4HydrogenModel:
+	case "gemini-4-argon", Gemini4CarbonModel, Gemini4HydrogenModel, Gemini4NeonModel:
 		return true
 	default:
 		return false
@@ -122,6 +125,33 @@ func gemini4HydrogenConfig() adaptor.ModelConfig {
 		SupportedReasoningEfforts:   []string{"low", "medium", "high", "xhigh"},
 		DefaultReasoningEffort:      "high",
 		Description: "Gemini 4 Hydrogen stable reasoning model. Shared 1,048,576-token input/thinking/output context; " +
+			"65,536-token synchronous output limit for streaming and non-streaming. Caching is implicit only. " +
+			"Long decode requires continuation and is not advertised by this relay. " +
+			"Text output only; no image generation, audio generation, or Live API.",
+	}
+}
+
+// gemini4NeonConfig returns independently owned Neon standard pricing and
+// metadata for the existing foreground GenerateContent and compatible routes.
+// Sources verified 2026-11-22:
+//   - https://aistudio.google.com/docs/models/gemini-4-neon
+//   - https://aistudio.google.com/docs/whats-new-gemini-4-neon
+//   - https://aistudio.google.com/docs/pricing#gemini-4-neon
+//   - https://aistudio.google.com/docs/openai#thinking
+func gemini4NeonConfig() adaptor.ModelConfig {
+	return adaptor.ModelConfig{
+		Ratio:                       3.00 * ratio.MilliTokensUsd,
+		CompletionRatio:             15.00 / 3.00,
+		CachedInputRatio:            0.15 * ratio.MilliTokensUsd,
+		ContextLength:               1_048_576,
+		MaxOutputTokens:             65_536,
+		InputModalities:             []string{"text", "image", "audio", "video", "file"},
+		OutputModalities:            []string{"text"},
+		SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "web_search", "reasoning"},
+		SupportedSamplingParameters: []string{"max_tokens"},
+		SupportedReasoningEfforts:   []string{"low", "medium", "high", "xhigh"},
+		DefaultReasoningEffort:      "high",
+		Description: "Gemini 4 Neon stable reasoning model. Shared 1,048,576-token input/thinking/output context; " +
 			"65,536-token synchronous output limit for streaming and non-streaming. Caching is implicit only. " +
 			"Long decode requires continuation and is not advertised by this relay. " +
 			"Text output only; no image generation, audio generation, or Live API.",

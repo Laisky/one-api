@@ -59,7 +59,7 @@ func deepInfraDeprecatedOracle() []deprecatedOracle {
 		{"stepfun-ai/Step-3.7-Flash", "2026-10-01", "XiaomiMiMo/MiMo-V2.6-Flash", usd3{0.16, 0.92, 0.032}, usd3{0.14, 0.28, 0.0028}},
 		{"tencent/Hy3", "2026-10-08", "tencent/Hy4-preview", usd3{0.13, 0.53, 0.033}, usd3{0.834, 2.501, 0.042}},
 		{"thinkingmachines/Inkling", "2026-10-22", "thinkingmachines/Inkling-Small", usd3{0.95, 4.05, 0.16}, usd3{0.45, 1.2, 0.1}},
-		{"zai-org/GLM-4.7-Flash", "2026-09-10", "zai-org/GLM-5.3-Flash", usd3{0.06, 0.4, 0.01}, usd3{0.15, 0.5, 0.03}},
+		{"zai-org/GLM-4.7-Flash", "2026-09-10", "zai-org/GLM-5.3-Flash", usd3{0.06, 0.4, 0.01}, usd3{0.1005, 0.335, 0.0201}},
 		{"zai-org/GLM-5", "2026-09-10", "zai-org/GLM-5.2", usd3{0.6, 2.08, 0.12}, usd3{0.5625, 1.8, 0.105}},
 		{"zai-org/GLM-5.1", "2026-10-01", "zai-org/GLM-5.3", usd3{1.05, 3.5, 0.205}, usd3{0.5625, 2.5, 0.125}},
 	}

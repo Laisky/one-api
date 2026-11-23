@@ -26,6 +26,10 @@ func TestNativeOpenAIStandardTierPolicyMatrix(t *testing.T) {
 		{" GPT-6.1-TERRA ", true},
 		{"gpt-6-cyber", true},
 		{"GPT-6-Cyber\t", true},
+		{"gpt-6.2-astra", true},
+		{" GPT-6.2-ASTRA ", true},
+		{"gpt-6.2-sol", true},
+		{"GPT-6.2-Sol\t", true},
 		{"gpt-6-sol", false},
 		{"gpt-6-luna", false},
 		{"gpt-5.6-cyber", false},
@@ -92,7 +96,10 @@ func TestNativeOpenAIStandardTierPolicyMatrix(t *testing.T) {
 // the WebSocket transport regardless of model-ID case and surrounding
 // whitespace. Parameter t reports failures; nothing returns.
 func TestNativeOpenAIWebSocketPolicySpellings(t *testing.T) {
-	for _, modelName := range []string{" GPT-6.1-TERRA ", "Gpt-6.1-Terra", "GPT-6-CYBER", "\tgpt-6-cyber\n"} {
+	for _, modelName := range []string{
+		" GPT-6.1-TERRA ", "Gpt-6.1-Terra", "GPT-6-CYBER", "\tgpt-6-cyber\n",
+		" GPT-6.2-ASTRA ", "Gpt-6.2-Astra", "GPT-6.2-SOL", "\tgpt-6.2-sol\n",
+	} {
 		t.Run(strings.TrimSpace(modelName), func(t *testing.T) {
 			c, _ := newWSUpgradeContext(t, "model=policy")
 			info := &metalib.Meta{ChannelType: channeltype.OpenAI, ActualModelName: modelName,

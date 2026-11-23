@@ -19,7 +19,7 @@ func TestNativeNovemberModelsRequireFoundryEvidence(t *testing.T) {
 	provider := &Adaptor{}
 	provider.Init(&meta.Meta{ChannelType: channeltype.Azure})
 	fallback := &adaptor.DefaultPricingMethods{}
-	for _, name := range []string{"gpt-6-cyber", "gpt-image-2.6-sunburst", "gpt-image-2.6-flare"} {
+	for _, name := range []string{"gpt-6.2-astra", "gpt-6.2-sol", "gpt-6-cyber", "gpt-image-2.6-sunburst", "gpt-image-2.6-flare"} {
 		require.Contains(t, openai.ModelList, name)
 		require.NotContains(t, provider.GetModelList(), name)
 		require.NotContains(t, provider.GetDefaultModelPricing(), name)

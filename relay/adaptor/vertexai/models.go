@@ -5,11 +5,12 @@ import (
 )
 
 // vertexSuggestedModels is the Vertex-owned, documentation-checked suggestion
-// catalog as of 2026-11-12. It is deliberately independent of legacy dispatch and
+// catalog as of 2026-11-22. It is deliberately independent of legacy dispatch and
 // pricing maps. Inclusion is not an entitlement, region, quota, or live-service
 // guarantee. See docs/vertexai-model-audit-20261112.md for lifecycle and limits.
 var vertexSuggestedModels = []string{
 	// Native generateContent: active, deprecated-but-served, and public preview.
+	"gemini-4-neon",
 	"gemini-4-hydrogen",
 	"gemini-4-argon",
 	"gemini-3.8-flash",

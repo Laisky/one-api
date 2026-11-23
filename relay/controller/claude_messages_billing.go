@@ -64,7 +64,8 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 	provider := resolvePricingAdaptor(meta)
 	modelRatio := pricing.ResolveModelRatioAt(request.Model, channelModelConfigs, channelModelRatio, provider, meta.StartTime)
 	cfg, _ := pricing.ResolveModelConfigRatioOnly(request.Model, channelModelConfigs, provider, meta.StartTime)
-	if len(cfg.Tiers) > 0 {
+	includeFlatTariff := includeFlatPromptCacheTariff(meta, request.Model)
+	if len(cfg.Tiers) > 0 || includeFlatTariff {
 		payload := tierAdmissionPreparedPayload(c, request)
 		if c.GetBool(ctxkey.ClaudeDirectPassthrough) {
 			raw, rawErr := common.GetRequestBody(c)
@@ -97,7 +98,7 @@ func preConsumeClaudeMessagesQuota(c *gin.Context, request *ClaudeMessagesReques
 			ModelRatio: modelRatio, ChannelModelRatio: channelModelRatio,
 			GroupRatio: c.GetFloat64(ctxkey.ChannelRatio), ChannelModelConfigs: channelModelConfigs,
 			ChannelCompletionRatio: channelCompletionRatio, PricingAdaptor: provider, RequestTime: meta.StartTime,
-		}, request.MaxTokens, 0, quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h})
+		}, request.MaxTokens, 0, quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h, IncludeFlatTariff: includeFlatTariff})
 		if applies {
 			if quoteErr != nil {
 				return 0, openai.ErrorWrapper(quoteErr, "invalid_claude_quota_quote", http.StatusBadRequest)

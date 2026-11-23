@@ -7,6 +7,17 @@ import "github.com/Laisky/one-api/relay/adaptor"
 // Source: https://docs.together.ai/docs/serverless/models
 func otherModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
+		"tencent/Hy4": {
+			Ratio:             nativeRate(0.834),
+			CompletionRatio:   2.501 / 0.834,
+			CachedInputRatio:  nativeRate(0.042),
+			ContextLength:     1048576,
+			InputModalities:   []string{"text", "image"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs"},
+			Quantization:      "fp4",
+			Description:       "Tencent Hy4 on Together Standard serverless; host tariff, context, vision, tools, structured outputs and NVFP4 serving checked 2026-11-22. Unpublished output limits and reasoning controls remain unspecified.",
+		},
 		"ByteDance-Seed/Seedream-3.0": {
 			Ratio:           0,
 			CompletionRatio: 1,
@@ -282,11 +293,15 @@ func otherModels() map[string]adaptor.ModelConfig {
 			Description:       "reflection/Beam-1.0-501B-A23B on Together Standard serverless; published token prices and metadata checked 2026-11-16. Dedicated deployments and US-only endpoint surcharges are separate contracts. Unpublished output limits remain unspecified.",
 		},
 		"ricursive-ai/Ripple-65B-Preview": {
-			Ratio:            nativeRate(0.2),
-			CompletionRatio:  3,
-			ContextLength:    131072,
-			OutputModalities: []string{"text"},
-			Description:      "ricursive-ai/Ripple-65B-Preview on Together Standard serverless; published token prices and metadata checked 2026-11-16. Dedicated deployments and US-only endpoint surcharges are separate contracts. Unpublished output limits remain unspecified.",
+			Ratio:             nativeRate(0.2),
+			CompletionRatio:   3,
+			CachedInputRatio:  nativeRate(0.02),
+			ContextLength:     131072,
+			InputModalities:   []string{"text"},
+			OutputModalities:  []string{"text"},
+			SupportedFeatures: []string{"tools", "structured_outputs"},
+			Quantization:      "fp4",
+			Description:       "Ripple 65B Preview on Together Standard serverless; the 2026-11-22 table now publishes cached input, tools, structured outputs and NVFP4 serving. Unpublished output limits and reasoning controls remain unspecified.",
 		},
 		"stabilityai/stable-diffusion-3-medium": {
 			Ratio:           0,

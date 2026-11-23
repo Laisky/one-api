@@ -7,7 +7,8 @@ import (
 // kimiModels returns independently owned kimi defaults for alibailian.
 // It takes no arguments and returns the complete family catalog.
 // Source: https://help.aliyun.com/zh/model-studio/model-pricing
-// Additional model and cache sources checked 2026-11-16:
+// Additional model and cache sources checked 2026-11-22:
+// https://help.aliyun.com/zh/model-studio/newly-released-models
 // https://help.aliyun.com/zh/model-studio/context-cache
 // https://help.aliyun.com/zh/model-studio/kimi-k3-1-pro
 // https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions
@@ -49,6 +50,13 @@ func kimiModels() map[string]adaptor.ModelConfig {
 			InputModalities: []string{"text", "image"}, OutputModalities: []string{"text"},
 			SupportedFeatures: []string{"tools", "reasoning"}, SupportedSamplingParameters: []string{"max_tokens", "max_completion_tokens"},
 			Description: "Alibaba-deployed Kimi K3.1 Pro, Beijing CNY 13 input, 1.3 cached input and 68 output per million tokens. Supports text and image, not video. Distinct from Moonshot-supplied kimi/kimi-k3.1-pro; the gateway does not forward this model's upstream effort controls.",
+		},
+		"kimi-k3.1-pro-prime": {
+			Ratio: nativeRate(26), CompletionRatio: 136.0 / 26, CachedInputRatio: nativeRate(1.3),
+			ContextLength: 1_048_576, MaxOutputTokens: 1_048_576,
+			InputModalities: []string{"text", "image"}, OutputModalities: []string{"text"},
+			SupportedFeatures: []string{"tools", "reasoning"}, SupportedSamplingParameters: []string{"max_tokens", "max_completion_tokens"},
+			Description: "Alibaba-deployed Kimi K3.1 Pro Prime, released 2026-11-19 with the same capabilities and limits as Pro. Beijing CNY 26 input, 1.3 cached input and 136 output per million tokens; cached input does not double. Supports text and image, not video. Distinct from Moonshot-supplied kimi/kimi-k3.1-pro-highspeed; the gateway does not forward this model's upstream effort controls.",
 		},
 		"kimi/kimi-k2.5": {
 			Ratio:           nativeRate(4),

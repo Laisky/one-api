@@ -15,15 +15,31 @@ var standardServiceTierOnly = []string{"default"}
 //
 //   - gpt-6.1-terra: the catalog prices only Standard; WebSocket frames bypass
 //     the HTTP Standard-tier and cache-lifetime admission guards.
+//   - gpt-6.2-astra and gpt-6.2-sol: as Terra, with first-party-only default
+//     tariffs and raw receipts preserved through presentation conversion.
 //   - gpt-6-cyber: as Terra, plus OpenAI publishes no long-context cache-write
 //     price, the model is published only for OpenAI's first-party API, and the
 //     raw receipt carries the actual service tier that converters discard.
 //
-// Sources verified 2026-11-16:
+// Sources verified 2026-11-22:
+//   - https://developers.openai.com/api/docs/models/gpt-6.2-astra
+//   - https://developers.openai.com/api/docs/models/gpt-6.2-sol
 //   - https://developers.openai.com/api/docs/models/gpt-6.1-terra
 //   - https://developers.openai.com/api/docs/models/gpt-6-cyber
 //   - https://developers.openai.com/api/docs/pricing.md
 var modelBillingPolicies = map[string]adaptor.ModelBillingPolicy{
+	"gpt-6.2-astra": {
+		SupportedServiceTiers:  standardServiceTierOnly,
+		HTTPOnly:               true,
+		NativeTariffOnly:       true,
+		CaptureRawUsageReceipt: true,
+	},
+	"gpt-6.2-sol": {
+		SupportedServiceTiers:  standardServiceTierOnly,
+		HTTPOnly:               true,
+		NativeTariffOnly:       true,
+		CaptureRawUsageReceipt: true,
+	},
 	"gpt-6.1-terra": {
 		SupportedServiceTiers: standardServiceTierOnly,
 		HTTPOnly:              true,

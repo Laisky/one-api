@@ -14,7 +14,7 @@ import (
 
 // TestNovemberDeepInfraPublishedCatalog pins new model tariffs and host limits through
 // native and registered adaptor discovery. Fixtures were read from https://api.deepinfra.com/models/list;
-// output limits and cached decimals were rechecked on 2026-11-18 against
+// output limits and cached decimals were rechecked on 2026-11-22 against
 // https://api.deepinfra.com/models/<model> (max_output_tokens) and https://deepinfra.com/<model>.
 func TestNovemberDeepInfraPublishedCatalog(t *testing.T) {
 	t.Parallel()
@@ -26,6 +26,8 @@ func TestNovemberDeepInfraPublishedCatalog(t *testing.T) {
 		input, cached, output float64
 		context, maxOutput    int32
 	}{
+		{"RadixArk/DaisyRose-27B", 0.15, 0.0375, 1.875, 262144, 0},
+		{"tencent/Hy4", 0.834, 0.04199999814, 2.501, 1048576, 131072},
 		{"deepseek-ai/DeepSeek-V4.1-Flash-1017", 0.098, 0.00294, 0.294, 1048576, 393216},
 		{"Qwen/Qwen4-Max", 1.413, 0.071, 4.24, 1000000, 0},
 		{"moonshotai/Kimi-K3.1-Pro", 1.9, 0.19, 9.5, 1048576, 943718},
@@ -54,7 +56,7 @@ func TestNovemberDeepInfraPublishedCatalog(t *testing.T) {
 // request survive the provider converter without account-level catalogue filtering.
 func TestNovemberDeepInfraRequestPreservation(t *testing.T) {
 	t.Parallel()
-	for _, id := range []string{"deepseek-ai/DeepSeek-V4.1-Flash-1017", "Qwen/Qwen4-Max", "moonshotai/Kimi-K3.1-Pro", "nvidia/NVIDIA-Nemotron-3.5-Super-VL", "thinkingmachines/Inkling-2-Small"} {
+	for _, id := range []string{"RadixArk/DaisyRose-27B", "tencent/Hy4", "deepseek-ai/DeepSeek-V4.1-Flash-1017", "Qwen/Qwen4-Max", "moonshotai/Kimi-K3.1-Pro", "nvidia/NVIDIA-Nemotron-3.5-Super-VL", "thinkingmachines/Inkling-2-Small"} {
 		var request model.GeneralOpenAIRequest
 		require.NoError(t, json.Unmarshal([]byte(`{"model":"`+id+`","messages":[{"role":"user","content":"Look up availability."}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{}}}}],"tool_choice":"auto"}`), &request))
 		before, err := json.Marshal(&request)

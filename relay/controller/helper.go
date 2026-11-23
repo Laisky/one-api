@@ -75,6 +75,11 @@ func maybeHandleRealtime(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 	return nil
 }
 
+// getPromptTokens estimates the prompt tokens of a relay request for its mode.
+// Parameters: ctx carries the request logger, textRequest is the parsed request
+// and relayMode selects which fields form the prompt. Chat requests count every
+// provider-visible prompt field, including tool and response schemas (see
+// chatPromptTokens). It returns the estimate, or 0 for an unhandled mode.
 func getPromptTokens(ctx context.Context, textRequest *relaymodel.GeneralOpenAIRequest, relayMode int) int {
 	switch relayMode {
 	case relaymode.ChatCompletions:
@@ -85,7 +90,7 @@ func getPromptTokens(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 		}
 
 		// text request
-		return openai.CountTokenMessages(ctx, textRequest.Messages, textRequest.Model)
+		return chatPromptTokens(ctx, textRequest, textRequest.Model)
 	case relaymode.Completions:
 		return openai.CountTokenInput(textRequest.Prompt, textRequest.Model)
 	case relaymode.Moderations:
@@ -198,7 +203,7 @@ func estimatePreConsumedQuota(
 }
 
 // estimatePreConsumedQuotaWithCachePolicy is estimatePreConsumedQuota that also
-// returns the tiered prompt-cache admission decision the dispatch must apply.
+// returns the complete prompt-cache admission decision the dispatch must apply.
 // Parameters match estimatePreConsumedQuota. Returns: the quote (-1 for an
 // unpriceable request), the cache-write decision, and an admission refusal
 // error that callers surface to the client.
@@ -249,7 +254,8 @@ func estimatePreConsumedQuotaWithCachePolicy(
 
 	if meta != nil {
 		cfg, _ := pricing.ResolveModelConfigRatioOnly(textRequest.Model, channelModelConfigs, resolvePricingAdaptor(meta), meta.StartTime)
-		if len(cfg.Tiers) > 0 {
+		includeFlatTariff := includeFlatPromptCacheTariff(meta, textRequest.Model)
+		if len(cfg.Tiers) > 0 || includeFlatTariff {
 			maxOutput := textRequest.MaxTokens
 			if textRequest.MaxCompletionTokens != nil && *textRequest.MaxCompletionTokens > 0 {
 				maxOutput = *textRequest.MaxCompletionTokens
@@ -271,7 +277,7 @@ func estimatePreConsumedQuotaWithCachePolicy(
 				ChannelModelRatio: channelModelRatio, GroupRatio: groupRatio,
 				ChannelModelConfigs: channelModelConfigs, ChannelCompletionRatio: channelCompletionRatio,
 				PricingAdaptor: resolvePricingAdaptor(meta), RequestTime: meta.StartTime,
-			}, maxOutput, config.PreConsumedQuota, quotautil.AdmissionOptions{CacheWrite5m: cache.write5m, CacheWrite1h: cache.write1h, OutputCount: count})
+			}, maxOutput, config.PreConsumedQuota, quotautil.AdmissionOptions{CacheWrite5m: cache.write5m, CacheWrite1h: cache.write1h, OutputCount: count, IncludeFlatTariff: includeFlatTariff})
 			if applies {
 				if err != nil {
 					return -1, promptCacheAdmission{}, nil

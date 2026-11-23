@@ -40,7 +40,7 @@ var ModelsSupportSystemInstruction = []string{
 	"gemini-3.5-flash", "gemini-3.5-flash-lite",
 	"gemini-3.6-flash", "gemini-3.7-flash", "gemini-3.8-flash",
 	"gemini-4-argon",
-	geminiOpenaiCompatible.Gemini4CarbonModel, geminiOpenaiCompatible.Gemini4HydrogenModel,
+	geminiOpenaiCompatible.Gemini4CarbonModel, geminiOpenaiCompatible.Gemini4HydrogenModel, geminiOpenaiCompatible.Gemini4NeonModel,
 	"gemini-4-carbon-cyber-permissive", "gemini-4-argon-cyber-permissive",
 	"gemini-3.8-flash-cyber",
 	"gemini-robotics-er-1.6-preview", "gemini-robotics-er-2-preview",

@@ -478,7 +478,8 @@ func quoteMCPTierRoundQuota(c *gin.Context, meta *metalib.Meta, modelName string
 		ChannelModelConfigs: configs, ChannelCompletionRatio: channelCompletionRatio,
 		PricingAdaptor: provider, RequestTime: meta.StartTime,
 	}
-	options := quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h, OutputCount: count}
+	options := quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h, OutputCount: count,
+		IncludeFlatTariff: includeFlatPromptCacheTariff(meta, modelName)}
 	roundQuote, _, err := quotautil.EstimateTierAdmission(input, maxOutput, 0, options)
 	if err != nil || accumulated == nil {
 		return roundQuote, roundQuote, errors.Wrap(err, "quote prepared MCP tier round")

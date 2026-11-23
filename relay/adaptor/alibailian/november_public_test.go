@@ -38,6 +38,7 @@ func TestNovemberAlibabaProviderDefaults(t *testing.T) {
 				"qwen4-max":                       {10, .5, 30},
 				"MiniMax/MiniMax-M3.1-Flash":      {1, .1, 4},
 				"kimi-k3.1-pro":                   {13, 1.3, 68},
+				"kimi-k3.1-pro-prime":             {26, 1.3, 136},
 				"kimi/kimi-k3.1-pro":              {13, 1.3, 68},
 				"kimi/kimi-k3.1-pro-highspeed":    {26, 1.3, 136},
 				"glm-5.3-prime":                   {16, 4, 56},
@@ -88,7 +89,7 @@ func TestNovemberAlibabaProviderDefaults(t *testing.T) {
 // compatible multimodal preservation for the new IDs using t. It returns nothing.
 func TestNovemberAlibabaRequestCompatibility(t *testing.T) {
 	t.Parallel()
-	for _, id := range []string{"qwen4-max", "MiniMax/MiniMax-M3.1-Flash", "kimi-k3.1-pro", "kimi/kimi-k3.1-pro", "kimi/kimi-k3.1-pro-highspeed", "glm-5.3-prime", "xiaomi/mimo-v2.6-pro-ultraspeed", "deepseek-v4.1-flash-1017"} {
+	for _, id := range []string{"qwen4-max", "MiniMax/MiniMax-M3.1-Flash", "kimi-k3.1-pro", "kimi-k3.1-pro-prime", "kimi/kimi-k3.1-pro", "kimi/kimi-k3.1-pro-highspeed", "glm-5.3-prime", "xiaomi/mimo-v2.6-pro-ultraspeed", "deepseek-v4.1-flash-1017"} {
 		t.Run(id, func(t *testing.T) {
 			t.Parallel()
 			native := &ali.Adaptor{}
@@ -105,12 +106,27 @@ func TestNovemberAlibabaRequestCompatibility(t *testing.T) {
 			c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
 			meta.Set2Context(c, m)
 			a := &openai.Adaptor{ChannelType: channeltype.AliBailian}
+			// The expectation is an independent literal: ConvertRequest returns
+			// and may rewrite the request it receives. The remote media uses a
+			// .localhost host, which the user-content URL validator rejects
+			// before any DNS lookup, so inlining fails locally and the URL part
+			// is preserved regardless of the resolver (including fake-IP DNS).
+			expected := `[{"role":"user","content":"Hello"}]`
 			if id == "qwen4-max" || id == "MiniMax/MiniMax-M3.1-Flash" {
 				req.Messages[0].Content = []any{
 					map[string]any{"type": "text", "text": "Describe these."},
-					map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://example.com/image.png"}},
-					map[string]any{"type": "video_url", "video_url": map[string]any{"url": "https://example.com/video.mp4"}},
+					map[string]any{"type": "image_url", "image_url": map[string]any{"url": "https://media.localhost/image.png"}},
+					map[string]any{"type": "video_url", "video_url": map[string]any{"url": "https://media.localhost/video.mp4"}},
 				}
+				expected = `[{"role":"user","content":[{"type":"text","text":"Describe these."},{"type":"image_url","image_url":{"url":"https://media.localhost/image.png"}},{"type":"video_url","video_url":{"url":"https://media.localhost/video.mp4"}}]}]`
+			}
+			const pixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aO4sAAAAASUVORK5CYII="
+			if id == "kimi-k3.1-pro" || id == "kimi-k3.1-pro-prime" {
+				req.Messages[0].Content = []any{
+					map[string]any{"type": "text", "text": "Describe this image."},
+					map[string]any{"type": "image_url", "image_url": map[string]any{"url": pixel}},
+				}
+				expected = `[{"role":"user","content":[{"type":"text","text":"Describe this image."},{"type":"image_url","image_url":{"url":"` + pixel + `"}}]}]`
 			}
 			converted, err = a.ConvertRequest(c, relaymode.ChatCompletions, req)
 			require.NoError(t, err)
@@ -119,7 +135,9 @@ func TestNovemberAlibabaRequestCompatibility(t *testing.T) {
 			var got model.GeneralOpenAIRequest
 			require.NoError(t, json.Unmarshal(encoded, &got))
 			require.Equal(t, id, got.Model)
-			require.Equal(t, req.Messages, got.Messages)
+			var wire map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(encoded, &wire))
+			require.JSONEq(t, expected, string(wire["messages"]))
 			require.NotNil(t, got.MaxCompletionTokens)
 			require.Equal(t, 2048, *got.MaxCompletionTokens)
 			url, err := a.GetRequestURL(m)
@@ -129,5 +147,9 @@ func TestNovemberAlibabaRequestCompatibility(t *testing.T) {
 		})
 	}
 	require.Equal(t, []string{"text", "image"}, alibailian.ModelRatios["kimi-k3.1-pro"].InputModalities)
+	require.Equal(t, []string{"text", "image"}, alibailian.ModelRatios["kimi-k3.1-pro-prime"].InputModalities)
+	require.EqualValues(t, 1_048_576, alibailian.ModelRatios["kimi-k3.1-pro-prime"].ContextLength)
+	require.EqualValues(t, 1_048_576, alibailian.ModelRatios["kimi-k3.1-pro-prime"].MaxOutputTokens)
 	require.NotSame(t, &ali.ModelRatios["qwen4-max"].InputModalities[0], &alibailian.ModelRatios["qwen4-max"].InputModalities[0])
+	require.NotSame(t, &ali.ModelRatios["kimi-k3.1-pro-prime"].InputModalities[0], &alibailian.ModelRatios["kimi-k3.1-pro-prime"].InputModalities[0])
 }

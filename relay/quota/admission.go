@@ -13,17 +13,23 @@ import (
 type AdmissionOptions struct {
 	CacheWrite5m, CacheWrite1h bool
 	OutputCount                int
+	// IncludeFlatTariff opts a verified paid-write contract into the same
+	// conservative quote even when a channel override has no context tiers.
+	// Callers retain responsibility for qualifying the provider and model.
+	IncludeFlatTariff bool
 }
 
 // EstimateTierAdmission prices the full estimated input once and every possible
 // output tier through maxOutputTokens before paid dispatch. Parameters: input
 // carries canonical prompt usage and request-time pricing; bufferTokens is the
 // existing extra normal-input allowance. Returns: the conservative rounded quote,
-// whether a resolved tier contract applies, and an error for invalid arithmetic.
+// whether a resolved tier or opted-in flat contract applies, and an error for
+// invalid arithmetic. Flat channel overrides retain their own tariff; opting in
+// never restores provider pricing tiers suppressed by that override.
 // Unknown cache composition uses the highest input bucket rate without discounts.
 func EstimateTierAdmission(input ComputeInput, maxOutputTokens int, bufferTokens int64, options AdmissionOptions) (int64, bool, error) {
 	cfg, known := pricing.ResolveModelConfigRatioOnly(input.ModelName, input.ChannelModelConfigs, input.PricingAdaptor, input.RequestTime)
-	if !known || len(cfg.Tiers) == 0 {
+	if !known || (len(cfg.Tiers) == 0 && !options.IncludeFlatTariff) {
 		return 0, false, nil
 	}
 	if input.Usage == nil || input.Usage.PromptTokens < 0 || maxOutputTokens < 0 || bufferTokens < 0 {

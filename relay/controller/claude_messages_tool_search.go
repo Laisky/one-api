@@ -247,7 +247,7 @@ func executeClaudeToolSearchMCPLoop(
 	groupRatio := c.GetFloat64(ctxkey.ChannelRatio)
 	ratio := modelRatio * groupRatio
 	tierConfig, _ := pricing.ResolveModelConfigRatioOnly(request.Model, channelModelConfigs, pricingAdaptor, meta.StartTime)
-	tiered := len(tierConfig.Tiers) > 0
+	tiered := len(tierConfig.Tiers) > 0 || includeFlatPromptCacheTariff(meta, request.Model)
 
 	var accumulated *relaymodel.Usage
 	var incrementalCharged int64

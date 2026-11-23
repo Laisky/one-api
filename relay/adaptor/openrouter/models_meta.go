@@ -27,7 +27,7 @@ func metaModels() map[string]adaptor.ModelConfig {
 			CompletionRatio:             1.5 / 0.35,
 			CachedInputRatio:            nativeRate(0.04),
 			ContextLength:               131072,
-			MaxOutputTokens:             16384,
+			MaxOutputTokens:             117964,
 			InputModalities:             []string{"text", "image"},
 			OutputModalities:            []string{"text"},
 			SupportedFeatures:           []string{"tools", "json_mode", "structured_outputs", "reasoning", "logprobs"},
@@ -35,7 +35,7 @@ func metaModels() map[string]adaptor.ModelConfig {
 			SupportedReasoningEfforts:   []string{"xhigh", "high", "medium", "low"},
 			DefaultReasoningEffort:      "medium",
 			HuggingFaceID:               "meta-models/Muse-Glimmer-30B",
-			Description:                 "meta/muse-glimmer-30b on OpenRouter; public routing-default token tariff checked 2026-11-18 (listing fetched 14:16 UTC). Provider selection and separately metered tools can change charges.",
+			Description:                 "meta/muse-glimmer-30b on OpenRouter; public routing-default token tariff and published host limits checked 2026-11-22. Provider selection and separately metered tools can change charges.",
 		},
 		"meta/muse-spark-1.1": {
 			Ratio:                       nativeRate(1.25),

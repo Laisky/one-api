@@ -16,8 +16,8 @@ import (
 	"github.com/Laisky/one-api/relay/relaymode"
 )
 
-// TestGeminiNovember12Discovery verifies public adaptor consumers receive both
-// new models after package initialization. Parameter t is the test handle; it returns nothing.
+// TestGeminiNovember12Discovery verifies public adaptor consumers receive the
+// November models after package initialization. Parameter t reports assertions.
 func TestGeminiNovember12Discovery(t *testing.T) {
 	t.Parallel()
 	native := &gemini.Adaptor{}
@@ -33,7 +33,7 @@ func TestGeminiNovember12Discovery(t *testing.T) {
 		{"vertex", vertex.GetModelList(), vertex.GetDefaultModelPricing()},
 	} {
 		t.Run(provider.name, func(t *testing.T) {
-			for _, name := range []string{"gemini-4-carbon", "gemini-4-hydrogen"} {
+			for _, name := range []string{"gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-neon"} {
 				require.Contains(t, provider.models, name)
 				cfg, ok := provider.pricing[name]
 				require.True(t, ok, "published models must have explicit pricing")
@@ -62,7 +62,7 @@ func TestGeminiNovember12Discovery(t *testing.T) {
 	// Vertex's provider override must not mutate the shared Developer tariff.
 	require.InDelta(t, 2.0, geminiOpenaiCompatible.ModelRatios["gemini-4-carbon"].Ratio/ratio.MilliTokensUsd, 1e-12)
 	require.Len(t, geminiOpenaiCompatible.ModelRatios["gemini-4-carbon"].TimeWindows, 1)
-	for _, name := range []string{"gemini-4-carbon", "gemini-4-hydrogen"} {
+	for _, name := range []string{"gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-neon"} {
 		require.NotNil(t, vertexai.GetAdaptor(name), "shared discovery must also have a dispatch entry")
 		for _, stream := range []bool{false, true} {
 			requestMeta := &meta.Meta{ActualModelName: name, Mode: relaymode.ChatCompletions, IsStream: stream}

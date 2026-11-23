@@ -18,7 +18,7 @@ import (
 // use the Responses endpoint for Chat, Claude, and native Responses requests.
 func TestAzureGPT6ResponseRouting(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol"} {
+	for _, name := range []string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol", "gpt-6.2-astra", "gpt-6.2-sol"} {
 		for _, surface := range []struct {
 			name string
 			mode int
@@ -49,7 +49,7 @@ func TestAzureGPT6ResponseRouting(t *testing.T) {
 // IDs does not classify arbitrary deployment names or GPT-OSS as Responses-only.
 func TestAzureGPT6RoutingPreservesOtherDeployments(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"gpt-4o", "gpt-oss-120b", "gpt-60", "gpt-6.1-sol-custom", "tenant-deployment"} {
+	for _, name := range []string{"gpt-4o", "gpt-oss-120b", "gpt-60", "gpt-6.1-sol-custom", "gpt-6.2-sol-custom", "tenant-deployment"} {
 		require.False(t, AzureRequiresResponseAPI(name), name)
 	}
 	require.True(t, AzureRequiresResponseAPI(" GPT-6.1-SOL "))
@@ -59,7 +59,7 @@ func TestAzureGPT6RoutingPreservesOtherDeployments(t *testing.T) {
 // TestAzureGPT6ChatConversion verifies the actual Azure conversion serializes
 // reasoning and function tools into Responses rather than forwarding Chat JSON.
 func TestAzureGPT6ChatConversion(t *testing.T) {
-	for _, name := range []string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol"} {
+	for _, name := range []string{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna", "gpt-6.1-sol", "gpt-6.2-astra", "gpt-6.2-sol"} {
 		t.Run(name, func(t *testing.T) {
 			c, _ := gin.CreateTestContext(httptest.NewRecorder())
 			info := &relaymeta.Meta{

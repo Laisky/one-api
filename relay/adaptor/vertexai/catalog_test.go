@@ -45,7 +45,7 @@ func TestVertexCatalogCurrentRoutes(t *testing.T) {
 	t.Parallel()
 	models := (&Adaptor{}).GetModelList()
 	for _, id := range []string{
-		"gemini-4-hydrogen", "gemini-4-carbon", "gemini-4-carbon-cyber-permissive",
+		"gemini-4-neon", "gemini-4-hydrogen", "gemini-4-carbon", "gemini-4-carbon-cyber-permissive",
 		"gemini-4-argon-cyber-permissive", "gemini-3.8-flash-cyber",
 		"gemini-nano-banana-2.1", "claude-fable-5-2", "claude-haiku-5-5",
 		"openai/gpt-oss-120b-maas", "deepseek-ai/deepseek-v4.1-flash-maas",

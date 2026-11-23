@@ -34,24 +34,24 @@ func TestNovemberOpenRouterTerraTier(t *testing.T) {
 
 // TestNovemberOpenRouterClockBoundaries checks weekday, weekend, and midnight
 // transitions in the exact host schedules rather than importing native tariffs.
-// deepseek/deepseek-v4.1-flash-1017 stays flat across its former boundaries
-// because its 2026-11-18 listing no longer publishes time-of-day overrides.
+// The 2026-11-22 listing restores DeepSeek Flash 1017 weekday peak windows;
+// weekend requests keep the off-peak tariff.
 func TestNovemberOpenRouterClockBoundaries(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		id, at                string
 		input, cached, output float64
 	}{
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T00:59:59Z", .036, .01, .5},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T01:00:00Z", .036, .01, .5},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T03:59:59Z", .036, .01, .5},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T04:00:00Z", .036, .01, .5},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T05:59:59Z", .036, .01, .5},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T06:00:00Z", .036, .01, .5},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T09:59:59Z", .036, .01, .5},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-16T10:00:00Z", .036, .01, .5},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-21T01:00:00Z", .036, .01, .5},
-		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-22T06:00:00Z", .036, .01, .5},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-23T00:59:59Z", .15, .003, .6},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-23T01:00:00Z", .3, .006, 1.2},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-23T03:59:59Z", .3, .006, 1.2},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-23T04:00:00Z", .15, .003, .6},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-23T05:59:59Z", .15, .003, .6},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-23T06:00:00Z", .3, .006, 1.2},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-23T09:59:59Z", .3, .006, 1.2},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-23T10:00:00Z", .15, .003, .6},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-21T01:00:00Z", .15, .003, .6},
+		{"deepseek/deepseek-v4.1-flash-1017", "2026-11-22T06:00:00Z", .15, .003, .6},
 		{"minimax/minimax-m3.1-flash", "2026-11-16T00:59:59Z", .075, .0075, .3},
 		{"minimax/minimax-m3.1-flash", "2026-11-16T01:00:00Z", .15, .015, .6},
 		{"minimax/minimax-m3.1-flash", "2026-11-16T14:59:59Z", .15, .015, .6},

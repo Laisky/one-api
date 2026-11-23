@@ -72,9 +72,13 @@ func TestNativePromptCacheAdmissionScope(t *testing.T) {
 	}{
 		{channeltype.OpenAI, "gpt-6-cyber", true},
 		{channeltype.OpenAI, "gpt-6.1-terra", true},
+		{channeltype.OpenAI, "gpt-6.2-astra", true},
+		{channeltype.OpenAI, " GPT-6.2-SOL ", true},
 		{channeltype.OpenAI, " GPT-6-SOL ", true},
 		{channeltype.OpenAI, "gpt-4o-mini", false},
 		{channeltype.Azure, "gpt-6.1-terra", false},
+		{channeltype.Azure, "gpt-6.2-astra", false},
+		{channeltype.AIProxyLibrary, "gpt-6.2-sol", false},
 		{channeltype.OpenAICompatible, "gpt-6-cyber", false},
 	} {
 		require.Equal(t, tc.implied, openai.ImplicitPromptCacheWrites(tc.channel, tc.model), "%d/%s", tc.channel, tc.model)

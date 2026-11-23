@@ -27,6 +27,7 @@ func TestGemini4NativeGenerationContracts(t *testing.T) {
 		{"gemini-4-argon", "medium", []string{"low", "medium", "high"}},
 		{"gemini-4-carbon", "medium", []string{"low", "medium", "high"}},
 		{"gemini-4-hydrogen", "high", []string{"low", "medium", "high", "xhigh"}},
+		{"gemini-4-neon", "high", []string{"low", "medium", "high", "xhigh"}},
 	} {
 		for _, level := range append([]string{"absent", "default", ""}, spec.levels...) {
 			t.Run(spec.name+"/"+level, func(t *testing.T) {
@@ -81,6 +82,9 @@ func TestGemini4NativeEffortAdmission(t *testing.T) {
 		name, upstream, fields, want, wantError string
 	}{
 		{"hydrogen-xhigh", "Gemini-4-Hydrogen", `"reasoning_effort":" XHIGH "`, "xhigh", ""},
+		{"neon-xhigh", "Gemini-4-Neon", `"reasoning_effort":" XHIGH "`, "xhigh", ""},
+		{"neon-minimal", "gemini-4-neon", `"reasoning_effort":"minimal"`, "", "reasoning effort"},
+		{"neon-budget", "gemini-4-neon", `"thinking":{"type":"enabled","budget_tokens":4096}`, "", "thinking budgets"},
 		{"nested-effort", "gemini-4-hydrogen", `"reasoning":{"effort":"xhigh"}`, "xhigh", ""},
 		{"matching-fields", "gemini-4-hydrogen", `"reasoning_effort":" XHIGH ","reasoning":{"effort":"xhigh"}`, "xhigh", ""},
 		{"conflicting-fields", "gemini-4-hydrogen", `"reasoning_effort":"high","reasoning":{"effort":"low"}`, "", "conflicting reasoning effort"},
@@ -152,7 +156,7 @@ func TestGemini4NativeClientFormats(t *testing.T) {
 // explicit version overrides, and unchanged conversion of unrelated model IDs.
 // Parameter t coordinates offline assertions; this test returns no values.
 func TestGemini4NativeURLsAndLegacyControl(t *testing.T) {
-	for _, name := range []string{"gemini-4-carbon", "gemini-4-hydrogen"} {
+	for _, name := range []string{"gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-neon"} {
 		for _, stream := range []bool{false, true} {
 			requestMeta := &meta.Meta{ActualModelName: name, Mode: relaymode.ChatCompletions, BaseURL: "https://generativelanguage.googleapis.com", IsStream: stream}
 			action := "generateContent"

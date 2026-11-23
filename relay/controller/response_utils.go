@@ -106,7 +106,11 @@ func getAndValidateResponseAPIRequest(c *gin.Context) (*openai.ResponseAPIReques
 	return responseAPIRequest, nil
 }
 
-// getResponseAPIPromptTokens estimates prompt tokens for Response API requests.
+// getResponseAPIPromptTokens estimates prompt tokens for Response API requests:
+// instructions, input items, the prompt template reference, and the tool and
+// text-format schemas that providers bill as input and cache with the prefix.
+// Parameters: ctx carries the request logger and responseAPIRequest is the
+// request (it is not modified). It returns the estimate, at least 10 tokens.
 func getResponseAPIPromptTokens(ctx context.Context, responseAPIRequest *openai.ResponseAPIRequest) int {
 	if responseAPIRequest == nil {
 		return 0
@@ -117,6 +121,8 @@ func getResponseAPIPromptTokens(ctx context.Context, responseAPIRequest *openai.
 	if responseAPIRequest.Prompt != nil {
 		totalTokens += countResponseAPIPromptTemplateTokens(ctx, responseAPIRequest.Prompt, responseAPIRequest.Model)
 	}
+	totalTokens += responseToolsPromptTokens(responseAPIRequest.Tools, responseAPIRequest.Model)
+	totalTokens += promptJSONTokens(responseAPIRequest.Text, responseAPIRequest.Model)
 
 	if totalTokens < 10 {
 		totalTokens = 10

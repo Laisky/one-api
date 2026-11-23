@@ -59,7 +59,7 @@ func newResponseWSTierFunding(c *gin.Context, meta *metalib.Meta, handshakeHold 
 		modelRatio:       pricing.ResolveModelRatioAt(meta.ActualModelName, configs, ratios, provider, meta.StartTime),
 		groupRatio:       group,
 		provider:         provider,
-		enabled:          known && len(cfg.Tiers) > 0 && group != 0,
+		enabled:          known && (len(cfg.Tiers) > 0 || includeFlatPromptCacheTariff(meta, meta.ActualModelName)) && group != 0,
 		reserved:         handshakeHold,
 	}
 }
@@ -226,7 +226,8 @@ func (s *responseWSTierFunding) additionalQuote(ctx context.Context, frame []byt
 		ModelRatio: s.modelRatio, ChannelModelRatio: s.modelRatios, GroupRatio: s.groupRatio,
 		ChannelModelConfigs: s.configs, ChannelCompletionRatio: s.completionRatios,
 		PricingAdaptor: s.provider, RequestTime: s.meta.StartTime,
-	}, maxOutput, 0, quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h})
+	}, maxOutput, 0, quotautil.AdmissionOptions{CacheWrite5m: write5m, CacheWrite1h: write1h,
+		IncludeFlatTariff: includeFlatPromptCacheTariff(&s.meta, request.Model)})
 	if err != nil {
 		return 0, 0, errors.Wrap(err, "quote WebSocket inherited tier allowance")
 	}

@@ -7,7 +7,8 @@ import (
 // kimiModels returns independently owned kimi defaults for ali.
 // It takes no arguments and returns the complete family catalog.
 // Source: https://help.aliyun.com/zh/model-studio/model-pricing
-// Additional model and cache sources checked 2026-11-16:
+// Additional model and cache sources checked 2026-11-22:
+// https://help.aliyun.com/zh/model-studio/newly-released-models
 // https://help.aliyun.com/zh/model-studio/context-cache
 // https://help.aliyun.com/zh/model-studio/kimi-k3-1-pro
 // https://help.aliyun.com/zh/model-studio/qwen-api-via-dashscope
@@ -49,6 +50,13 @@ func kimiModels() map[string]adaptor.ModelConfig {
 			InputModalities: []string{"text"}, OutputModalities: []string{"text"},
 			SupportedFeatures: []string{"reasoning"}, SupportedSamplingParameters: []string{"max_tokens"},
 			Description: "Alibaba-deployed Kimi K3.1 Pro, Beijing CNY 13 input, 1.3 cached input and 68 output per million tokens. Upstream supports text and image input; native Ali forwards text only and does not forward the thinking switch or effort. This ID is distinct from Moonshot-supplied kimi/kimi-k3.1-pro.",
+		},
+		"kimi-k3.1-pro-prime": {
+			Ratio: nativeRate(26), CompletionRatio: 136.0 / 26, CachedInputRatio: nativeRate(1.3),
+			ContextLength: 1_048_576, MaxOutputTokens: 1_048_576,
+			InputModalities: []string{"text"}, OutputModalities: []string{"text"},
+			SupportedFeatures: []string{"reasoning"}, SupportedSamplingParameters: []string{"max_tokens"},
+			Description: "Alibaba-deployed Kimi K3.1 Pro Prime, released 2026-11-19 with the same capabilities and limits as Pro. Beijing CNY 26 input, 1.3 cached input and 136 output per million tokens; cached input does not double. Native Ali forwards text only and does not forward the thinking switch or effort. This ID is distinct from Moonshot-supplied kimi/kimi-k3.1-pro-highspeed.",
 		},
 		"kimi/kimi-k2.5": {
 			Ratio:           nativeRate(4),

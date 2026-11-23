@@ -86,10 +86,12 @@ var ModelRatios = map[string]adaptor.ModelConfig{
 }
 
 // DeepseekToolingDefaults does not advertise a separate built-in tool policy.
-// The 2026-11-13 upstream built-in search, URL and file tools require distinct
-// protocol handling and per-call billing that this gateway has not implemented.
+// Built-in search, URL and file tools require distinct protocol handling that
+// this gateway has not implemented. Since 2026-11-18T04:00:00Z, model-triggered
+// search/fetch calls have no separate tool fee; returned context is token-billed.
+// Standalone Search/Fetch APIs still cost USD 0.75 per 1,000 successful requests.
 // Function tools retain the existing token accounting policy.
-// Source: https://api-docs.deepseek.com/news/news261113/
+// Source checked 2026-11-22: https://api-docs.deepseek.com/quick_start/pricing/
 var DeepseekToolingDefaults = adaptor.ChannelToolConfig{
 	Pricing: map[string]adaptor.ToolPricingConfig{},
 }

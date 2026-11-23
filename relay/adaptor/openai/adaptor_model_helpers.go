@@ -35,6 +35,18 @@ func extractGptVersion(modelName string) (float64, bool) {
 	return version, true
 }
 
+// legacyReasoningRejectsSystemRole reports whether modelName is one of the
+// original o1-preview or o1-mini snapshots, which accept neither system nor
+// developer messages (the reason the reasoning system filter was introduced),
+// so their system messages are removed on every route. Parameter modelName is
+// a requested or mapped model ID; matching ignores case and surrounding
+// whitespace. It returns false for every later reasoning model, all of which
+// accept instructions on the Responses API.
+func legacyReasoningRejectsSystemRole(modelName string) bool {
+	name := normalizedModelName(modelName)
+	return strings.HasPrefix(name, "o1-preview") || strings.HasPrefix(name, "o1-mini")
+}
+
 // isModelSupportedReasoning checks if the model supports reasoning features.
 func isModelSupportedReasoning(modelName string) bool {
 	lower := normalizedModelName(modelName)

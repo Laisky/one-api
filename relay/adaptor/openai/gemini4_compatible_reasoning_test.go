@@ -35,6 +35,9 @@ func TestGemini4OpenAICompatibleReasoningForwarding(t *testing.T) {
 			{"carbon-medium", "gemini-4-carbon", stringPtrReasoning("medium"), "medium"},
 			{"carbon-minimal-alias", "gemini-4-carbon", stringPtrReasoning("minimal"), "low"},
 			{"hydrogen-xhigh", "gemini-4-hydrogen", stringPtrReasoning("xhigh"), "xhigh"},
+			{"neon-xhigh", "gemini-4-neon", stringPtrReasoning("xhigh"), "xhigh"},
+			{"neon-minimal-alias", "gemini-4-neon", stringPtrReasoning("minimal"), "low"},
+			{"neon-omitted", "gemini-4-neon", nil, ""},
 			{"hydrogen-minimal-alias", "gemini-4-hydrogen", stringPtrReasoning("minimal"), "low"},
 			{"hydrogen-normalized", " GEMINI-4-HYDROGEN ", stringPtrReasoning(" XHIGH "), "xhigh"},
 			{"carbon-default", "gemini-4-carbon", stringPtrReasoning("default"), ""},
@@ -99,6 +102,8 @@ func TestGemini4OpenAICompatibleRejectsUnsupportedEffort(t *testing.T) {
 		{"gemini-4-carbon", "none"},
 		{"gemini-4-hydrogen", "ultra"},
 		{"gemini-4-hydrogen", "none"},
+		{"gemini-4-neon", "none"},
+		{"gemini-4-neon", "max"},
 	} {
 		t.Run(tc.model+"/"+tc.effort, func(t *testing.T) {
 			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -123,7 +128,7 @@ func TestGemini4OpenAICompatibleRejectsUnsupportedEffort(t *testing.T) {
 // TestGemini4OpenAICompatibleMinimalAliasMatchesNestedLow verifies the documented
 // Chat alias and native level compare consistently before conflict validation.
 func TestGemini4OpenAICompatibleMinimalAliasMatchesNestedLow(t *testing.T) {
-	for _, modelName := range []string{"gemini-4-carbon", "gemini-4-hydrogen"} {
+	for _, modelName := range []string{"gemini-4-carbon", "gemini-4-hydrogen", "gemini-4-neon"} {
 		t.Run(modelName, func(t *testing.T) {
 			minimal, low := "minimal", "low"
 			request := &model.GeneralOpenAIRequest{

@@ -15,6 +15,7 @@ var ModelRatios = adaptor.JoinModelCatalogs(
 	embeddingModels(),
 	glmModels(),
 	kimiModels(),
+	lingModels(),
 	mimoModels(),
 	minimaxModels(),
 	qwenAudioModels(),
