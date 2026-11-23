@@ -33,10 +33,14 @@ var nativeOnlyImageOperatorTariff = model.ModelConfigLocal{Ratio: 4 * billingrat
 var nativeOnlyImageTariffs = []struct {
 	name, receipt string
 	local         *model.ModelConfigLocal
-	charge        int64
+	charge, hold  int64
 }{
 	{name: "unpriced"},
-	{name: "token_price_only", local: &model.ModelConfigLocal{Ratio: 4 * billingratio.MilliTokensUsd, CompletionRatio: 10}},
+	// A complete channel token tariff without a per-image price reserves the
+	// calculator default at the channel's prices: auto/auto is 23,719 output
+	// tokens at $40/M plus the 12-byte prompt at $4/M.
+	{name: "token_price_only", receipt: nativeOnlyImageReceipt, local: &model.ModelConfigLocal{Ratio: 4 * billingratio.MilliTokensUsd, CompletionRatio: 10},
+		charge: 2_020, hold: expectedDefaultImageHold(23719, 40, 4, len("A lighthouse"), 1)},
 	{name: "image_price_only", local: &model.ModelConfigLocal{Image: &model.ImagePricingLocal{PricePerImageUsd: 0.04}}},
 	// ceil(10 text tokens * 2 + 100 output tokens * 2 * 10) = 20 + 2,000.
 	{name: "priced", receipt: nativeOnlyImageReceipt, local: &nativeOnlyImageOperatorTariff, charge: 2_020},
@@ -48,12 +52,13 @@ var nativeOnlyImageTariffs = []struct {
 
 // TestNativeOnlyImageOperatorTariffHTTP drives GPT Image 2.6 generations for the
 // native-only IDs through RelayImageHelper against a fake TLS provider and the
-// SQLite ledger. On Azure: without image.price_per_image_usd the request is
-// refused before reservation; with only a per-image price it is reserved and
-// then refused by the operator-tariff dispatch gate with a full refund; with a
-// complete operator tariff it is dispatched once, reserves the per-image
-// fallback, and settles the receipt at the channel's token prices, never at
-// OpenAI's native token or cached-input prices. The AIProxy
+// SQLite ledger. On Azure: without any channel price the request is refused
+// before reservation; with only a per-image price it is reserved and then
+// refused by the operator-tariff dispatch gate with a full refund; with a
+// complete operator token tariff it is dispatched once, reserves the per-image
+// fallback (or, without one, the calculator default priced at the channel's
+// token tariff), and settles the receipt at the channel's token prices, never
+// at OpenAI's native token or cached-input prices. The AIProxy
 // library host does not serve images (its default endpoints exclude them, so
 // the distributor never routes there); if forced through the controller, every
 // incompletely priced configuration is still refused without provider contact.
@@ -93,7 +98,7 @@ func TestNativeOnlyImageOperatorTariffHTTP(t *testing.T) {
 					drainCriticalTasks(t)
 					logQuota, costQuota := tariffRequestLedger(t, requestID)
 					switch tariff.name {
-					case "unpriced", "token_price_only":
+					case "unpriced":
 						require.NotNil(t, apiErr)
 						require.Equal(t, http.StatusServiceUnavailable, apiErr.StatusCode)
 						require.Equal(t, "image_billing_not_configured", apiErr.Error.Code)
@@ -111,7 +116,16 @@ func TestNativeOnlyImageOperatorTariffHTTP(t *testing.T) {
 						require.Equal(t, "/openai/deployments/"+imageModel+"/images/generations", obs.Path)
 						require.Contains(t, obs.Body, `"model":"`+imageModel+`"`)
 						require.Contains(t, writer.Body.String(), "b64_json")
-						require.Equal(t, reservation, balance-obs.UserQuota, "admission must reserve the operator per-image fallback")
+						hold := reservation
+						if tariff.hold > 0 {
+							hold = tariff.hold
+						}
+						// Request defaults come from the catalog even when the
+						// channel resolves no image tariff; the legacy
+						// "1024x1024"/"standard" defaults are not GPT Image 2.6 values.
+						require.Contains(t, obs.Body, `"size":"auto"`)
+						require.Contains(t, obs.Body, `"quality":"auto"`)
+						require.Equal(t, hold, balance-obs.UserQuota, "admission must reserve the per-image fallback or the derived default")
 						require.Equal(t, balance-tariff.charge, reloadUserQuota(t), "the receipt must settle at the channel token tariff")
 						require.Equal(t, tariff.charge, consumeLogQuota(t, requestID))
 						require.Equal(t, tariff.charge, logQuota)

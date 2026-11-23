@@ -242,7 +242,7 @@ func calculateImageBaseQuota(imagePriceUsd, ratio, imageCostRatio, groupRatio fl
 }
 
 // finalizeImageQuota merges token usage data with the reserved base quota to produce the final billed amount.
-// GPT Image 2.5 replaces its reserve; older models retain additive render billing.
+// GPT Image 2.5/2.6 replace their reserve; older models retain additive render billing.
 // Parameters: baseQuota is reserved quota, perImageBilling selects the legacy path,
 // imageModel/actualModel identify pricing, usage contains provider counts, and groupRatio
 // scales prices; configs optionally provides request-start channel pricing. Returns: the final charge and its token/reservation breakdown.

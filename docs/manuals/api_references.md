@@ -6748,7 +6748,7 @@ curl -sS "$BASE_URL/api/channel/default-pricing?type=1" \
 
 ### POST /api/channel/pricing-readiness
 
-Reports which Supported Models of a channel draft request admission would refuse until the channel's `model_configs` prices them, so the channel editor can warn before saving. The draft uses the channel save payload's encoding and is parsed with the same parsers the relay uses for saved channels; each model is evaluated after Model Mapping with the admission validators themselves (GPT Image 2.5/2.6 reservation fallback, operator-only token tariffs, provider-required cache prices, and Live-only realtime prices). It reads no channel rows and changes nothing.
+Reports which Supported Models of a channel draft request admission would refuse until the channel's `model_configs` prices them, so the channel editor can warn before saving. The draft uses the channel save payload's encoding and is parsed with the same parsers the relay uses for saved channels; each model is evaluated after Model Mapping with the admission validators themselves (the GPT Image 2.5/2.6 reservation/fallback, operator-only token tariffs, provider-required cache prices, and Live-only realtime prices). For GPT Image 2.5/2.6, `image.price_per_image_usd` is an optional override: without it, admission derives the reservation from OpenAI's token calculator at the model's image-output token price, so the gap is reported only when the model has neither a positive per-image price nor an image-output token price (for example GPT Image 2.6 on an operator-priced host whose channel sets no token prices). It reads no channel rows and changes nothing.
 
 **Auth:** Management access token — `Authorization: $ACCESS_TOKEN` (AdminAuth).
 
@@ -6767,7 +6767,7 @@ Reports which Supported Models of a channel draft request admission would refuse
 |-------|------|-------------|
 | `data.gaps[].model` | string | Supported model as listed. |
 | `data.gaps[].upstream_model` | string | Model after Model Mapping; the name admission prices and the `model_configs` key to set. |
-| `data.gaps[].requirement` | string | `image_price_per_image_usd`, `token_tariff`, `tariff_supplement`, or `live_tariff`. |
+| `data.gaps[].requirement` | string | `image_price_per_image_usd` (GPT Image 2.5/2.6 has neither a positive `image.price_per_image_usd` nor an image-output token price to derive the default reservation from), `token_tariff`, `tariff_supplement`, or `live_tariff`. |
 | `data.gaps[].message` | string | The refusal text admission returns. |
 
 ```json

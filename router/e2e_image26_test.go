@@ -60,14 +60,26 @@ const (
 	e2eImageOperatorCharge  = int64(2_020)
 	// e2eImageOperatorReservation is ceil($0.04 x 500,000) for one image.
 	e2eImageOperatorReservation = int64(20_000)
+	// e2eImageOperatorDefaultHold is the calculator default without a
+	// per-image price at the operator tariff: auto size and quality are the
+	// calculator maximum of 23,719 output tokens at $40/M plus the 12-byte
+	// prompt at $4/M = $0.948808, x 500,000 quota/USD.
+	e2eImageOperatorDefaultHold = int64(474_404)
+	// e2eImageNativeDefaultHold is the same default at OpenAI's native
+	// tariff: 23,719 x $30/M + 12 x $5/M = $0.71163, x 500,000 quota/USD.
+	e2eImageNativeDefaultHold = int64(355_815)
+	// e2eImageNativeOperatorReceiptCharge prices e2eImageOperatorReceipt at
+	// the native tariff: 10 x 2.5 + 100 x 15 = 1,525.
+	e2eImageNativeOperatorReceiptCharge = int64(1_525)
 )
 
 // TestE2EOperatorTariffNativeOnlyImages drives GPT Image 2.6 generations on
-// Azure through the shipped router. Without image.price_per_image_usd the
-// request is refused before reservation with 503 image_billing_not_configured;
-// a per-image price without a token tariff is reserved, refused at dispatch and
-// refunded (503 model_pricing_not_configured); a complete operator tariff
-// reserves the per-image fallback and settles the receipt at the channel's
+// Azure through the shipped router. Without any channel price the request is
+// refused before reservation with 503 image_billing_not_configured; a
+// per-image price without a token tariff is reserved, refused at dispatch and
+// refunded (503 model_pricing_not_configured); a complete operator token
+// tariff reserves the per-image fallback, or without one the calculator
+// default priced at that tariff, and settles the receipt at the channel's
 // token prices; and an unpriced primary fails over to a priced secondary.
 func TestE2EOperatorTariffNativeOnlyImages(t *testing.T) {
 	for _, imageModel := range e2eImageModels {
@@ -76,7 +88,7 @@ func TestE2EOperatorTariffNativeOnlyImages(t *testing.T) {
 			secondary           bool
 		}{
 			{name: "unpriced", code: "image_billing_not_configured"},
-			{name: "token_price_only", primary: `{"ratio":2,"completion_ratio":10}`, code: "image_billing_not_configured"},
+			{name: "token_price_only", primary: `{"ratio":2,"completion_ratio":10}`},
 			{name: "image_price_only", primary: `{"image":{"price_per_image_usd":0.04}}`, code: "model_pricing_not_configured"},
 			{name: "priced", primary: e2eImageOperatorEntry},
 			{name: "unpriced_fails_over", secondary: true},
@@ -98,7 +110,7 @@ func TestE2EOperatorTariffNativeOnlyImages(t *testing.T) {
 				case "unpriced_fails_over":
 					require.Empty(t, env.upstream.callsFor(e2eAzureKey), "the unpriced primary must never be contacted")
 					served = e2eAzureBackupKey
-				case "priced":
+				case "priced", "token_price_only":
 				default:
 					errObject := e2eRequireErrorWire(t, e2eChat, res, http.StatusServiceUnavailable)
 					require.Equal(t, tc.code, errObject["code"], "body=%s", res.Body)
@@ -114,7 +126,17 @@ func TestE2EOperatorTariffNativeOnlyImages(t *testing.T) {
 				require.Len(t, calls, 1, "a priced image request is dispatched exactly once")
 				require.Equal(t, "/openai/deployments/"+imageModel+"/images/generations", calls[0].Path)
 				require.Equal(t, imageModel, calls[0].Body["model"])
-				require.Equal(t, e2eImageOperatorReservation, before.UserQuota-calls[0].UserQuota, "admission reserves the operator per-image fallback")
+				reserved := before.UserQuota - calls[0].UserQuota
+				if tc.name == "token_price_only" {
+					// Float64 pricing may round the derived hold up by one
+					// quota unit ($0.000002), never below the exact price.
+					require.GreaterOrEqual(t, reserved, e2eImageOperatorDefaultHold, "admission reserves the derived default")
+					require.LessOrEqual(t, reserved-e2eImageOperatorDefaultHold, int64(1), "admission reserves the derived default")
+				} else {
+					require.Equal(t, e2eImageOperatorReservation, reserved, "admission reserves the operator per-image fallback")
+				}
+				require.Equal(t, "auto", calls[0].Body["size"], "catalog request defaults apply without an image tariff")
+				require.Equal(t, "auto", calls[0].Body["quality"], "catalog request defaults apply without an image tariff")
 				env.requireSettled(t, res, before, e2eImageOperatorCharge, false)
 			})
 		}
@@ -182,30 +204,36 @@ var e2eNativeImageCases = []e2eNativeImageCase{
 }
 
 // TestE2EImage26NativeOpenAI drives GPT Image 2.6 generations on a native
-// OpenAI channel. Without a positive image.price_per_image_usd the request is
-// refused before reservation with the operator-facing 503
-// image_billing_not_configured; with it, the per-image fallback is reserved, a
-// token receipt settles by the five native token buckets, and the excess
-// reservation is refunded.
+// OpenAI channel. Without a positive image.price_per_image_usd the request
+// reserves the calculator default (auto size and quality at the effective
+// token tariff), settles a token receipt by the five token buckets and
+// refunds the excess, or keeps the hold when no receipt arrives; with the
+// price, the per-image fallback is reserved instead and settled the same way.
 func TestE2EImage26NativeOpenAI(t *testing.T) {
 	for _, imageModel := range e2eImageModels {
-		for _, entry := range []struct{ name, configs string }{
-			{name: "no_model_configs"},
-			{name: "token_tariff_only", configs: `{"ratio":2.5,"completion_ratio":6}`},
-			{name: "zero_image_price", configs: `{"image":{"price_per_image_usd":0}}`},
+		for _, entry := range []struct {
+			name, configs, usage string
+			charge               int64
+			flagged              bool
+		}{
+			{name: "no_model_configs", usage: e2eImageOperatorReceipt, charge: e2eImageNativeOperatorReceiptCharge},
+			{name: "token_tariff_only", configs: `{"ratio":2.5,"completion_ratio":6}`, usage: e2eImageOperatorReceipt, charge: e2eImageNativeOperatorReceiptCharge},
+			{name: "zero_image_price", configs: `{"image":{"price_per_image_usd":0}}`, usage: e2eImageOperatorReceipt, charge: e2eImageNativeOperatorReceiptCharge},
+			{name: "no_receipt_keeps_default_hold", charge: e2eImageNativeDefaultHold, flagged: true},
 		} {
-			t.Run(fmt.Sprintf("%s/refused/%s", imageModel, entry.name), func(t *testing.T) {
-				env := newE2EEnv(t, func(e2eCall) e2eReply { return e2eImageReply(e2eImageOperatorReceipt) },
+			t.Run(fmt.Sprintf("%s/default_reservation/%s", imageModel, entry.name), func(t *testing.T) {
+				env := newE2EEnv(t, func(e2eCall) e2eReply { return e2eImageReply(entry.usage) },
 					e2eNativeChannel(939821, e2eNativeKey, 0, imageModel, e2eImageTariffConfigs(imageModel, entry.configs)))
 				before := env.ledger(t)
 
 				res := env.post(t, "/v1/images/generations", e2eImageBody(imageModel))
 
-				errObject := e2eRequireErrorWire(t, e2eChat, res, http.StatusServiceUnavailable)
-				require.Equal(t, "image_billing_not_configured", errObject["code"], "body=%s", res.Body)
-				require.Contains(t, errObject["message"], "image.price_per_image_usd", "the refusal must tell the operator what to configure")
-				require.Zero(t, env.upstream.total())
-				env.requireNothingCharged(t, res, before)
+				e2eRequireImageWire(t, res)
+				calls := env.upstream.callsFor(e2eNativeKey)
+				require.Len(t, calls, 1, "a default-reserved image request is dispatched exactly once")
+				require.Equal(t, imageModel, calls[0].Body["model"])
+				require.Equal(t, e2eImageNativeDefaultHold, before.UserQuota-calls[0].UserQuota, "admission reserves the calculator default")
+				env.requireSettled(t, res, before, entry.charge, entry.flagged)
 			})
 		}
 		for _, tc := range e2eNativeImageCases {

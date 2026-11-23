@@ -15,8 +15,9 @@ import (
 
 const (
 	// PricingRequirementImageFallback marks a GPT Image 2.5/2.6 model that has
-	// no positive image.price_per_image_usd reservation/fallback tariff, so
-	// image admission answers 503 image_billing_not_configured.
+	// neither a positive image.price_per_image_usd nor an image-output token
+	// price to derive the default reservation from, so image admission answers
+	// 503 image_billing_not_configured.
 	PricingRequirementImageFallback = "image_price_per_image_usd"
 	// PricingRequirementTokenTariff marks a model the provider declares
 	// operator-priced (adaptor.OperatorTariffPolicy) whose channel entry lacks a
@@ -103,7 +104,8 @@ func EvaluateChannelPricingReadiness(provider relayadaptor.Adaptor, models []str
 
 // strictGPTImageReadiness applies image admission's strict GPT Image tariff
 // check to a channel configuration: it resolves the image tariff and catalog
-// defaults exactly as RelayImageHelper does and validates the reservation at
+// defaults exactly as RelayImageHelper does, derives the default reservation
+// when no per-image fallback is configured, and validates the reservation at
 // tier 1, group ratio 1, and one image. Parameters: name is a strict GPT Image
 // model, configs the channel's model_configs, provider the pricing adaptor,
 // and at the evaluation time. Returns: nil when admission would reserve the
@@ -122,6 +124,12 @@ func strictGPTImageReadiness(name string, configs map[string]model.ModelConfigLo
 			return nil
 		}
 		fallbackUSD = cfg.PricePerImageUsd
+	}
+	if fallbackUSD <= 0 && strictGPTImageDefaultReservationAllowed(name, configs, provider, at) {
+		// Admission derives the default from the request-start token tariff;
+		// readiness checks its most expensive case (auto size and quality).
+		usage := resolveStrictGPTImageUsageConfig(name, configs, nil, provider, at)
+		fallbackUSD = strictGPTImageDefaultReservationUSD(name, "auto", "auto", 0, 0, 1, usage)
 	}
 	return validateStrictGPTImageBilling(name, fallbackUSD, 1, 1, 1)
 }
