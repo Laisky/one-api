@@ -171,7 +171,9 @@ func init() {
 			ChannelType: i,
 		}
 		adaptor.Init(meta)
-		channelId2Models[i] = adaptor.GetModelList()
+		// The editor fills and resets channels from this list, so it holds
+		// only models that are servable without operator pricing.
+		channelId2Models[i] = zeroConfigServableModels(i, adaptor.GetModelList())
 	}
 }
 

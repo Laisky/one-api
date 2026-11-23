@@ -14,8 +14,11 @@ import (
 )
 
 // TestVertexLiveDashboardModelCatalog exercises the actual administrative
-// dashboard handler, not merely the adaptor method. Parameters: t owns the
-// test. Returns: none. Router AdminAuth remains unchanged; no IAM probe occurs.
+// dashboard handler, not merely the adaptor method. Vertex Live models require
+// operator realtime prices, so they stay in the adaptor catalog (operators may
+// add and price them) but are not default suggestions: a channel filled from
+// the defaults must be servable without operator pricing. Parameters: t owns
+// the test. Returns: none. Router AdminAuth remains unchanged; no IAM probe occurs.
 func TestVertexLiveDashboardModelCatalog(t *testing.T) {
 	t.Parallel()
 	w := httptest.NewRecorder()
@@ -30,11 +33,14 @@ func TestVertexLiveDashboardModelCatalog(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
 	require.True(t, body.Success)
 	models := body.Data[fmt.Sprint(channeltype.VertextAI)]
-	require.Contains(t, models, "gemini-3.8-live")
+	raw := rawAdaptorModelList(t, channeltype.VertextAI)
+	for _, name := range []string{"gemini-3.8-live", "gemini-live-2.5-flash-native-audio"} {
+		require.Contains(t, raw, name, "%s stays addable from the adaptor catalog", name)
+		require.NotContains(t, models, name, "%s needs operator realtime prices, so it is not a default suggestion", name)
+	}
 	for _, name := range vertexLegacyLiveModelIDs() {
 		require.NotContains(t, models, name, "dashboard suggestions do not determine operator-configured eligibility")
 	}
-	require.Contains(t, models, "gemini-live-2.5-flash-native-audio")
 	require.Contains(t, models, "gemini-3.8-flash")
 }
 
