@@ -6751,7 +6751,7 @@ curl -sS "$BASE_URL/api/channel/default-pricing?type=1" \
 
 ### POST /api/channel/pricing-readiness
 
-Reports which Supported Models of a channel draft request admission would refuse until the channel's `model_configs` prices them, so the channel editor can warn before saving. The draft uses the channel save payload's encoding and is parsed with the same parsers the relay uses for saved channels; each model is evaluated after Model Mapping with the admission validators themselves (the GPT Image 2.5/2.6 reservation/fallback, operator-only token tariffs, provider-required cache prices, and Live-only realtime prices). For GPT Image 2.5/2.6, `image.price_per_image_usd` is an optional override: without it, admission derives the reservation from OpenAI's token calculator at the model's image-output token price, so the gap is reported only when the model has neither a positive per-image price nor an image-output token price (for example GPT Image 2.6 on an operator-priced host whose channel sets no token prices). The derived default serves generations only: an image edit of these models additionally needs a positive `image.price_per_image_usd` (reference-image input has no published bound), which this check does not report. It reads no channel rows and changes nothing.
+Reports which Supported Models of a channel draft request admission would refuse until the channel's `model_configs` prices them, so the channel editor can warn before saving. The draft uses the channel save payload's encoding and is parsed with the same parsers the relay uses for saved channels; each model is evaluated after Model Mapping with the admission validators themselves (the GPT Image 2.5/2.6 reservation/fallback, operator-only token tariffs, provider-required cache prices, and Live-only realtime prices). For GPT Image 2.5/2.6, `image.price_per_image_usd` is an optional override: without it, admission derives the reservation from OpenAI's token calculator at the model's image-output token price, so the gap is reported only when the model has neither a positive per-image price nor an image-output token price (for example GPT Image 2.6 on an operator-priced host whose channel sets no token prices). The derived default serves generations only: an image edit of these models additionally needs a positive `image.price_per_image_usd` or an opted-in megapixel tariff (`image.megapixel`) (reference-image input has no published bound), which this check does not report. It reads no channel rows and changes nothing.
 
 **Auth:** Management access token — `Authorization: $ACCESS_TOKEN` (AdminAuth).
 
@@ -6808,7 +6808,7 @@ curl -sS -X POST "$BASE_URL/api/channel/pricing-readiness" \
 
 Atomically resets one channel's Supported Models to its provider defaults. The server chooses the list; any request body is ignored. In one transaction it locks the row, validates the current configuration, writes `models`, clears `hidden_models`, keeps `testing_model` when it is still listed or the skip sentinel (otherwise reverts it to automatic), and rebuilds routing abilities (retained models keep their suspensions). Model Mapping, Model Configs, legacy ratios, inference profiles, status, and every other field are never rewritten.
 
-The new list is the `GET /api/models/defaults` list followed, in catalog order, by every other `GET /api/models` model the channel currently lists or explicitly configures (as a Model Mapping key, a `model_configs`/`model_ratio`/`completion_ratio` key, or an inference profile key) and can serve: request admission would not refuse it for missing pricing under the channel's own Model Mapping and Model Configs (the `POST /api/channel/pricing-readiness` evaluation). Listed models without such configuration, and custom models outside the catalog, are removed.
+The new list is the `GET /api/models/defaults` list followed, in catalog order, by every other `GET /api/models` model the channel currently lists or explicitly configures (as a Model Mapping key, a `model_configs`/`model_ratio`/`completion_ratio` key, or an inference profile key) and can serve: request admission would not refuse it for missing pricing under the channel's own Model Mapping and Model Configs (the `POST /api/channel/pricing-readiness` evaluation). Listed models without such configuration, and custom models outside the catalog, are removed. A default that is a Model Mapping key is evaluated the same way through its mapping; if admission would refuse it (for example a default mapped to an operator-priced model without a complete tariff), the reset is refused with `tariff_incomplete` on `model_mapping` naming that default. Whitespace-only or `null` Model Mapping and Model Configs are treated as unset.
 
 **Auth:** Management access token — `Authorization: $ACCESS_TOKEN` (AdminAuth).
 
@@ -6835,7 +6835,7 @@ The new list is the `GET /api/models/defaults` list followed, in catalog order, 
 | `mapping_conflict` | A Model Mapping key or target is a model this provider does not recognize. |
 | `pricing_conflict` | A `model_configs`, `model_ratio`, or `completion_ratio` key is a model this provider does not recognize. |
 | `inference_profile_conflict` | An `inference_profile_arn_map` key is a model this provider does not recognize. |
-| `tariff_incomplete` | A provider model the channel configures (in the named field) needs an operator tariff that is missing or incomplete, so it would not be servable. Complete the tariff in `model_configs` or remove the entry. |
+| `tariff_incomplete` | A model the channel configures in the named field needs an operator tariff that is missing or incomplete, so it would not be servable; for `model_mapping` this includes a default whose mapped target lacks the tariff. Complete the tariff in `model_configs`, or change or remove the mapping or entry in the named field. |
 | `invalid_configuration` | A configuration field is malformed. |
 
 **Example**
@@ -7880,7 +7880,7 @@ curl -s "$BASE_URL/api/models" \
 
 ### GET /api/models/defaults
 
-Returns the zero-config default models per channel type: each `GET /api/models` list minus the models request admission would refuse while the channel has no `model_configs` (for example Groq `minimaxai/minimax-m2.7`, which needs an operator tariff, or Live-only Google models that need explicit realtime prices). These are the lists the channel editor fills a new channel with and that model resets write, so a channel saved from them needs no operator pricing. Models absent here stay in `GET /api/models` and can be added once priced. The map is precomputed at startup.
+Returns the zero-config default models per channel type: each `GET /api/models` list minus the models request admission would refuse while the channel has no `model_configs` (for example Groq `minimaxai/minimax-m2.7`, which needs an operator tariff, or Live-only Google models that need explicit realtime prices). For GPT Image 2.5/2.6 the guarantee covers generations, which use the derived default reservation; `/v1/images/edits` for these models still answers `503 image_billing_not_configured` until the channel sets a positive `image.price_per_image_usd` or a megapixel tariff (`image.megapixel`). These are the lists the channel editor fills a new channel with and that model resets write, so a channel saved from them needs no operator pricing. Models absent here stay in `GET /api/models` and can be added once priced. The map is precomputed at startup.
 
 **Auth:** Management ACCESS TOKEN - `Authorization: $ACCESS_TOKEN` (admin role).
 
@@ -8765,11 +8765,11 @@ All filters are optional; CSV and repeated parameters are both accepted. Boolean
 | has_web_search | boolean | no | false | Require the `web_search` feature flag |
 | has_structured_outputs | boolean | no | false | Require the `structured_outputs` feature flag |
 
-**Response:** `200 OK`. `data` is a map keyed by `"<channelTypeName>:<channelName>"` (e.g. `"openai:openai-main"`); each entry carries the channel metadata and a `models` map keyed by model name. Prices are USD per 1M tokens unless noted. Most capability/metadata arrays and the various nested pricing objects use `omitempty` and are omitted when empty; `input_price`, `cached_input_price`, `output_price`, and `max_tokens` are always present.
+**Response:** `200 OK`. `data` is a map keyed by `"<channelTypeName>:<channelName>"` (e.g. `"openai:openai-main"`). When several channels in one response share a type and name, the channel with the lowest id keeps that key and each later one, in ascending id order, is keyed `"<channelTypeName>:<channelName>#2"`, `"#3"`, and so on, skipping any key that another channel's real name already holds. No channel is dropped and no channel id or UUID is exposed; treat the key as opaque. Each entry carries the channel metadata and a `models` map keyed by model name. Prices are USD per 1M tokens unless noted. Most capability/metadata arrays and the various nested pricing objects use `omitempty` and are omitted when empty; `input_price`, `cached_input_price`, `output_price`, and `max_tokens` are always present.
 
 | Field | JSON key | Type | Description |
 |-------|----------|------|-------------|
-| channel_name | `channel_name` | string | The composed `type:name` key |
+| channel_name | `channel_name` | string | The entry's map key: `type:name`, or `type:name#N` for a later channel sharing that type and name |
 | channel_type | `channel_type` | integer | Numeric channel type id |
 | models | `models` | object | Map of model name to model display info |
 | input_price | `input_price` | number | USD per 1M input tokens (always present) |
@@ -8784,7 +8784,7 @@ All filters are optional; CSV and repeated parameters are both accepted. Boolean
 | per_call_pricing | `per_call_pricing` | object | Flat per-invocation pricing `{usd_per_thousand_calls, usd_per_call}` (mutually exclusive with token pricing; omitted if absent) |
 | per_page_pricing | `per_page_pricing` | object | Flat per-processed-page pricing `{usd_per_thousand_pages, usd_per_page}` for page-priced document models (mutually exclusive with token and per-call pricing; omitted if absent) |
 | time_windows | `time_windows` | object[] | Ordered time-of-day pricing windows. Each item contains `name`, `timezone`, `ranges`, optional `days_of_week`/`date_from`/`date_to`, and an `overlay` object rendered as display prices. |
-| active_time_window | `active_time_window` | string | Name of the first window matching server display time. Historical billing still uses the request's own start time. |
+| active_time_window | `active_time_window` | string | Name of the first window matching server display time (the window billing applies); empty when no window matches or the first match is unnamed. Historical billing still uses the request's own start time. |
 
 Other optional nested fields present where applicable (all `omitempty`): `cache_write_5m_price`, `cache_write_1h_price`, `max_output_tokens`, `max_reasoning_tokens`, `supported_sampling_parameters`, `supported_reasoning_efforts`, `default_reasoning_effort`, `quantization`, `hugging_face_id`, `description`, `tiers`, `time_windows`, `active_time_window`, `video_pricing`, `audio_pricing`, `image_pricing`, `embedding_pricing`.
 
