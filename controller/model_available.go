@@ -488,7 +488,7 @@ func GetAvailableModelsByToken(c *gin.Context) {
 		if modelsString != "" {
 			ctx, userGroup, err := getRequestUserGroup(c)
 			if err != nil {
-				lg.Warn("failed to load user group for available models", zap.Int("user_id", userID), zap.String("error", err.Error()))
+				lg.Warn("failed to load user group for available models", zap.Int("user_id", userID), zap.Error(err))
 				c.JSON(http.StatusBadRequest, gin.H{
 					"success": false,
 					"message": err.Error(),

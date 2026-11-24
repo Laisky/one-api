@@ -23,8 +23,19 @@ import (
 	"github.com/Laisky/one-api/relay/meta"
 )
 
-// GetModelsDisplay returns models available to the current user grouped by channel/adaptor with pricing information
-// This endpoint is designed for the Models display page in the frontend
+// GetModelsDisplay returns models available to the current user grouped by channel/adaptor with pricing information.
+// This endpoint is designed for the Models display page in the frontend.
+//
+// The response data map is keyed by "<channel type name>:<channel name>", which is
+// also each entry's channel_name. When several channels in one response share a type
+// and name, the lowest channel id keeps that key and each later one, in ascending id
+// order, is keyed "<channel type name>:<channel name>#2", "#3", ... skipping any key a
+// real channel name already holds (see channelDisplayKeys). No channel is dropped, no
+// channel id or UUID is exposed, and existing consumers keep working unchanged.
+//
+// Parameters: c is the request context; an authenticated user id narrows the listing
+// to the user's group, and query parameters select keyword and capability filters.
+// Returns: nothing; it writes a ModelsDisplayResponse or an error response.
 func GetModelsDisplay(c *gin.Context) {
 	// If logged-in, filter by user's allowed models; otherwise, show all supported models grouped by channel type
 	userId := c.GetInt(ctxkey.Id)
@@ -118,6 +129,9 @@ func GetModelsDisplay(c *gin.Context) {
 			var timeWindows []TimeWindowDisplay
 			var activeTimeWindow string
 			baseCompletionRatio := 0.0
+			// tierBase is the ratio-space token tariff billing prices tiers and
+			// windows from: the provider default, or the channel config wholesale.
+			var tierBase adaptorpkg.ModelConfig
 			overrideApplied := false
 
 			// buildImageDisplayPricing converts an adaptor ImagePricingConfig to display format
@@ -172,7 +186,8 @@ func GetModelsDisplay(c *gin.Context) {
 			_ = buildImageDisplayPricing // used below
 
 			if cfg, ok := defaultPricing[actual]; ok {
-				timeWindows, activeTimeWindow = buildTimeWindowDisplays(cfg.TimeWindows, convertRatioToPrice(cfg.Ratio), cfg.CompletionRatio, displayNow, convertRatioToPrice)
+				tierBase = displayTierBase(cfg)
+				timeWindows, activeTimeWindow = buildTimeWindowDisplays(cfg.TimeWindows, tierBase, convertRatioToPrice(cfg.Ratio), displayNow, convertRatioToPrice)
 				perCallPricing = buildPerCallDisplayPricing(cfg.PerCall)
 				perPagePricing = buildPerPageDisplayPricing(cfg.PerPage)
 				inputPrice = convertRatioToPrice(cfg.Ratio)
@@ -211,33 +226,8 @@ func GetModelsDisplay(c *gin.Context) {
 					imagePrice = cfg.Image.PricePerImageUsd
 					imagePricing = buildImageDisplayPricing(cfg.Image, cfg.Image)
 				}
-				// Tiered pricing
-				if len(cfg.Tiers) > 0 {
-					tiers = make([]ModelDisplayTier, 0, len(cfg.Tiers))
-					for _, tier := range cfg.Tiers {
-						tierInput := convertRatioToPrice(tier.Ratio)
-						tierOutput := tierInput * tier.CompletionRatio
-						if tier.CompletionRatio == 0 {
-							tierOutput = tierInput * baseCompletionRatio
-						}
-						dt := ModelDisplayTier{
-							InputPrice:           tierInput,
-							OutputPrice:          tierOutput,
-							InputTokenThreshold:  tier.InputTokenThreshold,
-							OutputTokenThreshold: tier.OutputTokenThreshold,
-						}
-						if tier.CachedInputRatio != 0 {
-							dt.CachedInputPrice = convertRatioToPrice(tier.CachedInputRatio)
-						}
-						if tier.CacheWrite5mRatio != 0 {
-							dt.CacheWrite5mPrice = convertRatioToPrice(tier.CacheWrite5mRatio)
-						}
-						if tier.CacheWrite1hRatio != 0 {
-							dt.CacheWrite1hPrice = convertRatioToPrice(tier.CacheWrite1hRatio)
-						}
-						tiers = append(tiers, dt)
-					}
-				}
+				// Tiered pricing, with billing's cumulative tier inheritance.
+				tiers = buildDisplayTiers(tierBase, convertRatioToPrice)
 				// Video pricing
 				if cfg.Video != nil && cfg.Video.HasData() {
 					videoPricing = &VideoDisplayPricing{
@@ -283,6 +273,7 @@ func GetModelsDisplay(c *gin.Context) {
 				cachedInputPrice = inputPrice
 				outputPrice = inputPrice * compRatio
 				baseCompletionRatio = compRatio
+				tierBase = adaptorpkg.ModelConfig{Ratio: inRatio, CompletionRatio: compRatio}
 				maxTokens = 0
 				imagePrice = 0
 			}
@@ -290,6 +281,12 @@ func GetModelsDisplay(c *gin.Context) {
 			applyOverride := func(cfg *model.ModelConfigLocal) {
 				if cfg.MaxTokens != 0 {
 					maxTokens = cfg.MaxTokens
+				}
+				// Runtime admission prefers the channel context window when one is
+				// configured (pricing.ResolveModelConfig carries it); zero keeps the
+				// adaptor value. Apply it before the min_context_length filter.
+				if cfg.ContextLength > 0 {
+					contextLength = cfg.ContextLength
 				}
 				if cfg.Ratio != 0 {
 					prevInputPrice := inputPrice
@@ -327,6 +324,29 @@ func GetModelsDisplay(c *gin.Context) {
 				// Native tariffs have the same presence semantics as the billing
 				// resolvers: a present zero rate is free, not missing configuration.
 				converted := convertLocalDisplayConfig(*cfg)
+				// Token billing selects the channel config wholesale: its own tiers,
+				// already in billing order, replace the provider's and its cache
+				// prices are not inherited. Only an omitted ratio or completion_ratio
+				// falls back to the provider default, as relay/quota does.
+				localTierBase := displayTierBase(converted)
+				if localTierBase.Ratio == 0 {
+					localTierBase.Ratio = tierBase.Ratio
+				}
+				if localTierBase.CompletionRatio == 0 {
+					localTierBase.CompletionRatio = tierBase.CompletionRatio
+				}
+				tierBase = localTierBase
+				tiers = buildDisplayTiers(tierBase, convertRatioToPrice)
+				// Billing resolves a channel config wholesale (pricing.ResolveModelConfig),
+				// so a channel video or embedding block replaces the adaptor block
+				// rather than merging field by field. Without one, billing falls back
+				// to the provider default already rendered above.
+				if converted.Video != nil && converted.Video.HasData() {
+					videoPricing = buildVideoDisplayPricing(converted.Video)
+				}
+				if converted.Embedding != nil && converted.Embedding.HasData() {
+					embeddingPricing = buildEmbeddingDisplayPricing(converted.Embedding, convertRatioToPrice)
+				}
 				if converted.PerCall != nil && converted.PerCall.HasData() {
 					perCallPricing = buildPerCallDisplayPricing(converted.PerCall)
 				} else if perCallPricing != nil && cfg.Ratio != 0 && cfg.Video == nil {
@@ -356,7 +376,7 @@ func GetModelsDisplay(c *gin.Context) {
 					timeWindows, activeTimeWindow = nil, ""
 				}
 				if len(cfg.TimeWindows) > 0 {
-					timeWindows, activeTimeWindow = buildTimeWindowDisplays(convertLocalDisplayTimeWindows(cfg.TimeWindows), inputPrice, baseCompletionRatio, displayNow, convertRatioToPrice)
+					timeWindows, activeTimeWindow = buildTimeWindowDisplays(convertLocalDisplayTimeWindows(cfg.TimeWindows), tierBase, inputPrice, displayNow, convertRatioToPrice)
 				}
 			}
 
@@ -431,6 +451,7 @@ func GetModelsDisplay(c *gin.Context) {
 				return nil, errors.Wrap(err, "get all enabled channels")
 			}
 			result := make(map[string]ChannelModelsDisplayInfo)
+			keys := channelDisplayKeys(channels)
 			for _, ch := range channels {
 				if !filters.matchesChannel(ch.Type) {
 					continue
@@ -444,7 +465,7 @@ func GetModelsDisplay(c *gin.Context) {
 				if len(modelInfos) == 0 {
 					continue
 				}
-				key := fmt.Sprintf("%s:%s", channeltype.IdToName(ch.Type), ch.Name)
+				key := keys[ch.Id]
 				result[key] = ChannelModelsDisplayInfo{ChannelName: key, ChannelType: ch.Type, Models: modelInfos}
 			}
 			return result, nil
@@ -510,11 +531,20 @@ func GetModelsDisplay(c *gin.Context) {
 		}
 		ch2models[ab.ChannelId][ab.Model] = struct{}{}
 	}
-	for chID, modelSet := range ch2models {
+	channels := make([]*model.Channel, 0, len(ch2models))
+	for chID := range ch2models {
 		ch, err := model.GetChannelById(chID, true)
 		if err != nil {
+			// A stale ability can outlive its channel; the listing simply omits it.
+			lg.Debug("skip models display channel that failed to load",
+				zap.Int("channel_id", chID), zap.Error(err))
 			continue
 		}
+		channels = append(channels, ch)
+	}
+	keys := channelDisplayKeys(channels)
+	for _, ch := range channels {
+		modelSet := ch2models[ch.Id]
 		if !filters.matchesChannel(ch.Type) {
 			continue
 		}
@@ -533,9 +563,65 @@ func GetModelsDisplay(c *gin.Context) {
 		if len(infos) == 0 {
 			continue
 		}
-		key := fmt.Sprintf("%s:%s", channeltype.IdToName(ch.Type), ch.Name)
+		key := keys[ch.Id]
 		result[key] = ChannelModelsDisplayInfo{ChannelName: key, ChannelType: ch.Type, Models: infos}
 	}
 
 	c.JSON(http.StatusOK, ModelsDisplayResponse{Success: true, Message: "", Data: result})
+}
+
+// channelDisplayKeys assigns every channel a unique GET /api/models/display response key.
+//
+// The legacy key is "<channel type name>:<channel name>". Two enabled channels may share
+// a type and name (the channel "duplicate" action produces exactly that), and a plain map
+// keyed by the legacy key would let the later one overwrite the earlier one, silently
+// dropping a channel's models. Channels are therefore ranked by ascending id: the first
+// channel claiming a legacy key keeps it, and each later channel with the same key gets
+// the next free ordinal suffix "<legacy key>#2", "#3", ... in id order. Every channel's
+// own legacy key is reserved before any suffix is assigned, so a suffix never displaces
+// a channel whose real name already ends in "#N"; the ordinal simply keeps incrementing.
+// The endpoint is public, so neither integer ids nor channel UUIDs appear in the keys;
+// every known consumer treats the key as opaque and only strips the "<type name>:"
+// prefix for its label.
+//
+// Parameters: channels is the candidate channel set; the slice itself is not reordered
+// and nil entries are ignored.
+// Returns: a map from channel id to its unique response key, also used as channel_name.
+func channelDisplayKeys(channels []*model.Channel) map[int]string {
+	ordered := make([]*model.Channel, 0, len(channels))
+	for _, ch := range channels {
+		if ch != nil {
+			ordered = append(ordered, ch)
+		}
+	}
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].Id < ordered[j].Id })
+
+	keys := make(map[int]string, len(ordered))
+	taken := make(map[string]struct{}, len(ordered))
+	legacyKeys := make([]string, len(ordered))
+	collided := make([]bool, len(ordered))
+	for i, ch := range ordered {
+		legacyKeys[i] = fmt.Sprintf("%s:%s", channeltype.IdToName(ch.Type), ch.Name)
+		if _, exists := taken[legacyKeys[i]]; exists {
+			collided[i] = true
+			continue
+		}
+		taken[legacyKeys[i]] = struct{}{}
+		keys[ch.Id] = legacyKeys[i]
+	}
+	for i, ch := range ordered {
+		if !collided[i] {
+			continue
+		}
+		for ordinal := 2; ; ordinal++ {
+			candidate := fmt.Sprintf("%s#%d", legacyKeys[i], ordinal)
+			if _, exists := taken[candidate]; exists {
+				continue
+			}
+			taken[candidate] = struct{}{}
+			keys[ch.Id] = candidate
+			break
+		}
+	}
+	return keys
 }

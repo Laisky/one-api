@@ -161,38 +161,84 @@ type EmbeddingDisplayPricing struct {
 	UsdPerDocumentPage float64 `json:"usd_per_document_page,omitempty"` // Direct USD per document page
 }
 
-// buildDisplayTiers converts ratio tiers into display prices.
-// Parameters: tiers is the pricing tier list, baseCompletionRatio is inherited by tiers with no completion override, and convertRatioToPrice converts quota ratios to USD per million tokens.
-// Returns: display-ready tier entries.
-func buildDisplayTiers(tiers []adaptorpkg.ModelRatioTier, baseCompletionRatio float64, convertRatioToPrice func(float64) float64) []ModelDisplayTier {
-	if len(tiers) == 0 {
+// buildDisplayTiers renders a token tariff's tiers exactly as billing prices them.
+//
+// Billing walks the tiers in order and every applicable tier overrides only the
+// fields it sets (relaypricing.ResolveEffectivePricingForUsageFromConfig), so a
+// tier that omits ratio, completion_ratio or a cache price inherits the value
+// from the base or from an earlier applicable tier. Each row therefore shows the
+// price billing charges at that tier's own entry point, computed by the billing
+// resolver itself.
+//
+// Parameters: cfg holds the base scalars and the tiers in billing order, and
+// convertRatioToPrice converts quota ratios to USD per million tokens.
+// Returns: display-ready tier entries, or nil when cfg has no tiers.
+func buildDisplayTiers(cfg adaptorpkg.ModelConfig, convertRatioToPrice func(float64) float64) []ModelDisplayTier {
+	if len(cfg.Tiers) == 0 {
 		return nil
 	}
-	display := make([]ModelDisplayTier, 0, len(tiers))
-	for _, tier := range tiers {
-		tierInput := convertRatioToPrice(tier.Ratio)
-		tierCompletionRatio := tier.CompletionRatio
-		if tierCompletionRatio == 0 {
-			tierCompletionRatio = baseCompletionRatio
+	display := make([]ModelDisplayTier, 0, len(cfg.Tiers))
+	for _, tier := range cfg.Tiers {
+		eff := relaypricing.ResolveEffectivePricingForUsageFromConfig(tier.InputTokenThreshold, tier.OutputTokenThreshold, cfg)
+		inputPrice := convertRatioToPrice(eff.InputRatio)
+		completionRatio := 0.0
+		if eff.InputRatio != 0 {
+			completionRatio = eff.OutputRatio / eff.InputRatio
 		}
 		dt := ModelDisplayTier{
-			InputPrice:           tierInput,
-			OutputPrice:          tierInput * tierCompletionRatio,
+			InputPrice:           inputPrice,
+			OutputPrice:          inputPrice * completionRatio,
 			InputTokenThreshold:  tier.InputTokenThreshold,
 			OutputTokenThreshold: tier.OutputTokenThreshold,
 		}
-		if tier.CachedInputRatio != 0 {
-			dt.CachedInputPrice = convertRatioToPrice(tier.CachedInputRatio)
+		if eff.CachedInputRatio != 0 {
+			dt.CachedInputPrice = convertRatioToPrice(eff.CachedInputRatio)
 		}
-		if tier.CacheWrite5mRatio != 0 {
-			dt.CacheWrite5mPrice = convertRatioToPrice(tier.CacheWrite5mRatio)
+		if eff.CacheWrite5mRatio != 0 {
+			dt.CacheWrite5mPrice = convertRatioToPrice(eff.CacheWrite5mRatio)
 		}
-		if tier.CacheWrite1hRatio != 0 {
-			dt.CacheWrite1hPrice = convertRatioToPrice(tier.CacheWrite1hRatio)
+		if eff.CacheWrite1hRatio != 0 {
+			dt.CacheWrite1hPrice = convertRatioToPrice(eff.CacheWrite1hRatio)
 		}
 		display = append(display, dt)
 	}
 	return display
+}
+
+// displayTierBase extracts the token scalars and tiers a tier display is priced from.
+// Parameters: cfg is a resolved model config whose tiers are already in billing order.
+// Returns: a config carrying only the scalar ratios and tiers.
+func displayTierBase(cfg adaptorpkg.ModelConfig) adaptorpkg.ModelConfig {
+	return adaptorpkg.ModelConfig{
+		Ratio:             cfg.Ratio,
+		CompletionRatio:   cfg.CompletionRatio,
+		CachedInputRatio:  cfg.CachedInputRatio,
+		CacheWrite5mRatio: cfg.CacheWrite5mRatio,
+		CacheWrite1hRatio: cfg.CacheWrite1hRatio,
+		Tiers:             cfg.Tiers,
+	}
+}
+
+// windowTierConfig returns the token tariff billing applies while a window is active.
+//
+// It runs base and overlay through billing's own merge
+// (relaypricing.ApplyTimeWindowRatioOnly) with a synthetic always-matching window,
+// so the display cannot drift from billing: overlay scalars replace the base's,
+// and the overlay's tiers replace the base tiers only when the overlay defines
+// some. A window without tiers therefore keeps billing the base tiers at the
+// window's ratio and completion ratio.
+//
+// Parameters: base holds the inherited scalars and tiers, and overlay is the
+// window's sparse pricing overlay.
+// Returns: the merged token scalars and tiers.
+func windowTierConfig(base adaptorpkg.ModelConfig, overlay adaptorpkg.ModelConfig) adaptorpkg.ModelConfig {
+	cfg := displayTierBase(base)
+	cfg.TimeWindows = []adaptorpkg.TimeWindow{{
+		TimeZone: "UTC",
+		Ranges:   []adaptorpkg.ClockRange{{Start: "00:00", End: "00:00"}},
+		Overlay:  overlay,
+	}}
+	return displayTierBase(relaypricing.ApplyTimeWindowRatioOnly(cfg, time.Unix(0, 0).UTC()))
 }
 
 // buildVideoDisplayPricing converts video pricing into display data.
@@ -264,10 +310,21 @@ func buildPerCallDisplayPricing(cfg *adaptorpkg.PerCallPricingConfig) *PerCallDi
 	}
 }
 
-// buildTimeWindowOverlayDisplay converts a sparse pricing overlay into display prices.
+// buildTimeWindowOverlayDisplayWithBase converts a sparse pricing overlay into display prices
+// for a base that has no tiers.
 // Parameters: overlay is the sparse pricing overlay, baseInputPrice and baseCompletionRatio provide inherited output context, and convertRatioToPrice converts quota ratios to USD per million tokens.
 // Returns: displayable sparse overlay prices.
 func buildTimeWindowOverlayDisplayWithBase(overlay adaptorpkg.ModelConfig, baseInputPrice float64, baseCompletionRatio float64, convertRatioToPrice func(float64) float64) TimeWindowOverlayDisplay {
+	return buildTimeWindowOverlayDisplay(overlay, adaptorpkg.ModelConfig{CompletionRatio: baseCompletionRatio}, baseInputPrice, convertRatioToPrice)
+}
+
+// buildTimeWindowOverlayDisplay converts a sparse pricing overlay into display prices.
+// Parameters: overlay is the sparse pricing overlay, base holds the inherited token
+// scalars and tiers in billing order, baseInputPrice is the inherited display input
+// price, and convertRatioToPrice converts quota ratios to USD per million tokens.
+// Returns: displayable sparse overlay prices; its tiers are the ones billing applies
+// inside the window (see windowTierConfig).
+func buildTimeWindowOverlayDisplay(overlay adaptorpkg.ModelConfig, base adaptorpkg.ModelConfig, baseInputPrice float64, convertRatioToPrice func(float64) float64) TimeWindowOverlayDisplay {
 	display := TimeWindowOverlayDisplay{}
 	inputPrice := baseInputPrice
 	if overlay.Ratio != 0 {
@@ -284,13 +341,13 @@ func buildTimeWindowOverlayDisplayWithBase(overlay adaptorpkg.ModelConfig, baseI
 		display.CacheWrite1hPrice = convertRatioToPrice(overlay.CacheWrite1hRatio)
 	}
 	if overlay.Ratio != 0 || overlay.CompletionRatio != 0 {
-		completionRatio := baseCompletionRatio
+		completionRatio := base.CompletionRatio
 		if overlay.CompletionRatio != 0 {
 			completionRatio = overlay.CompletionRatio
 		}
 		display.OutputPrice = inputPrice * completionRatio
 	}
-	display.Tiers = buildDisplayTiers(overlay.Tiers, baseCompletionRatio, convertRatioToPrice)
+	display.Tiers = buildDisplayTiers(windowTierConfig(base, overlay), convertRatioToPrice)
 	display.VideoPricing = buildVideoDisplayPricing(overlay.Video)
 	display.AudioPricing = buildAudioDisplayPricing(overlay.Audio)
 	display.ImagePricing = buildAdaptorImageDisplayPricing(overlay.Image)
@@ -327,14 +384,17 @@ func buildAdaptorImageDisplayPricing(cfg *adaptorpkg.ImagePricingConfig) *ImageD
 }
 
 // buildTimeWindowDisplays converts time windows into display data and active-window metadata.
-// Parameters: windows is the ordered window list, baseInputPrice and baseCompletionRatio provide inherited output context, now is the display-time instant, and convertRatioToPrice converts quota ratios to USD per million tokens.
-// Returns: display windows and the first active window name.
-func buildTimeWindowDisplays(windows []adaptorpkg.TimeWindow, baseInputPrice float64, baseCompletionRatio float64, now time.Time, convertRatioToPrice func(float64) float64) ([]TimeWindowDisplay, string) {
+// Parameters: windows is the ordered window list, base holds the inherited token scalars and tiers in billing order, baseInputPrice is the inherited display input price, now is the display-time instant, and convertRatioToPrice converts quota ratios to USD per million tokens.
+// Returns: display windows and the name of the first matching window, which is
+// the window billing applies (relaypricing.ApplyTimeWindow); the name is empty
+// when no window matches or when the first match is unnamed.
+func buildTimeWindowDisplays(windows []adaptorpkg.TimeWindow, base adaptorpkg.ModelConfig, baseInputPrice float64, now time.Time, convertRatioToPrice func(float64) float64) ([]TimeWindowDisplay, string) {
 	if len(windows) == 0 {
 		return nil, ""
 	}
 	display := make([]TimeWindowDisplay, 0, len(windows))
 	active := ""
+	matched := false
 	for _, window := range windows {
 		ranges := make([]ClockRangeDisplay, 0, len(window.Ranges))
 		for _, clockRange := range window.Ranges {
@@ -347,9 +407,10 @@ func buildTimeWindowDisplays(windows []adaptorpkg.TimeWindow, baseInputPrice flo
 			DaysOfWeek: append([]int(nil), window.DaysOfWeek...),
 			DateFrom:   window.DateFrom,
 			DateTo:     window.DateTo,
-			Overlay:    buildTimeWindowOverlayDisplayWithBase(window.Overlay, baseInputPrice, baseCompletionRatio, convertRatioToPrice),
+			Overlay:    buildTimeWindowOverlayDisplay(window.Overlay, base, baseInputPrice, convertRatioToPrice),
 		})
-		if active == "" && relaypricing.MatchTimeWindow(window, now) {
+		if !matched && relaypricing.MatchTimeWindow(window, now) {
+			matched = true
 			active = window.Name
 		}
 	}
@@ -381,6 +442,13 @@ func convertLocalDisplayConfig(cfg model.ModelConfigLocal) adaptorpkg.ModelConfi
 				OutputTokenThreshold: tier.OutputTokenThreshold,
 			})
 		}
+		// Billing walks channel tiers in this order (relay/pricing convertLocalModelConfig).
+		sort.SliceStable(converted.Tiers, func(i, j int) bool {
+			if converted.Tiers[i].InputTokenThreshold == converted.Tiers[j].InputTokenThreshold {
+				return converted.Tiers[i].OutputTokenThreshold < converted.Tiers[j].OutputTokenThreshold
+			}
+			return converted.Tiers[i].InputTokenThreshold < converted.Tiers[j].InputTokenThreshold
+		})
 	}
 	if cfg.PerCall != nil {
 		converted.PerCall = &adaptorpkg.PerCallPricingConfig{UsdPerThousandCalls: cfg.PerCall.UsdPerThousandCalls}
