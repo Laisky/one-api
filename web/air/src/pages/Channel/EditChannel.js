@@ -229,8 +229,9 @@ const EditChannel = (props) => {
                       console.error('Failed to parse channel config:', error);
                   }
               }
-              // The field shows the value the relay uses: a stored typed override wins over `other`.
-              const { displayed, snapshot } = snapshotOther(data.type, data.other, loadedConfig);
+              // The field shows the value the relay uses: a stored typed override wins over `other`. The raw
+              // stored text keeps keys that JSON.parse collapses, so the override is read as the relay reads it.
+              const { displayed, snapshot } = snapshotOther(data.type, data.other, typeof data.config === 'string' ? data.config : loadedConfig);
               otherSnapshot.current = snapshot;
               data.other = displayed;
               setInputs(data);

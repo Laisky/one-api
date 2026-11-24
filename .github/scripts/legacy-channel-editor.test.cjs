@@ -23,21 +23,21 @@ const RENDERED_FIELDS = theme === 'air'
   ? { 3: 'input[name="azure_other"]', 18: 'input[name="other"]', 21: 'input[name="other"]' }
   : { 3: '#channel-other-label', 17: '#channel-other-label', 18: '#channel-other-label', 24: '#channel-other-label' };
 
-/** expectedEntries lists the override spellings a fixture state places in config, in order. */
+/** expectedEntries lists the override members a fixture state places in config, in document order, possibly repeating a key. */
 function expectedEntries(entry, state) {
-  const entries = state.shadowed ? [[state.shadowed.key, state.shadowed.value]] : [];
-  if (state.override !== null) entries.push([entry.config_key ?? entry.override_key, state.override]);
-  return entries;
+  if (state.spellings) return state.spellings;
+  return state.override === null ? [] : [[entry.config_key ?? entry.override_key, state.override]];
 }
 
-/** storedChannel returns the GET /api/channel/:id body for the supplied fixture case. */
+/** storedChannel returns the GET /api/channel/:id body for the supplied fixture case; its config is raw text that may repeat a key. */
 function storedChannel(entry) {
-  const config = { api_format: 'chat_completion', future_backend_key: 'kept', ...Object.fromEntries(expectedEntries(entry, entry.stored)) };
+  const members = ['"api_format":"chat_completion"', '"future_backend_key":"kept"', ...expectedEntries(entry, entry.stored).map(([key, value]) => `${JSON.stringify(key)}:${JSON.stringify(value)}`)];
+  const config = `{${members.join(',')}}`;
   return {
     id: 7, uuid: 'channel-7', name: 'Stored channel', type: entry.type, key: '', status: 1,
     base_url: 'https://upstream.example.test', other: entry.stored.other, models: 'stored-model', group: 'default',
     model_mapping: '', system_prompt: '', model_configs: '', inference_profile_arn_map: '', ratelimit: 0, auto_ban: 1,
-    config: JSON.stringify(config),
+    config,
   };
 }
 
@@ -165,6 +165,19 @@ test(`${theme}: the shared fixture covers every type whose field this theme rend
     if (!Object.hasOwn(RENDERED_FIELDS, type)) assert.ok([17, 21].includes(type), `Type ${type} must be rendered or documented as hidden`);
   }
   for (const type of Object.keys(RENDERED_FIELDS).map(Number).filter(type => type !== 24)) assert.ok(fixtureTypes.has(type), `Fixture covers type ${type}`);
+});
+
+test(`${theme}: the config scanner keeps repeated keys, escapes and nested values in document order`, () => {
+  const { scanConfigMembers, storedOtherOverride } = loadModule(theme === 'air' ? 'web/air/src/helpers/channel-other.js' : 'web/berry/src/utils/channel-other.js');
+  assert.deepEqual(scanConfigMembers('{"a":1,"A":"x","a":2}'), [['a', 1], ['A', 'x'], ['a', 2]]);
+  assert.deepEqual(
+    scanConfigMembers(' {\n "\\u0061pi_version" : "v" ,\t"n": {"api_version": ["}", "\\\\"]}, "z": [1, {"k": null}] } '),
+    [['api_version', 'v'], ['n', { api_version: ['}', '\\'] }], ['z', [1, { k: null }]]],
+  );
+  for (const text of ['[1]', 'null', '{"a":', '']) assert.equal(scanConfigMembers(text), null, `Reject ${text}`);
+  assert.equal(storedOtherOverride(3, '{"api_version":"a","API_VERSION":"b","api_version":"c"}'), 'c', 'The raw text keeps the relay value');
+  assert.equal(storedOtherOverride(3, JSON.parse('{"api_version":"a","API_VERSION":"b","api_version":"c"}')), 'b', 'JSON.parse collapses the repeated key');
+  assert.equal(storedOtherOverride(3, { ['api_ver\u017fion']: 'long-s', APIVERSION: 'x' }), 'long-s');
 });
 
 for (const entry of fixture.cases) {

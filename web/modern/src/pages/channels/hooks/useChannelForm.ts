@@ -278,13 +278,15 @@ export const useChannelForm = () => {
         }
 
         const storedOther = typeof data.other === 'string' ? data.other : '';
+        // The raw stored text keeps keys that JSON.parse collapses, so the override is read as the relay reads it.
+        const storedConfig = typeof data.config === 'string' && data.config.trim() !== '' ? data.config : config;
         const formData: ChannelForm = {
           name: data.name || '',
           type: channelType,
           key: data.key || '',
           base_url: data.base_url || '',
           // The relay prefers a non-empty typed override, so the field shows that effective value.
-          other: effectiveOtherValue(channelType, storedOther, config),
+          other: effectiveOtherValue(channelType, storedOther, storedConfig),
           models,
           hidden_models: parseStringArrayField(data.hidden_models),
           model_mapping: formatPrivateChannelJSONField(data.model_mapping),
@@ -311,7 +313,7 @@ export const useChannelForm = () => {
         }
 
         setLoadedChannelType(channelType);
-        storedOtherRef.current = snapshotStoredOther(channelType, storedOther, config);
+        storedOtherRef.current = snapshotStoredOther(channelType, storedOther, storedConfig);
         loadedChannelRef.current = formData;
         reset(formData);
         await new Promise((resolve) => setTimeout(resolve, 0));

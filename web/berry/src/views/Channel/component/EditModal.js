@@ -310,6 +310,8 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
         if (data.model_mapping !== '') {
           data.model_mapping = JSON.stringify(JSON.parse(data.model_mapping), null, 2);
         }
+        // The raw stored text keeps keys that JSON.parse collapses, so the override is read as the relay reads it.
+        const storedConfig = data.config;
         if (data.config !== '') {
           try {
             const parsedConfig = JSON.parse(data.config);
@@ -326,7 +328,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
           data.config = { ...defaultConfig.input.config };
         }
         // The field shows the value the relay uses: a stored typed override wins over `other`.
-        const { displayed, snapshot } = snapshotOther(data.type, data.other, data.config);
+        const { displayed, snapshot } = snapshotOther(data.type, data.other, typeof storedConfig === 'string' ? storedConfig : data.config);
         otherSnapshot.current = snapshot;
         data.other = displayed;
         // Format pricing fields for display

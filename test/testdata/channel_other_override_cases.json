@@ -1,5 +1,5 @@
 {
-  "description": "Shared contract for the channel editor field that edits the legacy `other` value while a typed config override (config.api_version, config.library_id, config.plugin) may also be stored. The relay prefers a non-empty override over `other` (middleware/distributor.go). Go's encoding/json decodes the override from every config key that equals the override key case-insensitively (underscores stay significant); keys apply in document order, so the last string value wins. `config_key` (default `override_key`) is the exact spelling the override is stored and saved under; `shadowed` is an optional earlier spelling whose value the later `config_key` overrides. Every frontend must display `displayed`, and saving with `edit` (null = an unrelated save that leaves the field untouched; a string = the new value typed into the field) must send `payload`: the override spellings of the saved config, in order, are `payload.shadowed` (when non-null) and then `config_key` (when `payload.override` is non-null), and no other spelling. The backend must persist `payload` unchanged, and the relay must then use `effective`. `payload.override` null means the override key is absent from config. Consumed by Go and frontend tests; do not reformat case names.",
+  "description": "Shared contract for the channel editor field that edits the legacy `other` value while a typed config override (config.api_version, config.library_id, config.plugin) may also be stored. The relay prefers a non-empty override over `other` (middleware/distributor.go). Go's encoding/json decodes the override from every top-level config key that equals the override key under strings.EqualFold (underscores stay significant), applying them in document order, so the last string value wins. `stored.spellings` (optional) lists the stored config's override members in document order and may repeat a key; by default the stored config holds `stored.override` under `config_key` (default `override_key`), or no override member when it is null. `stored.override` is always the relay-effective value of the stored config. Every frontend must display `displayed`, and saving with `edit` (null = an unrelated save that leaves the field untouched; a string = the new value typed into the field) must send `payload`: exactly one override member, `config_key` holding `payload.override`, or none when it is null. A stored config that repeats the override key is saved under the canonical `override_key`. The backend must persist `payload` byte for byte, collapse any config that repeats a key into one member holding the relay-effective value, and the relay must then use `effective`. Consumed by Go and frontend tests; do not reformat case names.",
   "cases": [
     {
       "name": "azure_legacy_only_unrelated_save",
@@ -169,40 +169,110 @@
       "name": "azure_shadowed_spelling_unrelated_save",
       "type": 3,
       "override_key": "api_version",
-      "stored": { "other": "2024-02-01", "override": "2024-10-21", "shadowed": { "key": "API_VERSION", "value": "2023-05-15" } },
+      "stored": { "other": "2024-02-01", "override": "2024-10-21", "spellings": [["API_VERSION", "2023-05-15"], ["api_version", "2024-10-21"]] },
       "edit": null,
       "displayed": "2024-10-21",
-      "payload": { "other": "2024-02-01", "override": "2024-10-21", "shadowed": { "key": "API_VERSION", "value": "2023-05-15" } },
+      "payload": { "other": "2024-02-01", "override": "2024-10-21" },
       "effective": "2024-10-21"
     },
     {
       "name": "azure_shadowed_spelling_edit",
       "type": 3,
       "override_key": "api_version",
-      "stored": { "other": "2024-02-01", "override": "2024-10-21", "shadowed": { "key": "API_VERSION", "value": "2023-05-15" } },
+      "stored": { "other": "2024-02-01", "override": "2024-10-21", "spellings": [["api_version", "2023-05-15"], ["API_VERSION", "2024-10-21"]] },
       "edit": "2025-01-01-preview",
       "displayed": "2024-10-21",
-      "payload": { "other": "2025-01-01-preview", "override": "2025-01-01-preview", "shadowed": { "key": "API_VERSION", "value": "2023-05-15" } },
+      "payload": { "other": "2025-01-01-preview", "override": "2025-01-01-preview" },
       "effective": "2025-01-01-preview"
     },
     {
       "name": "ali_shadowed_spelling_cleared",
       "type": 17,
       "override_key": "plugin",
-      "stored": { "other": "plugin-a", "override": "plugin-b", "shadowed": { "key": "PLUGIN", "value": "plugin-stale" } },
+      "stored": { "other": "plugin-a", "override": "plugin-b", "spellings": [["PLUGIN", "plugin-stale"], ["plugin", "plugin-b"]] },
       "edit": "",
       "displayed": "plugin-b",
-      "payload": { "other": "", "override": null, "shadowed": null },
+      "payload": { "other": "", "override": null },
       "effective": ""
     },
     {
       "name": "aiproxy_library_shadowed_spelling_cleared",
       "type": 21,
       "override_key": "library_id",
-      "stored": { "other": "lib-legacy", "override": "lib-1", "shadowed": { "key": "Library_Id", "value": "lib-stale" } },
+      "stored": { "other": "lib-legacy", "override": "lib-1", "spellings": [["Library_Id", "lib-stale"], ["library_id", "lib-1"]] },
       "edit": "",
       "displayed": "lib-1",
-      "payload": { "other": "", "override": null, "shadowed": null },
+      "payload": { "other": "", "override": null },
+      "effective": ""
+    },
+    {
+      "name": "azure_duplicate_spellings_unrelated_save",
+      "type": 3,
+      "override_key": "api_version",
+      "stored": { "other": "2024-02-01", "override": "2024-10-21", "spellings": [["api_version", "2023-05-15"], ["API_VERSION", "2024-06-01"], ["api_version", "2024-10-21"]] },
+      "edit": null,
+      "displayed": "2024-10-21",
+      "payload": { "other": "2024-02-01", "override": "2024-10-21" },
+      "effective": "2024-10-21"
+    },
+    {
+      "name": "azure_duplicate_spellings_edit",
+      "type": 3,
+      "override_key": "api_version",
+      "stored": { "other": "2024-02-01", "override": "2024-10-21", "spellings": [["api_version", "2023-05-15"], ["API_VERSION", "2024-06-01"], ["api_version", "2024-10-21"]] },
+      "edit": "2025-01-01-preview",
+      "displayed": "2024-10-21",
+      "payload": { "other": "2025-01-01-preview", "override": "2025-01-01-preview" },
+      "effective": "2025-01-01-preview"
+    },
+    {
+      "name": "azure_exact_duplicate_unrelated_save",
+      "type": 3,
+      "override_key": "api_version",
+      "stored": { "other": "2024-02-01", "override": "2024-10-21", "spellings": [["api_version", "2023-05-15"], ["api_version", "2024-10-21"]] },
+      "edit": null,
+      "displayed": "2024-10-21",
+      "payload": { "other": "2024-02-01", "override": "2024-10-21" },
+      "effective": "2024-10-21"
+    },
+    {
+      "name": "azure_repeated_spellings_empty_last_unrelated_save",
+      "type": 3,
+      "override_key": "api_version",
+      "stored": { "other": "2024-02-01", "override": "", "spellings": [["api_version", "2024-10-21"], ["API_VERSION", ""]] },
+      "edit": null,
+      "displayed": "2024-02-01",
+      "payload": { "other": "2024-02-01", "override": "" },
+      "effective": "2024-02-01"
+    },
+    {
+      "name": "azure_repeated_spellings_empty_last_edit",
+      "type": 3,
+      "override_key": "api_version",
+      "stored": { "other": "2024-02-01", "override": "", "spellings": [["api_version", "2024-10-21"], ["API_VERSION", ""]] },
+      "edit": "2025-01-01-preview",
+      "displayed": "2024-02-01",
+      "payload": { "other": "2025-01-01-preview", "override": "" },
+      "effective": "2025-01-01-preview"
+    },
+    {
+      "name": "ali_duplicate_spellings_cleared",
+      "type": 17,
+      "override_key": "plugin",
+      "stored": { "other": "plugin-a", "override": "plugin-c", "spellings": [["plugin", "plugin-a1"], ["PLUGIN", "plugin-b"], ["plugin", "plugin-c"]] },
+      "edit": "",
+      "displayed": "plugin-c",
+      "payload": { "other": "", "override": null },
+      "effective": ""
+    },
+    {
+      "name": "aiproxy_library_duplicate_spellings_cleared",
+      "type": 21,
+      "override_key": "library_id",
+      "stored": { "other": "lib-legacy", "override": "lib-2", "spellings": [["library_id", "lib-0"], ["LIBRARY_ID", "lib-1"], ["library_id", "lib-2"]] },
+      "edit": "",
+      "displayed": "lib-2",
+      "payload": { "other": "", "override": null },
       "effective": ""
     }
   ]

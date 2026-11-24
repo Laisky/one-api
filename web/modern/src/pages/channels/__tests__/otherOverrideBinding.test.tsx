@@ -32,11 +32,11 @@ const mockApiGet = vi.mocked(api.get);
 const mockApiPost = vi.mocked(api.post);
 const mockApiPut = vi.mocked(api.put);
 
-/** OverrideState is the stored or submitted `other` value, override, and optional shadowed spelling. */
+/** OverrideState is the stored or submitted `other` value, relay-effective override, and optional stored spellings. */
 interface OverrideState {
   other: string;
   override: string | null;
-  shadowed?: { key: string; value: string } | null;
+  spellings?: [string, string][];
 }
 
 /** OtherOverrideCase is one entry of the shared Go/frontend contract fixture. */
@@ -57,11 +57,9 @@ const fixture = JSON.parse(readFileSync(resolve(repoRoot, 'test/testdata/channel
   cases: OtherOverrideCase[];
 };
 
-/** expectedEntries lists the override spellings a fixture state places in config, in order. */
-const expectedEntries = (testCase: OtherOverrideCase, state: OverrideState): [string, string][] => [
-  ...(state.shadowed ? [[state.shadowed.key, state.shadowed.value] as [string, string]] : []),
-  ...(state.override === null ? [] : [[testCase.config_key ?? testCase.override_key, state.override] as [string, string]]),
-];
+/** expectedEntries lists the override members a fixture state places in config, in document order, possibly repeating a key. */
+const expectedEntries = (testCase: OtherOverrideCase, state: OverrideState): [string, string][] =>
+  state.spellings ?? (state.override === null ? [] : [[testCase.config_key ?? testCase.override_key, state.override]]);
 
 /** overrideEntries lists, in config order, every key of config that spells the override key in any letter case. */
 const overrideEntries = (config: Record<string, unknown>, key: string): [string, unknown][] =>
@@ -73,10 +71,12 @@ const overrideEntries = (config: Record<string, unknown>, key: string): [string,
  * unrelated key that must round-trip.
  */
 const mockStoredChannel = (testCase: OtherOverrideCase) => {
-  const config: Record<string, unknown> = {
-    future_backend_key: 'kept',
-    ...Object.fromEntries(expectedEntries(testCase, testCase.stored)),
-  };
+  // The stored config is raw text, so a repeated key reaches the editor as the relay reads it.
+  const members = [
+    '"future_backend_key":"kept"',
+    ...expectedEntries(testCase, testCase.stored).map(([key, value]) => `${JSON.stringify(key)}:${JSON.stringify(value)}`),
+  ];
+  const config = `{${members.join(',')}}`;
   mockApiGet.mockImplementation((url: string) => {
     if (url.startsWith('/api/channel/1')) {
       return Promise.resolve({
@@ -91,7 +91,7 @@ const mockStoredChannel = (testCase: OtherOverrideCase) => {
             base_url: 'https://example.openai.azure.com',
             other: testCase.stored.other,
             group: 'default',
-            config: JSON.stringify(config),
+            config,
             tooling: '{}',
           },
         },
@@ -192,7 +192,14 @@ describe('channel editor binding of the legacy other field to its typed config o
         type: 3,
         override_key: 'api_version',
         config_key: configKey,
-        stored: { other: '2024-02-01', override: '2024-10-21', shadowed: { key: 'Api_Version', value: '2023-05-15' } },
+        stored: {
+          other: '2024-02-01',
+          override: '2024-10-21',
+          spellings: [
+            ['Api_Version', '2023-05-15'],
+            [configKey ?? 'api_version', '2024-10-21'],
+          ],
+        },
         edit: null,
         displayed: '2024-10-21',
         payload: { other: '', override: null },
