@@ -46,7 +46,11 @@ func TestSecurityNativeResponseTierAdmission(t *testing.T) {
 	}}}
 	for _, scenario := range []string{"owner_low", "token_low", "funded", "flat_control", "retry_refund", "no_usage", "partial_output", "default_configured", "uppercase_cap", "uncapped", "free_group"} {
 		t.Run(scenario, func(t *testing.T) {
-			userBalance, tokenBalance := int64(10000), int64(10000)
+			// The 456-token prompt crosses the 100-token tier, so the hold is
+			// 456*5 + 20*5*100 = 12,280 at group 1; 50,000 funds it about four
+			// times over. 1,000 fits the flat hold 456*1 + 20*1*2 = 496 but not
+			// the tier hold, so a low balance is rejected only by the tier.
+			userBalance, tokenBalance := int64(50000), int64(50000)
 			if scenario == "owner_low" {
 				userBalance = 1000
 			}
@@ -145,6 +149,14 @@ func TestSecurityNativeResponseTierAdmission(t *testing.T) {
 			require.False(t, supportsNativeResponseAPI(&unsupported), "Anthropic Responses uses Chat fallback, not this native branch")
 			apiErr := RelayResponseAPIHelper(c)
 			held := c.GetInt64(ctxkey.PreConsumedQuotaAmount)
+			// At group 1 the 456-token prompt holds 456*5 + 20*5*100 at the tier
+			// and 456*1 + 20*1*2 under the flat control.
+			switch scenario {
+			case "funded":
+				require.EqualValues(t, 12280, held, "the hold prices the tier's own input ratio")
+			case "flat_control":
+				require.EqualValues(t, 496, held)
+			}
 			if scenario == "retry_refund" {
 				// Generic possibly-forwarded HTTP failures retain the hold until
 				// the existing retry lifecycle explicitly abandons that attempt.

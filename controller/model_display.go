@@ -21,6 +21,7 @@ import (
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
+	relaypricing "github.com/Laisky/one-api/relay/pricing"
 )
 
 // GetModelsDisplay returns models available to the current user grouped by channel/adaptor with pricing information.
@@ -132,6 +133,9 @@ func GetModelsDisplay(c *gin.Context) {
 			// tierBase is the ratio-space token tariff billing prices tiers and
 			// windows from: the provider default, or the channel config wholesale.
 			var tierBase adaptorpkg.ModelConfig
+			// providerSchedule is the provider's unwindowed token schedule (base
+			// scalars, tiers and windows) a channel entry without ratio inherits.
+			var providerSchedule adaptorpkg.ModelConfig
 			overrideApplied := false
 
 			// buildImageDisplayPricing converts an adaptor ImagePricingConfig to display format
@@ -187,6 +191,8 @@ func GetModelsDisplay(c *gin.Context) {
 
 			if cfg, ok := defaultPricing[actual]; ok {
 				tierBase = displayTierBase(cfg)
+				providerSchedule = tierBase
+				providerSchedule.TimeWindows = cfg.TimeWindows
 				timeWindows, activeTimeWindow = buildTimeWindowDisplays(cfg.TimeWindows, tierBase, convertRatioToPrice(cfg.Ratio), displayNow, convertRatioToPrice)
 				perCallPricing = buildPerCallDisplayPricing(cfg.PerCall)
 				perPagePricing = buildPerPageDisplayPricing(cfg.PerPage)
@@ -326,9 +332,16 @@ func GetModelsDisplay(c *gin.Context) {
 				converted := convertLocalDisplayConfig(*cfg)
 				// Token billing selects the channel config wholesale: its own tiers,
 				// already in billing order, replace the provider's and its cache
-				// prices are not inherited. Only an omitted ratio or completion_ratio
-				// falls back to the provider default, as relay/quota does.
-				localTierBase := displayTierBase(converted)
+				// prices are not inherited. An omitted ratio inherits the provider's
+				// schedule as a unit, its tiers and, without windows of its own, its
+				// windows (relaypricing.InheritProviderSchedule); an omitted
+				// completion_ratio falls back to the provider default, as relay/quota does.
+				localSchedule := displayTierBase(converted)
+				localSchedule.TimeWindows = convertLocalDisplayTimeWindows(cfg.TimeWindows)
+				if !adaptorpkg.RequiresOperatorTariff(adaptor, actual) {
+					localSchedule = relaypricing.InheritProviderSchedule(localSchedule, providerSchedule)
+				}
+				localTierBase := displayTierBase(localSchedule)
 				if localTierBase.Ratio == 0 {
 					localTierBase.Ratio = tierBase.Ratio
 				}
@@ -368,15 +381,17 @@ func GetModelsDisplay(c *gin.Context) {
 				} else if cfg.Audio == nil && cfg.Ratio != 0 {
 					audioPricing = buildLegacyAudioTariffDisplay(audioPricing, cfg.Ratio)
 				}
+				hasUnit := perCallPricing != nil || perPagePricing != nil || audioPricing != nil
+				hasMedia := videoPricing != nil || imagePricing != nil || embeddingPricing != nil
 				dropInheritedSchedule, cachedInputPrice = applyLocalTokenDisplayOverride(
-					*cfg, converted, inputPrice, cachedInputPrice,
-					perCallPricing != nil || perPagePricing != nil || audioPricing != nil,
-					videoPricing != nil || imagePricing != nil || embeddingPricing != nil, convertRatioToPrice)
+					*cfg, converted, inputPrice, cachedInputPrice, hasUnit, hasMedia, convertRatioToPrice)
 				if dropInheritedSchedule {
 					timeWindows, activeTimeWindow = nil, ""
 				}
-				if len(cfg.TimeWindows) > 0 {
-					timeWindows, activeTimeWindow = buildTimeWindowDisplays(convertLocalDisplayTimeWindows(cfg.TimeWindows), tierBase, inputPrice, displayNow, convertRatioToPrice)
+				// The entry's own windows, or the provider windows a token entry
+				// inherits with token-only overlays.
+				if len(cfg.TimeWindows) > 0 || (!hasUnit && !hasMedia && len(localSchedule.TimeWindows) > 0) {
+					timeWindows, activeTimeWindow = buildTimeWindowDisplays(localSchedule.TimeWindows, tierBase, inputPrice, displayNow, convertRatioToPrice)
 				}
 			}
 

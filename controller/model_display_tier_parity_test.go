@@ -9,6 +9,7 @@ import (
 
 	"github.com/Laisky/one-api/model"
 	adaptorpkg "github.com/Laisky/one-api/relay/adaptor"
+	"github.com/Laisky/one-api/relay/adaptor/deepseek"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 	"github.com/Laisky/one-api/relay/channeltype"
 	relaymodel "github.com/Laisky/one-api/relay/model"
@@ -37,8 +38,16 @@ func displayedTierQuota(input, output, cached float64, u tierUsage) int64 {
 // pricing adaptor and u the usage. Returns: the billed quota.
 func billedTierQuota(t *testing.T, ch *model.Channel, name string, provider adaptorpkg.Adaptor, u tierUsage) int64 {
 	t.Helper()
+	return billedTierQuotaAt(t, ch, name, provider, u, time.Now())
+}
+
+// billedTierQuotaAt settles usage through billing for one channel model at a
+// request start time. Parameters: t is the test handle, ch the channel, name
+// the model, provider the pricing adaptor, u the usage and at the request
+// start. Returns: the billed quota.
+func billedTierQuotaAt(t *testing.T, ch *model.Channel, name string, provider adaptorpkg.Adaptor, u tierUsage, at time.Time) int64 {
+	t.Helper()
 	configs := ch.GetModelPriceConfigs()
-	at := time.Now()
 	modelRatio := pricing.ResolveModelRatioAt(name, configs, ch.GetModelRatioFromConfigs(), provider, at)
 	usage := &relaymodel.Usage{PromptTokens: u.prompt, CompletionTokens: u.completion}
 	if u.cached > 0 {
@@ -158,43 +167,133 @@ func TestGetModelsDisplayWindowTiersMatchBilling(t *testing.T) {
 }
 
 // TestGetModelsDisplayProviderTiersInheritBaseCache verifies provider tiers that
-// omit cached_input_ratio display the base cache price billing charges.
+// omit cached_input_ratio display the base cache price billing charges. No
+// shipped tier omits its cache price, so a test catalog entry supplies one
+// tier that omits it and one that states its own, on a DeepSeek channel.
 func TestGetModelsDisplayProviderTiersInheritBaseCache(t *testing.T) {
 	setupModelsDisplayTestEnv(t)
-	const name = "qwen3-max"
-	ch := createDisplayChannel(t, "provider-tier-cache", channeltype.Ali, name, "public", nil)
+	const name = "display-tier-cache-fixture"
+	m := ratio.MilliTokensUsd
+	cfg := adaptorpkg.ModelConfig{
+		Ratio: 2 * m, CompletionRatio: 4, CachedInputRatio: 0.5 * m,
+		Tiers: []adaptorpkg.ModelRatioTier{
+			{InputTokenThreshold: 1000, Ratio: 3 * m, CompletionRatio: 3},
+			{InputTokenThreshold: 5000, Ratio: 4 * m, CachedInputRatio: 1 * m},
+		},
+	}
+	// Non-parallel tests may extend a catalog map; see channel_pricing_test.go.
+	_, existed := deepseek.ModelRatios[name]
+	require.False(t, existed, "the fixture name must not shadow a shipped model")
+	deepseek.ModelRatios[name] = cfg
+	t.Cleanup(func() { delete(deepseek.ModelRatios, name) })
+	ch := createDisplayChannel(t, "provider-tier-cache", channeltype.DeepSeek, name, "public", nil)
 	provider := displayProvider(t, ch)
-	cfg, ok := provider.GetDefaultModelPricing()[name]
-	require.True(t, ok)
-	require.Positive(t, cfg.CachedInputRatio)
-	require.NotEmpty(t, cfg.Tiers)
+	require.Equal(t, cfg, provider.GetDefaultModelPricing()[name], "billing must price the fixture entry")
 	require.Zero(t, cfg.Tiers[0].CachedInputRatio, "fixture needs a tier that omits the cache price")
 
 	info := fetchModelsDisplay(t, 0, "").Data[channeltype.IdToName(ch.Type)+":"+ch.Name].Models[name]
 	require.Len(t, info.Tiers, len(cfg.Tiers))
+	require.InDelta(t, 0.5, info.Tiers[0].CachedInputPrice, 1e-9, "the omitted tier cache price is the base's")
+	require.InDelta(t, 1.0, info.Tiers[1].CachedInputPrice, 1e-9)
 	for i, row := range info.Tiers {
 		eff := pricing.ResolveEffectivePricingForUsageFromConfig(cfg.Tiers[i].InputTokenThreshold, cfg.Tiers[i].OutputTokenThreshold, cfg)
 		require.InDelta(t, convertDisplayRatio(eff.CachedInputRatio), row.CachedInputPrice, 1e-9)
 		require.InDelta(t, convertDisplayRatio(eff.InputRatio), row.InputPrice, 1e-9)
 		u := tierUsage{prompt: row.InputTokenThreshold, cached: row.InputTokenThreshold / 2, completion: 1000}
-		require.InDelta(t, float64(billedTierQuota(t, ch, name, provider, u)),
-			float64(displayedTierQuota(row.InputPrice, row.OutputPrice, row.CachedInputPrice, u)), 1,
+		require.Equal(t, billedTierQuota(t, ch, name, provider, u),
+			displayedTierQuota(row.InputPrice, row.OutputPrice, row.CachedInputPrice, u),
 			"tier row at %d input tokens must quote billing", row.InputTokenThreshold)
 	}
 }
 
-// TestGetModelsDisplayLocalOverrideReplacesProviderTiers verifies a channel entry
-// without tiers drops the provider tiers, because billing selects the channel
-// config wholesale.
-func TestGetModelsDisplayLocalOverrideReplacesProviderTiers(t *testing.T) {
+// TestGetModelsDisplayMetadataEntryInheritsProviderTiers verifies a channel
+// entry that omits ratio and tiers (here MaxTokens only) displays the
+// provider's tiers, because billing inherits the provider's price schedule as
+// a unit (relaypricing.InheritProviderSchedule).
+func TestGetModelsDisplayMetadataEntryInheritsProviderTiers(t *testing.T) {
 	setupModelsDisplayTestEnv(t)
 	const name = "gpt-5.5-pro"
-	ch := createDisplayChannel(t, "provider-tiers-dropped", channeltype.OpenAI, name, "public", map[string]model.ModelConfigLocal{name: {MaxTokens: 4096}})
+	ch := createDisplayChannel(t, "provider-tiers-inherited", channeltype.OpenAI, name, "public", map[string]model.ModelConfigLocal{name: {MaxTokens: 4096}})
 	provider := displayProvider(t, ch)
-	require.NotEmpty(t, provider.GetDefaultModelPricing()[name].Tiers)
+	providerTiers := provider.GetDefaultModelPricing()[name].Tiers
+	require.Len(t, providerTiers, 1)
 
 	info := fetchModelsDisplay(t, 0, "").Data[channeltype.IdToName(ch.Type)+":"+ch.Name].Models[name]
-	require.Empty(t, info.Tiers, "billing ignores provider tiers once the channel configures the model")
+	require.Len(t, info.Tiers, 1, "the entry inherits the provider's long-context tier")
+	require.Equal(t, providerTiers[0].InputTokenThreshold, info.Tiers[0].InputTokenThreshold)
+	require.InDelta(t, convertDisplayRatio(providerTiers[0].Ratio), info.Tiers[0].InputPrice, 1e-9)
+	requireTierRowsQuoteBilling(t, info.Tiers, ch, name, provider)
 	u := tierUsage{prompt: 300_000, completion: 1000}
-	require.Equal(t, billedTierQuota(t, ch, name, provider, u), displayedTierQuota(info.InputPrice, info.OutputPrice, info.CachedInputPrice, u))
+	require.Equal(t, billedTierQuota(t, ch, name, provider, u), displayedTierQuota(info.Tiers[0].InputPrice, info.Tiers[0].OutputPrice, info.Tiers[0].CachedInputPrice, u))
+}
+
+// TestGetModelsDisplayMetadataEntryInheritsProviderWindows verifies a channel
+// entry that omits ratio and windows displays the provider's time window that
+// billing now applies: Ali's deepseek-v4.1-flash-1017 Beijing peak (CNY 2/8
+// from 08:00 to 22:00 Asia/Shanghai, 1/4 otherwise), without the window's
+// cache discount the entry never granted.
+func TestGetModelsDisplayMetadataEntryInheritsProviderWindows(t *testing.T) {
+	setupModelsDisplayTestEnv(t)
+	const name = "deepseek-v4.1-flash-1017"
+	ch := createDisplayChannel(t, "provider-windows-inherited", channeltype.Ali, name, "public", map[string]model.ModelConfigLocal{name: {MaxTokens: 4096}})
+	provider := displayProvider(t, ch)
+	require.Len(t, provider.GetDefaultModelPricing()[name].TimeWindows, 1)
+
+	info := fetchModelsDisplay(t, 0, "").Data[channeltype.IdToName(ch.Type)+":"+ch.Name].Models[name]
+	require.Len(t, info.TimeWindows, 1, "the entry inherits the provider's peak window")
+	window := info.TimeWindows[0]
+	require.Equal(t, "beijing-peak", window.Name)
+	require.Zero(t, window.Overlay.CachedInputPrice, "no ungranted window cache discount")
+	r := ratio.MilliTokensRmb
+	require.InDelta(t, convertDisplayRatio(2*r), window.Overlay.InputPrice, 1e-9)
+	require.InDelta(t, convertDisplayRatio(8*r), window.Overlay.OutputPrice, 1e-9)
+
+	u := tierUsage{prompt: 10_000, cached: 4_000, completion: 1_000}
+	peak := time.Date(2026, 11, 24, 4, 0, 0, 0, time.UTC)     // 12:00 Asia/Shanghai
+	offPeak := time.Date(2026, 11, 24, 16, 0, 0, 0, time.UTC) // 00:00 Asia/Shanghai
+	require.Equal(t, billedTierQuotaAt(t, ch, name, provider, u, peak),
+		displayedTierQuota(window.Overlay.InputPrice, window.Overlay.OutputPrice, window.Overlay.CachedInputPrice, u), "the peak window quotes billing")
+	require.Equal(t, billedTierQuotaAt(t, ch, name, provider, u, offPeak),
+		displayedTierQuota(info.InputPrice, info.OutputPrice, info.CachedInputPrice, u), "the base row quotes off-peak billing")
+}
+
+// TestGetModelsDisplayLocalRatioTiersQuoteBilling verifies a channel entry
+// with its own ratio and tiers but no time windows bills the displayed tier
+// rows: the scalar ratio map copied from the entry no longer suppresses the
+// tiers' input ratios as a legacy flat override would.
+func TestGetModelsDisplayLocalRatioTiersQuoteBilling(t *testing.T) {
+	setupModelsDisplayTestEnv(t)
+	const name = "gpt-4o"
+	m := ratio.MilliTokensUsd
+	local := map[string]model.ModelConfigLocal{name: {
+		Ratio: 2 * m, CompletionRatio: 2, CachedInputRatio: 0.5 * m,
+		Tiers: []model.ModelRatioTierLocal{
+			{Ratio: 3 * m, InputTokenThreshold: 1000},
+			{Ratio: 5 * m, CompletionRatio: 4, CachedInputRatio: 1 * m, InputTokenThreshold: 5000},
+		},
+	}}
+	ch := createDisplayChannel(t, "local-ratio-tiers", channeltype.OpenAI, name, "public", local)
+	provider := displayProvider(t, ch)
+
+	info := fetchModelsDisplay(t, 0, "").Data[channeltype.IdToName(ch.Type)+":"+ch.Name].Models[name]
+	require.Len(t, info.Tiers, 2)
+	require.InDelta(t, 3.0, info.Tiers[0].InputPrice, 1e-12)
+	requireTierRowsQuoteBilling(t, info.Tiers, ch, name, provider)
+}
+
+// TestGetModelsDisplayQwenTiersShowBandCachePrice verifies the DashScope
+// tiered Qwen catalog displays, and bills, each input band's own cache-hit
+// price (20% of that band's input price) rather than the base band's.
+func TestGetModelsDisplayQwenTiersShowBandCachePrice(t *testing.T) {
+	setupModelsDisplayTestEnv(t)
+	const name = "qwen3-max"
+	ch := createDisplayChannel(t, "qwen-band-cache", channeltype.Ali, name, "public", nil)
+	provider := displayProvider(t, ch)
+
+	info := fetchModelsDisplay(t, 0, "").Data[channeltype.IdToName(ch.Type)+":"+ch.Name].Models[name]
+	require.NotEmpty(t, info.Tiers)
+	for _, row := range info.Tiers {
+		require.InDelta(t, 0.2*row.InputPrice, row.CachedInputPrice, 1e-9, "tier at %d input tokens", row.InputTokenThreshold)
+	}
+	requireTierRowsQuoteBilling(t, info.Tiers, ch, name, provider)
 }
