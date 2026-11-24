@@ -193,6 +193,7 @@ func TestComputeOpenAIGPT56CacheWritePricing(t *testing.T) {
 				ModelRatio:     pricingAdaptor.GetModelRatio(tt.modelName),
 				GroupRatio:     1,
 				PricingAdaptor: pricingAdaptor,
+				RequestTime:    time.Date(2026, time.November, 30, 12, 0, 0, 0, time.UTC),
 			})
 
 			require.Equal(t, tt.expected, result.TotalQuota)

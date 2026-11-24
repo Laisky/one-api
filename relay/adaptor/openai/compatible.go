@@ -63,6 +63,8 @@ var CompatibleChannels = []int{
 //     for channel types that are plain OpenAI.
 func GetCompatibleChannelPricing(channelType int) map[string]adaptor.ModelConfig {
 	switch channelType {
+	case 0, channeltype.OpenAI:
+		return nativeModelRatios
 	case channeltype.Azure:
 		// Azure inherits OpenAI's catalog except native-only IDs, so the
 		// embedded OpenAI adaptor never sees a tariff Foundry did not publish.
