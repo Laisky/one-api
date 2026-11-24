@@ -20,7 +20,8 @@ import (
 
 // TestChannelResetRoutesRequireAdministrator uses the real shipped router with
 // its real rate limiter and an isolated Redis fixture. Both anonymous callers
-// and regular users must be denied before a batch handler touches the database.
+// and regular users must be denied before a batch handler touches the database,
+// and before the model catalog or default-model lists are served.
 func TestChannelResetRoutesRequireAdministrator(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	redisServer := miniredis.RunT(t)
@@ -56,16 +57,18 @@ func TestChannelResetRoutesRequireAdministrator(t *testing.T) {
 			})
 			require.NotPanics(t, func() { SetApiRouter(engine) })
 
-			for _, path := range []string{
-				"/api/channel/reset_models",
-				"/api/channel/selection",
-				"/api/channel/delete_selected_disabled",
-				"/api/log/delete_selected",
-				"/api/channel/018fcf6d-c484-7000-8000-000000000101/reset_models",
+			for _, route := range []struct{ method, path string }{
+				{http.MethodPost, "/api/channel/reset_models"},
+				{http.MethodPost, "/api/channel/selection"},
+				{http.MethodPost, "/api/channel/delete_selected_disabled"},
+				{http.MethodPost, "/api/log/delete_selected"},
+				{http.MethodPost, "/api/channel/018fcf6d-c484-7000-8000-000000000101/reset_models"},
+				{http.MethodGet, "/api/models"},
+				{http.MethodGet, "/api/models/defaults"},
 			} {
-				t.Run(path, func(t *testing.T) {
+				t.Run(route.method+" "+route.path, func(t *testing.T) {
 					recorder := httptest.NewRecorder()
-					engine.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, path, nil))
+					engine.ServeHTTP(recorder, httptest.NewRequest(route.method, route.path, nil))
 					require.Equal(t, caller.status, recorder.Code)
 					if caller.status == http.StatusForbidden {
 						require.Contains(t, recorder.Body.String(), "insufficient permissions")

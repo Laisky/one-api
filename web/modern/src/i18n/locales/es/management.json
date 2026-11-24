@@ -77,9 +77,9 @@
         },
         "heading": "Configuración de Azure OpenAI",
         "version": {
-          "help": "Versión de API predeterminada utilizada cuando la solicitud no especifica una (ej. 2024-03-01-preview).",
+          "help": "Versión de API que este canal envía a Azure como parámetro de consulta api-version (ej. 2024-03-01-preview).",
           "label": "Versión de API",
-          "note": "Predeterminado: 2024-03-01-preview. Esto puede ser anulado por los parámetros de consulta de la solicitud.",
+          "note": "Predeterminado: 2024-03-01-preview. Los parámetros de consulta de la solicitud del cliente no pueden anularla; los modelos o1, o3, o4 y los que solo admiten Responses usan la versión que requieren.",
           "placeholder": "2024-03-01-preview",
           "warning_label": "Importante:",
           "warning_text": "El nombre del modelo debe ser tu nombre de implementación, no el nombre original del modelo."

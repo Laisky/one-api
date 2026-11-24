@@ -77,9 +77,9 @@
         },
         "heading": "Azure OpenAI 配置",
         "version": {
-          "help": "当请求未指定时使用的默认 API 版本 (例如 2024-03-01-preview)。",
+          "help": "此渠道作为 api-version 查询参数发送给 Azure 的 API 版本 (例如 2024-03-01-preview)。",
           "label": "API 版本",
-          "note": "默认: 2024-03-01-preview。这可以通过请求查询参数覆盖。",
+          "note": "默认: 2024-03-01-preview。客户端请求的查询参数无法覆盖它；o1、o3、o4 以及仅支持 Responses 的模型会使用其所需的版本。",
           "placeholder": "2024-03-01-preview",
           "warning_label": "重要:",
           "warning_text": "模型名称应该是您的部署名称，而不是原始模型名称。"

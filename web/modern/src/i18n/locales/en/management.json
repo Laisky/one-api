@@ -77,9 +77,9 @@
         },
         "heading": "Azure OpenAI Configuration",
         "version": {
-          "help": "Default API version used when the request does not specify one (e.g., 2024-03-01-preview).",
+          "help": "API version this channel sends to Azure as the api-version query parameter (e.g., 2024-03-01-preview).",
           "label": "API Version",
-          "note": "Default: 2024-03-01-preview. This can be overridden by request query parameters.",
+          "note": "Default: 2024-03-01-preview. Client request query parameters cannot override it; o1, o3, o4, and Responses-only models use the version they require.",
           "placeholder": "2024-03-01-preview",
           "warning_label": "Important:",
           "warning_text": "The model name should be your deployment name, not the original model name."

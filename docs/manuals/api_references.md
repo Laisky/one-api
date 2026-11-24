@@ -597,6 +597,8 @@ _Total: 154 active routes across 15 sections (plus 38 reserved OpenAI endpoints 
 | `GET` | [`/api/channel/pricing/:id`](#channel-administration--diagnostics) | Admin | Effective pricing: derived ratios, unified model_configs, tooling. |
 | `GET` | [`/api/channel/default-pricing`](#channel-administration--diagnostics) | Admin | Adapter default pricing for a type; fields are JSON-encoded strings. |
 | `POST` | [`/api/channel/pricing-readiness`](#channel-administration--diagnostics) | Admin | Read-only pre-save check: supported models that admission would refuse until channel pricing is configured. |
+| `POST` | [`/api/channel/:id/reset_models`](#channel-administration--diagnostics) | Admin | Atomically reset one channel to its provider defaults, retaining explicitly priced/mapped servable catalog models; 409 with a conflict code on refusal. |
+| `POST` | [`/api/channel/reset_models`](#channel-administration--diagnostics) | Admin | Reset an explicit UUID selection; each channel is atomic and reported as reset, rejected, or failed. |
 | `POST` | [`/api/channel/`](#channel-administration--diagnostics) | Admin | Create one or more channels (newline-split key = bulk create). |
 | `POST` | [`/api/channel/:id/duplicate`](#channel-administration--diagnostics) | Admin | Clone a channel; resets identity/usage, appends ' Copy'. |
 | `PUT` | [`/api/channel/`](#channel-administration--diagnostics) | Admin | Update channel; full update or status_only mode. |
@@ -630,6 +632,7 @@ _Total: 154 active routes across 15 sections (plus 38 reserved OpenAI endpoints 
 | `GET` | [`/api/admin/tokens/search`](#redemptions-groups-logs-admin-token-visibility--model-catalog) | Admin | Keyword search tokens across users by name prefix, read-only, paginated/sorted. |
 | `GET` | [`/api/admin/tokens/:id`](#redemptions-groups-logs-admin-token-visibility--model-catalog) | Admin | Fetch any token by UUID regardless of owner, read-only; a malformed id returns HTTP 400 'invalid token id: invalid resource reference'. |
 | `GET` | [`/api/models`](#redemptions-groups-logs-admin-token-visibility--model-catalog) | Admin | Return full channel-type-ID to model-name-list catalog; data is an object keyed by channel type ID. |
+| `GET` | [`/api/models/defaults`](#redemptions-groups-logs-admin-token-visibility--model-catalog) | Admin | Return the zero-config default model list per channel type (same shape as `/api/models`); used to fill new channels and by resets. |
 
 **[MCP Server & Tool Administration](#mcp-server--tool-administration)**
 
@@ -6748,7 +6751,7 @@ curl -sS "$BASE_URL/api/channel/default-pricing?type=1" \
 
 ### POST /api/channel/pricing-readiness
 
-Reports which Supported Models of a channel draft request admission would refuse until the channel's `model_configs` prices them, so the channel editor can warn before saving. The draft uses the channel save payload's encoding and is parsed with the same parsers the relay uses for saved channels; each model is evaluated after Model Mapping with the admission validators themselves (the GPT Image 2.5/2.6 reservation/fallback, operator-only token tariffs, provider-required cache prices, and Live-only realtime prices). For GPT Image 2.5/2.6, `image.price_per_image_usd` is an optional override: without it, admission derives the reservation from OpenAI's token calculator at the model's image-output token price, so the gap is reported only when the model has neither a positive per-image price nor an image-output token price (for example GPT Image 2.6 on an operator-priced host whose channel sets no token prices). It reads no channel rows and changes nothing.
+Reports which Supported Models of a channel draft request admission would refuse until the channel's `model_configs` prices them, so the channel editor can warn before saving. The draft uses the channel save payload's encoding and is parsed with the same parsers the relay uses for saved channels; each model is evaluated after Model Mapping with the admission validators themselves (the GPT Image 2.5/2.6 reservation/fallback, operator-only token tariffs, provider-required cache prices, and Live-only realtime prices). For GPT Image 2.5/2.6, `image.price_per_image_usd` is an optional override: without it, admission derives the reservation from OpenAI's token calculator at the model's image-output token price, so the gap is reported only when the model has neither a positive per-image price nor an image-output token price (for example GPT Image 2.6 on an operator-priced host whose channel sets no token prices). The derived default serves generations only: an image edit of these models additionally needs a positive `image.price_per_image_usd` (reference-image input has no published bound), which this check does not report. It reads no channel rows and changes nothing.
 
 **Auth:** Management access token — `Authorization: $ACCESS_TOKEN` (AdminAuth).
 
@@ -6800,6 +6803,63 @@ curl -sS -X POST "$BASE_URL/api/channel/pricing-readiness" \
 | Status | Meaning |
 |--------|---------|
 | 400 | Malformed or oversized body, unknown field, unsupported channel type, too many models, or Model Mapping / Model Configs that are not valid JSON objects. |
+
+### POST /api/channel/:id/reset_models
+
+Atomically resets one channel's Supported Models to its provider defaults. The server chooses the list; any request body is ignored. In one transaction it locks the row, validates the current configuration, writes `models`, clears `hidden_models`, keeps `testing_model` when it is still listed or the skip sentinel (otherwise reverts it to automatic), and rebuilds routing abilities (retained models keep their suspensions). Model Mapping, Model Configs, legacy ratios, inference profiles, status, and every other field are never rewritten.
+
+The new list is the `GET /api/models/defaults` list followed, in catalog order, by every other `GET /api/models` model the channel currently lists or explicitly configures (as a Model Mapping key, a `model_configs`/`model_ratio`/`completion_ratio` key, or an inference profile key) and can serve: request admission would not refuse it for missing pricing under the channel's own Model Mapping and Model Configs (the `POST /api/channel/pricing-readiness` evaluation). Listed models without such configuration, and custom models outside the catalog, are removed.
+
+**Auth:** Management access token — `Authorization: $ACCESS_TOKEN` (AdminAuth).
+
+**Path parameters**
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `id` | string (UUID) | Yes | Channel UUID. |
+
+**Response**: HTTP 200 `{"success": true, "message": "", "data": {"uuid", "name", "success": true, "model_count"}}`. Keys, internal IDs, and configuration values are never returned.
+
+**Errors**
+
+| Status | Meaning |
+|--------|---------|
+| 400 | Malformed channel UUID (see [Resource reference errors](#resource-reference-errors-management-api)). |
+| 409 `{"success": false, "message": "...", "conflict": {"code", "field", "models"}}` | Policy refusal; nothing changed. `field` names the offending column and `models` the sorted model names. |
+| 500 | Operational failure; nothing changed. |
+
+| `conflict.code` | Meaning |
+|-----------------|---------|
+| `unsupported_channel` | Custom / OpenAI-compatible / Claude-compatible channels have no provider defaults. |
+| `no_default_models` | No valid default list is registered for the channel type. |
+| `mapping_conflict` | A Model Mapping key or target is a model this provider does not recognize. |
+| `pricing_conflict` | A `model_configs`, `model_ratio`, or `completion_ratio` key is a model this provider does not recognize. |
+| `inference_profile_conflict` | An `inference_profile_arn_map` key is a model this provider does not recognize. |
+| `tariff_incomplete` | A provider model the channel configures (in the named field) needs an operator tariff that is missing or incomplete, so it would not be servable. Complete the tariff in `model_configs` or remove the entry. |
+| `invalid_configuration` | A configuration field is malformed. |
+
+**Example**
+
+```bash
+curl -sS -X POST "$BASE_URL/api/channel/018fcf6d-c484-7000-8000-000000000101/reset_models" \
+  -H "Authorization: $ACCESS_TOKEN"
+```
+
+### POST /api/channel/reset_models
+
+Applies the single-channel reset above to an explicit, confirmed selection. Only `selection.mode = "ids"` is accepted (resolve the UUIDs first, for example with `POST /api/channel/selection`). Each channel is reset in its own transaction, so a refusal or failure leaves that channel unchanged without blocking the others.
+
+**Auth:** Management access token — `Authorization: $ACCESS_TOKEN` (AdminAuth).
+
+**Request body**: `{"selection": {"mode": "ids", "ids": ["<channel UUID>", ...]}}`.
+
+**Response**: HTTP 200 `{"success": true, "message": "", "data": {"total", "reset", "rejected", "failed", "results": [{"uuid", "name", "success", "model_count", "message", "conflict"}]}}`. A rejected result carries the same `conflict` object and codes as the single-channel endpoint; a missing or non-`ids` selection is refused.
+
+```bash
+curl -sS -X POST "$BASE_URL/api/channel/reset_models" \
+  -H "Authorization: $ACCESS_TOKEN" -H "Content-Type: application/json" \
+  -d '{"selection":{"mode":"ids","ids":["018fcf6d-c484-7000-8000-000000000101"]}}'
+```
 
 ### POST /api/debug/channel/:id/debug
 
@@ -7787,7 +7847,7 @@ curl -s "$BASE_URL/api/admin/tokens/018f0000-0000-7000-8000-000000000041" \
 
 ### GET /api/models
 
-Returns the full channel-to-model catalog: a map keyed by channel type ID, each value being the list of model names that channel exposes. Used by the admin dashboard to populate channel/model selectors. The map is precomputed at startup.
+Returns the full channel-to-model catalog: a map keyed by channel type ID, each value being every model name that channel type's adaptor recognizes, including models that need an operator tariff (explicit `model_configs` pricing) before request admission serves them. Used by the admin dashboard to offer every addable model. The map is precomputed at startup. For the lists a new channel is filled with, use `GET /api/models/defaults`.
 
 **Auth:** Management ACCESS TOKEN - `Authorization: $ACCESS_TOKEN` (admin role).
 
@@ -7815,6 +7875,34 @@ Returns the full channel-to-model catalog: a map keyed by channel type ID, each 
 
 ```bash
 curl -s "$BASE_URL/api/models" \
+  -H "Authorization: $ACCESS_TOKEN"
+```
+
+### GET /api/models/defaults
+
+Returns the zero-config default models per channel type: each `GET /api/models` list minus the models request admission would refuse while the channel has no `model_configs` (for example Groq `minimaxai/minimax-m2.7`, which needs an operator tariff, or Live-only Google models that need explicit realtime prices). These are the lists the channel editor fills a new channel with and that model resets write, so a channel saved from them needs no operator pricing. Models absent here stay in `GET /api/models` and can be added once priced. The map is precomputed at startup.
+
+**Auth:** Management ACCESS TOKEN - `Authorization: $ACCESS_TOKEN` (admin role).
+
+**Response:** HTTP 200, the same shape as `GET /api/models`: `data` maps channel-type IDs (string keys) to arrays of model names, in catalog order, for the same channel types.
+
+```json
+{
+  "success": true,
+  "message": "",
+  "data": {
+    "29": [
+      "llama-3.1-8b-instant",
+      "llama-3.3-70b-versatile"
+    ]
+  }
+}
+```
+
+**Example**
+
+```bash
+curl -s "$BASE_URL/api/models/defaults" \
   -H "Authorization: $ACCESS_TOKEN"
 ```
 

@@ -74,9 +74,16 @@ var (
 	// A time.Now() here would make `created` churn on every rebuild.
 	modelCatalogCreated = 1626777600
 
-	allModels               []OpenAIModels
-	modelsMap               map[string]OpenAIModels
-	channelId2Models        map[int][]string
+	allModels []OpenAIModels
+	modelsMap map[string]OpenAIModels
+	// channelId2Models is the raw provider catalog per channel type: every
+	// model the adaptor recognizes, including models that need an operator
+	// tariff. GET /api/models serves it and resets validate references against it.
+	channelId2Models map[int][]string
+	// channelId2DefaultModels holds the zero-config recommendations per channel
+	// type: the catalog minus models that are not servable without operator
+	// pricing. GET /api/models/defaults serves it and resets write it.
+	channelId2DefaultModels map[int][]string
 	defaultModelPermissions []OpenAIModelPermission
 )
 
@@ -161,6 +168,7 @@ func init() {
 		modelsMap[model.Id] = model
 	}
 	channelId2Models = make(map[int][]string)
+	channelId2DefaultModels = make(map[int][]string)
 	for i := 1; i < channeltype.Dummy; i++ {
 		adaptor := relay.GetAdaptor(channeltype.ToAPIType(i))
 		if adaptor == nil {
@@ -171,9 +179,11 @@ func init() {
 			ChannelType: i,
 		}
 		adaptor.Init(meta)
-		// The editor fills and resets channels from this list, so it holds
-		// only models that are servable without operator pricing.
-		channelId2Models[i] = zeroConfigServableModels(i, adaptor.GetModelList())
+		catalog := adaptor.GetModelList()
+		channelId2Models[i] = catalog
+		// The editor fills new channels and resets write this list, so it
+		// holds only models that are servable without operator pricing.
+		channelId2DefaultModels[i] = zeroConfigServableModels(i, catalog)
 	}
 }
 
@@ -218,7 +228,11 @@ func dedupeStaticModelsByOwner(models []OpenAIModels) []OpenAIModels {
 	return deduped
 }
 
-// DashboardListModels returns the complete channel-to-model mapping for administrative dashboards.
+// DashboardListModels returns the complete channel-type-to-model catalog for
+// administrative dashboards: every model each provider recognizes, including
+// models that need an operator tariff before they are servable. Zero-config
+// recommendations are served separately by DashboardListDefaultModels.
+// Parameters: c is the admin request. Returns: none; it writes the envelope.
 func DashboardListModels(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

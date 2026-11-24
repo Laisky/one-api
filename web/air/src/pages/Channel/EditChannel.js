@@ -8,6 +8,7 @@ import { SideSheet, Space, Spin, Button, Input, Typography, Select, TextArea, Ch
 import { IconHelpCircle } from "@douyinfe/semi-icons";
 import ChannelDebugPanel from '../../components/ChannelDebugPanel';
 import { omitUnownedChannelFields } from '../../../../legacy/channel-update-payload.mjs';
+import { resolveOtherSave, snapshotOther, storedOtherOverride } from '../../helpers/channel-other';
 
 const MODEL_MAPPING_EXAMPLE = {
     'gpt-3.5-turbo-0301': 'gpt-3.5-turbo',
@@ -248,6 +249,8 @@ const EditChannel = (props) => {
         api_format: 'chat_completion',
     };
     const [config, setConfig] = useState(defaultConfig);
+    // otherSnapshot remembers the stored `other` value and typed override of the loaded channel.
+    const otherSnapshot = useRef(null);
     const [defaultPricing, setDefaultPricing] = useState({
         model_configs: '',
     });
@@ -332,6 +335,8 @@ const EditChannel = (props) => {
             return next;
         });
         if (name === 'type') {
+            // The new type starts from the default config, so no stored override remains.
+            otherSnapshot.current = null;
             // Load default pricing for the new channel type
             loadDefaultPricing(value).catch(reportUIError);
             setConfig({ ...defaultConfig });
@@ -394,22 +399,25 @@ const EditChannel = (props) => {
                       console.error('Failed to parse inference_profile_arn_map:', e);
                   }
               }
-              setInputs(data);
+              let loadedConfig = { ...defaultConfig };
               if (data.config && data.config !== '') {
                   try {
                       const parsedConfig = JSON.parse(data.config);
-                      setConfig({
+                      loadedConfig = {
                           ...defaultConfig,
                           ...parsedConfig,
                           api_format: parsedConfig.api_format || 'chat_completion',
-                      });
+                      };
                   } catch (error) {
                       console.error('Failed to parse channel config:', error);
-                      setConfig({ ...defaultConfig });
                   }
-              } else {
-                  setConfig({ ...defaultConfig });
               }
+              // The field shows the value the relay uses: a stored typed override wins over `other`.
+              const { displayed, snapshot } = snapshotOther(data.type, data.other, loadedConfig);
+              otherSnapshot.current = snapshot;
+              data.other = displayed;
+              setInputs(data);
+              setConfig(loadedConfig);
               // Load default pricing for this channel type, but don't override existing model_configs
               loadDefaultPricing(data.type).catch(reportUIError);
               if (data.auto_ban === 0) {
@@ -481,6 +489,7 @@ const EditChannel = (props) => {
         if (isEdit) {
             loadChannel().then().catch(reportUIError);
         } else {
+            otherSnapshot.current = null;
             setInputs(originInputs);
             setConfig({ ...defaultConfig });
             // Load default pricing for new channels
@@ -524,10 +533,15 @@ const EditChannel = (props) => {
         if (localInputs.base_url && localInputs.base_url.endsWith('/')) {
             localInputs.base_url = localInputs.base_url.slice(0, localInputs.base_url.length - 1);
         }
-        if (localInputs.type === 3 && localInputs.other === '') {
+        // An untouched field resends the stored values; an edit also replaces a stored override.
+        const otherSave = resolveOtherSave(otherSnapshot.current, localInputs.type, localInputs.other, config);
+        localInputs.other = otherSave.other;
+        // The legacy defaults apply only when no typed override supplies the value.
+        const overridden = storedOtherOverride(localInputs.type, otherSave.config) !== '';
+        if (!overridden && localInputs.type === 3 && localInputs.other === '') {
             localInputs.other = '2024-03-01-preview';
         }
-        if (localInputs.type === 18 && localInputs.other === '') {
+        if (!overridden && localInputs.type === 18 && localInputs.other === '') {
             localInputs.other = 'v2.1';
         }
         let res;
@@ -547,7 +561,7 @@ const EditChannel = (props) => {
         if (localInputs.completion_ratio === '') {
             localInputs.completion_ratio = null;
         }
-        localInputs.config = JSON.stringify(config);
+        localInputs.config = JSON.stringify(otherSave.config);
         if (isEdit) {
             res = await API.put(`/api/channel/`, omitUnownedChannelFields({ ...localInputs, uuid: channelId }));
         } else {

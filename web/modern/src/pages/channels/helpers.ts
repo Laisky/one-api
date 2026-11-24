@@ -1,4 +1,11 @@
 import { isExpectedRequestError, markPrivateError } from '../../../../legacy/browser-sentry-privacy.mjs';
+import {
+  applyOtherFieldEdit,
+  OTHER_OVERRIDE_KEY_BY_TYPE,
+  readOtherOverride,
+  type OtherOverrideKey,
+  type StoredOtherBinding,
+} from './otherOverride';
 import type { ChannelConfigForm, ChannelForm, NormalizedToolingConfig, ToolPricingEntry } from './schemas';
 
 export const normalizeChannelType = (value: unknown): number | null => {
@@ -479,12 +486,14 @@ export const validateToolingConfig = (configStr: string) => {
 };
 
 /**
- * CONFIG_OVERRIDES_OF_OTHER lists the channel config keys that override the legacy `other` field
- * for specific channel types (Go middleware/distributor.go): api_version for Azure, Xunfei, and
- * Gemini, library_id for AI Proxy Library, and plugin for Ali. The form does not edit them, so they
- * round-trip unchanged on save, but changing the channel type clears them together with `other`.
+ * CONFIG_OVERRIDES_OF_OTHER lists every channel config key that overrides the legacy `other` field
+ * for some channel type (OTHER_OVERRIDE_KEY_BY_TYPE). The `other` field edits the effective value
+ * and keeps a stored override in step (applyOtherFieldEdit); changing the channel type clears all
+ * of these keys together with `other`.
  */
-export const CONFIG_OVERRIDES_OF_OTHER: readonly string[] = ['api_version', 'library_id', 'plugin'];
+export const CONFIG_OVERRIDES_OF_OTHER: readonly string[] = [
+  ...new Set(Object.values(OTHER_OVERRIDE_KEY_BY_TYPE).filter((key): key is OtherOverrideKey => key !== undefined)),
+];
 
 /**
  * BuildChannelSubmitPayloadOptions captures all the contextual flags that
@@ -499,6 +508,12 @@ export interface BuildChannelSubmitPayloadOptions {
   watchType: number | null | undefined;
   /** Live config values used to derive composite key fields. */
   watchConfig: ChannelConfigForm;
+  /**
+   * The `other` binding of the channel as loaded for editing (null or absent when creating). The
+   * `other` field shows the effective value, so this decides whether the stored `other` and typed
+   * override are resent unchanged or updated to the edited value (applyOtherFieldEdit).
+   */
+  storedOther?: StoredOtherBinding | null;
 }
 
 /**
@@ -516,6 +531,7 @@ export interface BuildChannelSubmitPayloadOptions {
  *    serialised as JSON `null` (key present, value `null`) so the backend
  *    can distinguish "clear me" from "leave me alone".
  *  - JSONC inputs are sanitised to strict JSON.
+ *  - `other` and its typed config override follow applyOtherFieldEdit.
  */
 export const buildChannelSubmitPayload = (data: ChannelForm, opts: BuildChannelSubmitPayloadOptions): Record<string, any> => {
   const { isEdit, watchType, watchConfig } = opts;
@@ -544,7 +560,14 @@ export const buildChannelSubmitPayload = (data: ChannelForm, opts: BuildChannelS
   payload.group = Array.isArray(payload.groups) ? payload.groups.join(',') : '';
   delete payload.groups;
 
-  payload.config = JSON.stringify(data.config);
+  const otherSubmission = applyOtherFieldEdit(
+    opts.storedOther,
+    normalizeChannelType(watchType),
+    data.other,
+    data.config as Record<string, unknown> | undefined
+  );
+  payload.other = otherSubmission.other;
+  payload.config = JSON.stringify(otherSubmission.config);
 
   // On edit, an empty key signals "leave the existing key alone". Drop the
   // field entirely so the backend's partial-update logic skips it.
@@ -560,8 +583,13 @@ export const buildChannelSubmitPayload = (data: ChannelForm, opts: BuildChannelS
   payload.base_url = trimmedBaseURL;
 
   // Azure (type 3) requires an api_version-like value in `other`. Apply a
-  // reasonable default so existing callers keep working without manual entry.
-  if (watchType === 3 && (typeof payload.other !== 'string' || payload.other.trim() === '')) {
+  // reasonable default so existing callers keep working without manual entry,
+  // unless a typed config.api_version override already supplies the version.
+  if (
+    watchType === 3 &&
+    (typeof payload.other !== 'string' || payload.other.trim() === '') &&
+    readOtherOverride(3, otherSubmission.config) === ''
+  ) {
     payload.other = '2024-03-01-preview';
   }
 

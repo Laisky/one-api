@@ -139,9 +139,9 @@ describe('useChannelForm', () => {
     const channelCalls = mockApiGet.mock.calls.filter((call) => call[0].startsWith('/api/channel/1')).length;
     expect(channelCalls).toBe(1);
 
-    // loadModelsCatalog should be called once
-    const modelsCalls = mockApiGet.mock.calls.filter((call) => call[0].startsWith('/api/models')).length;
-    expect(modelsCalls).toBe(1);
+    // The complete catalog and the default suggestions are each requested once.
+    expect(mockApiGet.mock.calls.filter((call) => call[0] === '/api/models')).toHaveLength(1);
+    expect(mockApiGet.mock.calls.filter((call) => call[0] === '/api/models/defaults')).toHaveLength(1);
 
     // The group catalog belongs to ChannelGroups (useGroupCatalog), not to the form hook.
     const groupsCalls = mockApiGet.mock.calls.filter((call) => call[0].startsWith('/api/group/')).length;

@@ -276,15 +276,61 @@ export function removeTrailingSlash(url) {
 }
 
 let channelModels = undefined;
+let channelDefaultModels = undefined;
 
+/**
+ * loadChannelModels caches the full provider catalog from /api/models, which feeds model
+ * suggestions, and the zero-config recommendations from /api/models/defaults, which fill
+ * related models. A failed catalog request is rethrown for the caller to report.
+ */
 export async function loadChannelModels() {
-  const res = await API.get('/api/models');
-  const { success, data } = res.data;
+  const [catalog, defaults] = await Promise.allSettled([API.get('/api/models'), API.get('/api/models/defaults')]);
+  storeChannelDefaultModels(defaults);
+  if (catalog.status === 'rejected') {
+    throw catalog.reason;
+  }
+  const { success, data } = catalog.value.data;
   if (!success) {
     return;
   }
   channelModels = data;
   localStorage.setItem('channel_models', JSON.stringify(data));
+}
+
+/**
+ * storeChannelDefaultModels caches a successful /api/models/defaults result. Any other outcome
+ * drops stale defaults so getChannelDefaultModels falls back to the full catalog; the API
+ * interceptor has already reported a failed request, so only a string summary is logged.
+ */
+function storeChannelDefaultModels(result) {
+  const body = result.status === 'fulfilled' ? result.value?.data : undefined;
+  if (body?.success && body.data && typeof body.data === 'object') {
+    channelDefaultModels = body.data;
+    localStorage.setItem('channel_default_models', JSON.stringify(body.data));
+    return;
+  }
+  const reason = result.status === 'rejected' ? String(result.reason?.message || result.reason) : 'unsuccessful response';
+  console.warn('Default channel models are unavailable, so related models fall back to the full catalog: ' + reason);
+  channelDefaultModels = undefined;
+  localStorage.removeItem('channel_default_models');
+}
+
+/** getChannelDefaultModels returns the zero-config recommended models for type, or the full catalog's models when no defaults are cached. */
+export function getChannelDefaultModels(type) {
+  if (channelDefaultModels === undefined) {
+    const saved = localStorage.getItem('channel_default_models');
+    if (saved) {
+      try {
+        channelDefaultModels = JSON.parse(saved);
+      } catch (error) {
+        throw markPrivateError(error, 'Saved model data could not be parsed.');
+      }
+    }
+  }
+  if (channelDefaultModels && typeof channelDefaultModels === 'object' && type in channelDefaultModels) {
+    return channelDefaultModels[type];
+  }
+  return getChannelModels(type);
 }
 
 /** getChannelModels returns cached or saved models for type without changing storage parse errors. */

@@ -36,7 +36,9 @@ export const CHANNEL_PRICING_READINESS_TIMEOUT_MS = 5000;
 /**
  * getChannelMappingWarnings inspects Model Mapping entries against the channel's configuration to
  * surface silent misconfigurations before saving. It takes the submitted form data and the
- * per-channel-type model catalog, and returns:
+ * complete per-channel-type provider catalog (/api/models), never the default suggestions: a
+ * target that is valid but needs operator pricing is known, and its pricing is the readiness
+ * check's concern. It returns:
  * - unreachableKeys: sources (keys) not in Supported Models, so requests to the alias cannot reach this channel;
  * - unknownTargets: targets (values) in neither the supported list nor the channel-type catalog, likely typos.
  */
@@ -184,8 +186,9 @@ export interface ChannelSaveWarnings {
 
 /**
  * CollectChannelSaveWarningsOptions configures collectChannelSaveWarnings: `baseline` is the
- * channel exactly as loaded for editing (null when creating), `modelsCatalog` the per-type model
- * catalog, and `payloadOptions` the draft's save-payload options.
+ * channel exactly as loaded for editing (null when creating), `modelsCatalog` the complete
+ * per-type provider catalog (not the default suggestions), and `payloadOptions` the draft's
+ * save-payload options.
  */
 export interface CollectChannelSaveWarningsOptions {
   baseline: ChannelForm | null;

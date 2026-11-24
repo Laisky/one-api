@@ -40,7 +40,9 @@ export const createChannelSchema = (tr?: SchemaTranslationFn) => {
         sk: z.string().optional(),
         user_id: z.string().optional(),
         // Typed overrides of the legacy `other` field: api_version (Azure, Xunfei, Gemini),
-        // library_id (AI Proxy Library), and plugin (Ali). The relay prefers them over `other`.
+        // library_id (AI Proxy Library), and plugin (Ali). The relay prefers a non-empty one over
+        // `other`, so the `other` field shows that effective value and an edit of it updates a
+        // stored override too (see otherOverride.ts); unrelated saves resend both unchanged.
         api_version: z.string().optional(),
         library_id: z.string().optional(),
         plugin: z.string().optional(),

@@ -200,7 +200,9 @@ describe('collectChannelSaveWarnings', () => {
     debug.mockRestore();
   });
 
-  const catalog = { 3: ['gpt-4o', 'gpt-6-cyber'] };
+  // The complete provider catalog (/api/models). gpt-6-cyber needs operator pricing, so the
+  // zero-config suggestions (/api/models/defaults) leave it out, but it is still a known target.
+  const catalog = { 3: ['gpt-4o', 'gpt-4o-mini', 'gpt-6-cyber'] };
   const loaded = buildForm({ models: ['gpt-4o', 'cyber'], model_mapping: '{"cyber": "gpt-6-cyber", "ghost": "retired-model"}' });
 
   it('creating a channel shows every warning', async () => {
@@ -268,7 +270,7 @@ describe('collectChannelSaveWarnings', () => {
 
     const warnings = await collectChannelSaveWarnings(draft, {
       baseline: loaded,
-      modelsCatalog: { 1: ['gpt-4o', 'gpt-6-cyber'] },
+      modelsCatalog: { 1: ['gpt-4o', 'gpt-4o-mini', 'gpt-6-cyber'] },
       payloadOptions: { ...payloadOptions, watchType: 1 },
     });
 
@@ -334,5 +336,84 @@ describe('collectChannelSaveWarnings', () => {
 
     expect(warnings.pricingGaps).toEqual([cyberGap]);
     expect(requestedModels()).toEqual(['gpt-4o,cyber']);
+  });
+});
+
+describe('collectChannelSaveWarnings against the complete provider catalog', () => {
+  const GROQ = 29;
+  const PRICED_TARGET = 'minimaxai/minimax-m2.7';
+  // /api/models: every model the provider serves, including targets that need operator pricing.
+  const fullCatalog = { [GROQ]: ['llama-3.1-8b-instant', 'openai/gpt-oss-120b', PRICED_TARGET] };
+  // /api/models/defaults: zero-config Fill/Reset suggestions only.
+  const defaultSuggestions = { [GROQ]: ['llama-3.1-8b-instant', 'openai/gpt-oss-120b'] };
+  const groqOptions: BuildChannelSubmitPayloadOptions = { ...payloadOptions, watchType: GROQ };
+  const stored = buildForm({ type: GROQ, models: ['llama-3.1-8b-instant'], model_mapping: '', model_configs: '' });
+  const aliasGap = gapFor('m2', PRICED_TARGET);
+
+  /** addAlias returns the stored channel with the new alias m2 mapped to target, plus any extra fields. */
+  const addAlias = (target: string, extra: Partial<ChannelForm> = {}) =>
+    buildForm({ ...stored, models: ['llama-3.1-8b-instant', 'm2'], model_mapping: `{"m2": "${target}"}`, ...extra });
+
+  let warn: ReturnType<typeof vi.spyOn>;
+  let debug: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+    debug.mockRestore();
+  });
+
+  it('uses a target that is excluded from the default suggestions', () => {
+    expect(fullCatalog[GROQ]).toContain(PRICED_TARGET);
+    expect(defaultSuggestions[GROQ]).not.toContain(PRICED_TARGET);
+  });
+
+  it('reports nothing for a new alias pointing to an explicitly priced model excluded from the defaults', async () => {
+    respondByModels({ 'llama-3.1-8b-instant': [], 'llama-3.1-8b-instant,m2': [] });
+
+    const draft = addAlias(PRICED_TARGET, { model_configs: `{"${PRICED_TARGET}": {"ratio": 0.15, "completion_ratio": 4}}` });
+    const warnings = await collectChannelSaveWarnings(draft, { baseline: stored, modelsCatalog: fullCatalog, payloadOptions: groqOptions });
+
+    expect(warnings).toEqual({ unreachableKeys: [], unknownTargets: [], pricingGaps: [] });
+    expect(mockApiPost).toHaveBeenCalledTimes(2);
+  });
+
+  it('reports only the pricing gap when the same alias lacks the required pricing', async () => {
+    respondByModels({ 'llama-3.1-8b-instant': [], 'llama-3.1-8b-instant,m2': [aliasGap] });
+
+    const warnings = await collectChannelSaveWarnings(addAlias(PRICED_TARGET), {
+      baseline: stored,
+      modelsCatalog: fullCatalog,
+      payloadOptions: groqOptions,
+    });
+
+    expect(warnings).toEqual({ unreachableKeys: [], unknownTargets: [], pricingGaps: [aliasGap] });
+  });
+
+  it('reports a genuinely unknown target, on create and on edit', async () => {
+    respondByModels({ 'llama-3.1-8b-instant': [], 'llama-3.1-8b-instant,m2': [] });
+    const draft = addAlias('minimaxai/minimax-m2.7-typo');
+    const unknown = [{ source: 'm2', target: 'minimaxai/minimax-m2.7-typo' }];
+
+    const onEdit = await collectChannelSaveWarnings(draft, { baseline: stored, modelsCatalog: fullCatalog, payloadOptions: groqOptions });
+    expect(onEdit.unknownTargets).toEqual(unknown);
+
+    const onCreate = await collectChannelSaveWarnings(draft, { baseline: null, modelsCatalog: fullCatalog, payloadOptions: groqOptions });
+    expect(onCreate.unknownTargets).toEqual(unknown);
+  });
+
+  it('keeps hiding an unknown target the stored channel already had', async () => {
+    const baseline = addAlias('minimaxai/minimax-m2.7-typo');
+    const draft = buildForm({ ...baseline, name: 'Renamed' });
+
+    const warnings = await collectChannelSaveWarnings(draft, { baseline, modelsCatalog: fullCatalog, payloadOptions: groqOptions });
+
+    expect(warnings).toEqual({ unreachableKeys: [], unknownTargets: [], pricingGaps: [] });
+    expect(mockApiPost).not.toHaveBeenCalled();
   });
 });

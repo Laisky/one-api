@@ -125,9 +125,33 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	// bodyReencoded reports that the provider receives the normalized request
 	// (defaults applied, n clamped) rather than the client's body verbatim.
 	bodyReencoded := true
+	// An edit that must name another model, or reach Azure, is rewritten from
+	// the client's own body rather than re-encoded from the typed request, which
+	// cannot carry reference images, the mask, or edit-only controls. The
+	// provider then receives the client's values, so billing treats it as a
+	// verbatim body.
+	editRewritten := false
+	if meta.Mode == relaymode.ImagesEdits && (isModelMapped || meta.ChannelType == channeltype.Azure) {
+		var omit []string
+		if meta.ChannelType == channeltype.Azure {
+			omit = azureImageEditOmittedFields
+		}
+		rewritten, ok, rewriteErr := rewriteImageEditBody(c, rawBody, imageRequest.Model, omit)
+		if rewriteErr != nil {
+			return openai.ErrorWrapper(rewriteErr, "invalid_image_request", http.StatusBadRequest)
+		}
+		if ok {
+			requestBody = bytes.NewReader(rewritten)
+			bodyReencoded = false
+			editRewritten = true
+		}
+	}
 	// Re-encode a mapped request whenever the typed request was decoded from the
 	// body as JSON, so the provider renders the model that billing priced.
-	if common.IsJSONRequestBody(c, rawBody) &&
+	if editRewritten {
+		lg.Debug("rewrote image edit body for the provider model",
+			zap.String("model", imageRequest.Model), zap.Bool("azure", meta.ChannelType == channeltype.Azure))
+	} else if common.IsJSONRequestBody(c, rawBody) &&
 		isModelMapped || meta.ChannelType == channeltype.Azure { // make Azure channel request body
 		requestToMarshal := any(imageRequest)
 		if meta.Mode != relaymode.ImagesEdits &&
@@ -261,28 +285,39 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	// Strict GPT Image settlement prices the receipt with the request-start
 	// token tariff; the default reservation below is priced from the same one.
 	imageUsageConfig := resolveStrictGPTImageUsageConfig(imageModel, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
-	// Without an operator per-image fallback, reserve OpenAI's calculator
-	// estimate for this request instead of refusing it.
 	defaultImageFallback := false
-	if imagePriceUsd <= 0 && megapixelCharge == nil && usesStrictGPTImageTokenBilling(imageModel) &&
-		strictGPTImageDefaultReservationAllowed(imageModel, channelModelConfigs, pricingAdaptor, meta.StartTime) {
+	if megapixelCharge == nil && usesStrictGPTImageTokenBilling(imageModel) {
 		rendered := strictGPTImageRenderedRequest(c, imageRequest, strictGPTImageClientValues{
 			Size: clientImageSize, Quality: clientImageQuality, N: clientImageN,
 		}, billedCount, bodyReencoded)
+		// Hold, and charge without a usable receipt, the images the provider
+		// is asked to render, whichever source prices each one.
 		billedCount = rendered.Count
-		imagePriceUsd = strictGPTImageDefaultReservationUSD(imageModel, rendered.Size, rendered.Quality,
-			len(imageRequest.Prompt), rendered.PartialImages, billedCount, imageUsageConfig)
-		defaultImageFallback = imagePriceUsd > 0
+		if imagePriceUsd <= 0 {
+			// The derived default prices output and prompt text only. An
+			// edit's reference images are billed as image input tokens that no
+			// published rule bounds, so an edit needs an explicit fallback.
+			if imageRequest.IsEdit {
+				return openai.ErrorWrapper(strictGPTImageEditFallbackError(), "image_billing_not_configured", http.StatusServiceUnavailable)
+			}
+			// Without an operator per-image fallback, reserve OpenAI's
+			// calculator estimate for this request instead of refusing it.
+			if strictGPTImageDefaultReservationAllowed(imageModel, channelModelConfigs, pricingAdaptor, meta.StartTime) {
+				imagePriceUsd = strictGPTImageDefaultReservationUSD(imageModel, rendered.Size, rendered.Quality,
+					len(imageRequest.Prompt), rendered.PartialImages, billedCount, imageUsageConfig)
+				defaultImageFallback = imagePriceUsd > 0
+			}
+		}
 		if defaultImageFallback {
 			// Size/quality tier multipliers scale a configured per-image price;
 			// the derived default already prices size and quality.
 			imageCostRatio = 1
-			lg.Debug("derived default GPT Image reservation",
-				zap.String("model", imageModel), zap.String("size", rendered.Size),
-				zap.String("quality", rendered.Quality), zap.Int("billed_n", billedCount),
-				zap.Int("partial_images", rendered.PartialImages), zap.Bool("body_reencoded", bodyReencoded),
-				zap.Float64("per_image_usd", imagePriceUsd))
 		}
+		lg.Debug("strict GPT Image reservation basis",
+			zap.String("model", imageModel), zap.String("size", rendered.Size),
+			zap.String("quality", rendered.Quality), zap.Int("billed_n", billedCount),
+			zap.Int("partial_images", rendered.PartialImages), zap.Bool("body_reencoded", bodyReencoded),
+			zap.Bool("derived_default", defaultImageFallback), zap.Float64("per_image_usd", imagePriceUsd))
 	}
 	if err := validateStrictGPTImageBilling(imageModel, imagePriceUsd, imageCostRatio, groupRatio, billedCount); err != nil {
 		return openai.ErrorWrapper(err, "image_billing_not_configured", http.StatusServiceUnavailable)
@@ -406,6 +441,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 			logContent := formatImageBillingLog(imageBillingLogParams{
 				OriginModel:     visibleModelName,
 				Model:           visibleModelName,
+				PricedModel:     imageModel,
 				Size:            imageRequest.Size,
 				Quality:         imageRequest.Quality,
 				RequestCount:    requestedCount,
@@ -582,8 +618,12 @@ func reconcileImageFailureBilling(
 
 // imageBillingLogParams captures the attributes required to build a user-facing billing log entry for image requests.
 type imageBillingLogParams struct {
-	OriginModel     string
-	Model           string
+	OriginModel string
+	Model       string
+	// PricedModel is the mapped provider model billing priced; it selects the
+	// strict GPT Image log format when Model is a client-visible alias. Empty
+	// means Model.
+	PricedModel     string
 	Size            string
 	Quality         string
 	RequestCount    int
@@ -635,7 +675,11 @@ func formatImageBillingLog(params imageBillingLogParams) string {
 	fmt.Fprintf(&builder, " total_usd=%.4f", totalUsd)
 	fmt.Fprintf(&builder, " group_rate=%.2f", params.GroupRatio)
 
-	if usesStrictGPTImageTokenBilling(params.Model) {
+	pricedModel := params.PricedModel
+	if pricedModel == "" {
+		pricedModel = params.Model
+	}
+	if usesStrictGPTImageTokenBilling(pricedModel) {
 		source := "provider_tokens"
 		switch {
 		case params.TokenQuota == 0:

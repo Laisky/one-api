@@ -9,6 +9,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { CHANNEL_TYPES_WITH_DEDICATED_BASE_URL } from '../constants';
 import {
   buildChannelSubmitPayload,
+  type BuildChannelSubmitPayloadOptions,
   CONFIG_OVERRIDES_OF_OTHER,
   isValidJSON,
   normalizeChannelType,
@@ -20,7 +21,9 @@ import {
   toInt,
   validateModelConfigs,
 } from '../helpers';
+import { effectiveOtherValue, snapshotStoredOther, type StoredOtherBinding } from '../otherOverride';
 import { createChannelSchema, type ChannelConfigForm, type ChannelForm, type ChannelFormInput, type EndpointInfo } from '../schemas';
+import { loadChannelModelCatalogs, type ChannelModelCatalog } from './channelModelCatalogs';
 import { collectChannelSaveWarnings, type ChannelPricingGap, type ChannelSaveWarnings } from './channelSaveWarnings';
 /** useChannelForm manages channel loading, validation, submission, and related UI state, returning the complete page model. */
 export const useChannelForm = () => {
@@ -36,7 +39,10 @@ export const useChannelForm = () => {
   );
   const [loading, setLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [modelsCatalog, setModelsCatalog] = useState<Record<number, string[]>>({});
+  // The complete provider catalog: model selector options and known Model Mapping targets.
+  const [modelsCatalog, setModelsCatalog] = useState<ChannelModelCatalog>({});
+  // The zero-config default suggestions used by the Fill actions (the complete catalog when unavailable).
+  const [defaultModelsCatalog, setDefaultModelsCatalog] = useState<ChannelModelCatalog>({});
   const [defaultPricing, setDefaultPricing] = useState<string>('');
   const [defaultTooling, setDefaultTooling] = useState<string>('');
   const [defaultBaseURL, setDefaultBaseURL] = useState<string>('');
@@ -47,6 +53,8 @@ export const useChannelForm = () => {
   const [loadedChannelType, setLoadedChannelType] = useState<number | null>(null);
   // The channel exactly as loaded for editing; save warnings report only what the edit introduces relative to it.
   const loadedChannelRef = useRef<ChannelForm | null>(null);
+  // The stored `other` value and typed override as loaded; the form field shows their effective value.
+  const storedOtherRef = useRef<StoredOtherBinding | null>(null);
   // State for channel type change confirmation dialog
   const [pendingTypeChange, setPendingTypeChange] = useState<{
     fromType: number;
@@ -270,12 +278,14 @@ export const useChannelForm = () => {
           }
         }
 
+        const storedOther = typeof data.other === 'string' ? data.other : '';
         const formData: ChannelForm = {
           name: data.name || '',
           type: channelType,
           key: data.key || '',
           base_url: data.base_url || '',
-          other: data.other || '',
+          // The relay prefers a non-empty typed override, so the field shows that effective value.
+          other: effectiveOtherValue(channelType, storedOther, config),
           models,
           hidden_models: parseStringArrayField(data.hidden_models),
           model_mapping: formatPrivateChannelJSONField(data.model_mapping),
@@ -302,6 +312,7 @@ export const useChannelForm = () => {
         }
 
         setLoadedChannelType(channelType);
+        storedOtherRef.current = snapshotStoredOther(channelType, storedOther, config);
         loadedChannelRef.current = formData;
         reset(formData);
         await new Promise((resolve) => setTimeout(resolve, 0));
@@ -328,23 +339,9 @@ export const useChannelForm = () => {
   }, [channelId, loadDefaultPricing]);
 
   const loadModelsCatalog = useCallback(async () => {
-    try {
-      const response = await api.get('/api/models');
-      const { success, data } = response.data;
-
-      if (success && data) {
-        const catalog: Record<number, string[]> = {};
-        Object.entries(data).forEach(([typeKey, models]) => {
-          if (!Array.isArray(models)) return;
-          const typeId = Number(typeKey);
-          if (!Number.isFinite(typeId)) return;
-          catalog[typeId] = (models as string[]).filter((model) => typeof model === 'string' && model.trim() !== '');
-        });
-        setModelsCatalog(catalog);
-      }
-    } catch (error) {
-      console.error(`Error loading models catalog: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    const catalogs = await loadChannelModelCatalogs();
+    setModelsCatalog(catalogs.full);
+    setDefaultModelsCatalog(catalogs.defaults);
   }, []);
 
   // The group catalog is loaded by ChannelGroups itself through useGroupCatalog.
@@ -399,6 +396,14 @@ export const useChannelForm = () => {
     }
   }, [normalizedChannelType, loadDefaultPricing]);
 
+  /** submitPayloadOptions returns the save-payload options for a validated draft. */
+  const submitPayloadOptions = (data: ChannelForm): BuildChannelSubmitPayloadOptions => ({
+    isEdit,
+    watchType: data.type,
+    watchConfig,
+    storedOther: isEdit ? storedOtherRef.current : null,
+  });
+
   /**
    * onSubmit intercepts a validated save so admins can review Model Mapping entries that look wrong
    * and supported models that request admission would refuse for missing channel pricing; it takes
@@ -410,10 +415,11 @@ export const useChannelForm = () => {
     setIsSubmitting(true);
     let warnings: ChannelSaveWarnings;
     try {
+      // Known mapping targets come from the complete provider catalog, never the default suggestions.
       warnings = await collectChannelSaveWarnings(data, {
         baseline: isEdit ? loadedChannelRef.current : null,
         modelsCatalog,
-        payloadOptions: { isEdit, watchType: data.type, watchConfig },
+        payloadOptions: submitPayloadOptions(data),
       });
     } finally {
       setIsSubmitting(false);
@@ -556,11 +562,7 @@ export const useChannelForm = () => {
       }
       form.clearErrors('base_url');
 
-      const payload = buildChannelSubmitPayload(data, {
-        isEdit,
-        watchType: data.type,
-        watchConfig,
-      });
+      const payload = buildChannelSubmitPayload(data, submitPayloadOptions(data));
 
       let response;
       if (isEdit && channelId) {
@@ -722,6 +724,7 @@ export const useChannelForm = () => {
     loading,
     isSubmitting,
     modelsCatalog,
+    defaultModelsCatalog,
     defaultPricing,
     defaultTooling,
     defaultBaseURL,

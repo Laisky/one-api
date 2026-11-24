@@ -1,10 +1,11 @@
 import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CHANNEL_OPTIONS } from 'constants/ChannelConstants';
 import { useTheme } from '@mui/material/styles';
 import { API } from 'utils/api';
-import { showError, showSuccess, getChannelModels } from 'utils/common';
+import { showError, showSuccess, getChannelDefaultModels } from 'utils/common';
+import { resolveOtherSave, snapshotOther, storedOtherOverride } from 'utils/channel-other';
 import ChannelDebugPanel from '../../../components/ChannelDebugPanel';
 import {
   Dialog,
@@ -220,7 +221,8 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
   const [groupOptions, setGroupOptions] = useState([]);
   const [modelOptions, setModelOptions] = useState([]);
   const [batchAdd, setBatchAdd] = useState(false);
-  const [basicModels, setBasicModels] = useState([]);
+  // otherSnapshot remembers the stored `other` value and typed override of the loaded channel.
+  const otherSnapshot = useRef(null);
   const [defaultPricing, setDefaultPricing] = useState({
     model_ratio: '',
     completion_ratio: '',
@@ -270,8 +272,8 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
   };
   const handleTypeChange = (setFieldValue, typeValue, values) => {
     initChannel(typeValue);
-    let localModels = getChannelModels(typeValue);
-    setBasicModels(localModels);
+    // The new type starts from a fresh config, so no stored override remains.
+    otherSnapshot.current = null;
 
     setFieldValue('models', []);
     setFieldValue('model_configs', '');
@@ -358,10 +360,15 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
       if (values.base_url && values.base_url.endsWith('/')) {
         values.base_url = values.base_url.slice(0, values.base_url.length - 1);
       }
-      if (values.type === 3 && values.other === '') {
+      // An untouched field resends the stored values; an edit also replaces a stored override.
+      const otherSave = resolveOtherSave(otherSnapshot.current, values.type, values.other, values.config);
+      values.other = otherSave.other;
+      // The legacy defaults apply only when no typed override supplies the value.
+      const overridden = storedOtherOverride(values.type, otherSave.config) !== '';
+      if (!overridden && values.type === 3 && values.other === '') {
         values.other = '2023-09-01-preview';
       }
-      if (values.type === 18 && values.other === '') {
+      if (!overridden && values.type === 18 && values.other === '') {
         values.other = 'v2.1';
       }
       if (values.key === '') {
@@ -374,7 +381,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
 
       let res;
       const modelsStr = values.models.map((model) => model.id).join(',');
-      const configStr = JSON.stringify(values.config);
+      const configStr = JSON.stringify(otherSave.config);
       values.group = values.groups.join(',');
 
       // Handle pricing fields - convert empty strings to null for the API
@@ -472,6 +479,10 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
         } else {
           data.config = { ...defaultConfig.input.config };
         }
+        // The field shows the value the relay uses: a stored typed override wins over `other`.
+        const { displayed, snapshot } = snapshotOther(data.type, data.other, data.config);
+        otherSnapshot.current = snapshot;
+        data.other = displayed;
         // Format pricing fields for display
         if (data.model_ratio && data.model_ratio !== '') {
           try {
@@ -525,6 +536,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
       loadChannel().then().catch(reportUIError);
     } else {
       initChannel(1);
+      otherSnapshot.current = null;
       setInitialInput({ ...defaultConfig.input, is_edit: false });
       // Load default pricing for new channels
       loadDefaultPricing(1).catch(reportUIError);
@@ -812,7 +824,8 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                   <ButtonGroup variant="outlined" aria-label="small outlined primary button group">
                     <Button
                       onClick={() => {
-                        setFieldValue('models', initialModel(basicModels));
+                        // Related models are the zero-config recommendations for the selected type.
+                        setFieldValue('models', initialModel(getChannelDefaultModels(values.type)));
                       }}
                     >
                       填入相关模型

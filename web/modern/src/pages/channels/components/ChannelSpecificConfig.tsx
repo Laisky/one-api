@@ -26,6 +26,16 @@ interface ChannelSpecificConfigProps {
 // These should not show the common base URL field
 const CHANNEL_TYPES_WITH_INTERNAL_BASE_URL = new Set<number>([3, 50, 52]);
 
+const SPARK_VERSIONS: readonly string[] = ['v1.1', 'v2.1', 'v3.1', 'v3.5'];
+
+/**
+ * sparkVersionOptions returns the Spark version choices. It takes the field's current value and
+ * appends it when it is a stored version outside the built-in list, so the effective version the
+ * relay uses is always visible instead of an empty selection.
+ */
+const sparkVersionOptions = (current: string | undefined): readonly string[] =>
+  current && !SPARK_VERSIONS.includes(current) ? [...SPARK_VERSIONS, current] : SPARK_VERSIONS;
+
 export const ChannelSpecificConfig = ({ form, normalizedChannelType, defaultBaseURL, baseURLEditable, tr }: ChannelSpecificConfigProps) => {
   const watchConfig = form.watch('config');
   const _watchType = form.watch('type');
@@ -113,14 +123,17 @@ export const ChannelSpecificConfig = ({ form, normalizedChannelType, defaultBase
                     label={tr('azure.version.label', 'API Version')}
                     help={tr(
                       'azure.version.help',
-                      'Default API version used when the request does not specify one (e.g., 2024-03-01-preview).'
+                      'API version this channel sends to Azure as the api-version query parameter (e.g., 2024-03-01-preview).'
                     )}
                   />
                   <FormControl>
                     <Input placeholder={tr('azure.version.placeholder', '2024-03-01-preview')} className={errorClass('other')} {...field} />
                   </FormControl>
                   <span className="text-xs text-muted-foreground">
-                    {tr('azure.version.note', 'Default: 2024-03-01-preview. This can be overridden by request query parameters.')}
+                    {tr(
+                      'azure.version.note',
+                      'Default: 2024-03-01-preview. Client request query parameters cannot override it; o1, o3, o4, and Responses-only models use the version they require.'
+                    )}
                   </span>
                   <FormMessage />
                 </FormItem>
@@ -468,10 +481,11 @@ export const ChannelSpecificConfig = ({ form, normalizedChannelType, defaultBase
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="v1.1">v1.1</SelectItem>
-                      <SelectItem value="v2.1">v2.1</SelectItem>
-                      <SelectItem value="v3.1">v3.1</SelectItem>
-                      <SelectItem value="v3.5">v3.5</SelectItem>
+                      {sparkVersionOptions(field.value).map((version) => (
+                        <SelectItem key={version} value={version}>
+                          {version}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />

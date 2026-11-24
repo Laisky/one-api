@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
 	"github.com/Laisky/zap"
 	"github.com/gin-gonic/gin"
@@ -50,11 +51,12 @@ type strictGPTImageRendered struct {
 // clamped count are what the provider receives. A body forwarded verbatim
 // (edits, OpenAI-compatible channel types) carries the client's values
 // instead: an omitted size or quality is the provider's own default, auto; the
-// client's unclamped n is rendered; and any requested streamed partial images
-// add output tokens. Parameters: c carries the reusable client body, req the
-// normalized request, client the pre-default client values, billedCount the
-// clamped billed count, and reencoded whether the body was re-encoded.
-// Returns: the rendered request.
+// client's own positive n is rendered, whether the gateway's copy raised it to
+// a channel min_images or clamped it to max_images; and any requested streamed
+// partial images add output tokens. Parameters: c carries the reusable client
+// body, req the normalized request, client the pre-default client values,
+// billedCount the normalized billed count, and reencoded whether the body was
+// re-encoded. Returns: the rendered request.
 func strictGPTImageRenderedRequest(c *gin.Context, req *relaymodel.ImageRequest, client strictGPTImageClientValues, billedCount int, reencoded bool) strictGPTImageRendered {
 	rendered := strictGPTImageRendered{
 		Size:    normalizeImageSizeKey(req.Size),
@@ -70,7 +72,12 @@ func strictGPTImageRenderedRequest(c *gin.Context, req *relaymodel.ImageRequest,
 	if normalizeImageQualityKey(client.Quality) == "" {
 		rendered.Quality = "auto"
 	}
-	rendered.Count = max(rendered.Count, client.N)
+	if client.N > 0 {
+		// The provider receives the client's n, not the normalized copy. A
+		// non-positive n keeps the normalized count; the provider rejects it
+		// or renders its own default of at least one image.
+		rendered.Count = client.N
+	}
 	var streaming struct {
 		PartialImages int `json:"partial_images" form:"partial_images"`
 	}
@@ -91,8 +98,9 @@ func strictGPTImageRenderedRequest(c *gin.Context, req *relaymodel.ImageRequest,
 // its most expensive case) plus any streamed partial images at the effective
 // output-token rate, and the prompt's UTF-8 byte count (an upper bound on its
 // text tokens) at the effective text-input rate, spread across the billed
-// images. Reference-image input on edits is not estimable from published
-// rules; complete receipts bill it. Parameters: name is the mapped model, size
+// images. It does not price reference-image input, which no published rule
+// bounds, so RelayImageHelper never uses it for an edit (see
+// strictGPTImageEditFallbackError). Parameters: name is the mapped model, size
 // and quality the normalized rendered values, promptBytes the prompt length in
 // bytes, partialImages the streamed partial images per image, count the billed
 // image count, and cfg the request-start pricing from
@@ -121,6 +129,19 @@ func strictGPTImageDefaultReservationUSD(name, size, quality string, promptBytes
 		return 0
 	}
 	return perImage
+}
+
+// strictGPTImageEditFallbackError explains why a strict GPT Image edit without
+// an explicit per-image reservation/fallback is refused before reservation.
+// OpenAI bills every reference image (and mask) of an edit as image input
+// tokens and publishes no formula or per-request cap that bounds them (the
+// vision patch rules explicitly exclude GPT Image), so the calculator-derived
+// default cannot cover an edit whose receipt turns out unusable. Returns: the
+// client-facing configuration error.
+func strictGPTImageEditFallbackError() error {
+	return errors.New("GPT Image 2.5/2.6 image edits require a positive image.price_per_image_usd reservation/fallback in channel model_configs: " +
+		"OpenAI bills reference images and masks as image input tokens and publishes no rule that bounds them, " +
+		"so the default derived from OpenAI's token calculator cannot cover an edit")
 }
 
 // strictGPTImageDefaultReservationAllowed reports whether a channel may use the

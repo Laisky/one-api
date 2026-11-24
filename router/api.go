@@ -51,6 +51,8 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/browser-config", controller.GetBrowserConfig)
 		apiRouter.GET("/status/channel", controller.GetChannelStatus)
 		apiRouter.GET("/models", middleware.AdminAuth(), controller.DashboardListModels)
+		// Zero-config default models per channel type, the lists new channels and resets use.
+		apiRouter.GET("/models/defaults", middleware.AdminAuth(), controller.DashboardListDefaultModels)
 		// Public endpoint: anonymous users see all supported models; logged-in users see only allowed models
 		apiRouter.GET("/models/display", middleware.OptionalUserAuth(), controller.GetModelsDisplay)
 		// Public endpoint: list enabled MCP servers and their enabled tools

@@ -16,7 +16,8 @@ of the token charge as a render fee.
 
 When the channel's `model_configs` sets no positive `image.price_per_image_usd`
 for the model, and no megapixel tariff applies, the relay derives the per-image
-amount from the request:
+amount of a **generation** from the request (edits need an explicit amount; see
+[Edits and reference images](#edits-and-reference-images)):
 
 ```text
 per_image_usd = output_tokens × output_rate / 1e6
@@ -51,15 +52,30 @@ size and quality, so it ignores them and can never be discounted by them.
 The default prices what the provider will actually render:
 
 - When the relay re-encodes the request (native OpenAI and Azure generations,
-  mapped JSON requests, converted channel types), the provider receives the
+  mapped JSON generations, converted channel types), the provider receives the
   normalized request. The hold uses its size, quality, and clamped `n`,
   including any channel `default_size` or `default_quality`.
-- When the relay forwards the client body verbatim (native OpenAI edits,
-  OpenAI-compatible channel types), the provider receives the client's values.
+- When the relay forwards the client body verbatim (edits, OpenAI-compatible
+  channel types), the provider receives the client's values. An edit is never
+  re-encoded from the typed request, which cannot carry reference images or the
+  mask: when Model Mapping renames the model, or the channel is Azure, only the
+  `model` field is rewritten (Azure also omits `safety_identifier` and
+  `complexity`), and every other JSON field or multipart part, including each
+  reference image and the mask, is forwarded as sent, under the client's own
+  multipart boundary.
   An omitted size or quality is the provider's own default, `auto`, whatever
-  the channel defaults say. The client's unclamped `n` is held, and each
-  requested streamed partial image (`partial_images`, at most 3) adds the
-  documented 100 output tokens per image.
+  the channel defaults say. Each requested streamed partial image
+  (`partial_images`, at most 3) adds the documented 100 output tokens per
+  image.
+
+The image count follows the same rule for both reservation sources, the derived
+default and an explicit `price_per_image_usd`: the hold, and the charge when the
+receipt is unusable, cover the images the provider is asked to render. A
+re-encoded body sends the normalized `n` (raised to the channel's `min_images`,
+clamped to `max_images`). A verbatim body sends the client's own positive `n`,
+so a `min_images` that only raised the gateway's copy is neither held nor
+charged, and an `n` above `max_images` that reaches the provider unclamped is
+held in full.
 
 ### Calculator formula
 
@@ -114,10 +130,36 @@ A request with `n` = 10, `auto` size, and `auto` quality therefore reserves
 about $7.12 before the prompt term. A balance that cannot cover the hold is
 refused at admission under the existing quota policy.
 
-The default does not cover reference-image input tokens on edits, because
-OpenAI publishes no rule for estimating them. A complete receipt still bills
-them. The hold is an advance estimate, not a provider cost ceiling. If actual
-usage exceeds it, the difference is debited under the existing quota policy.
+The hold is an advance estimate, not a provider cost ceiling. If a complete
+receipt exceeds it, the difference is debited under the existing quota policy.
+
+### Edits and reference images
+
+OpenAI bills every reference image of an edit, and its mask, as image input
+tokens. It publishes no formula and no per-request cap for them: the vision
+patch/tile rules explicitly exclude GPT Image, the cost calculator covers output
+only, and the model pages list no context or input-token limit (checked
+2026-11-23). The derived default therefore cannot bound an edit's provider cost,
+and a successful edit whose receipt is unusable would leave that input uncovered.
+
+An edit (`/v1/images/edits`, multipart or JSON, verbatim or re-encoded) of these
+models is therefore admitted only with an explicit reservation/fallback: a
+positive `image.price_per_image_usd`, or an opt-in megapixel tariff, which also
+prices every uploaded reference. Without one, the relay answers
+`503 image_billing_not_configured` before reservation and before contacting the
+provider, with this text:
+
+> GPT Image 2.5/2.6 image edits require a positive image.price_per_image_usd
+> reservation/fallback in channel model_configs: OpenAI bills reference images
+> and masks as image input tokens and publishes no rule that bounds them, so the
+> default derived from OpenAI's token calculator cannot cover an edit
+
+This matches the edit contract before derived defaults existed, so no channel
+that served edits loses them. Generations keep the derived default. For edits,
+choose a `price_per_image_usd` that covers the reference images your clients
+send: it is what a receipt without usable usage is charged. A complete receipt
+still settles its exact token price, refunding or debiting the difference, and
+an incomplete one is charged at least its own ceiling.
 
 ## Explicit per-image price (optional override)
 
@@ -169,6 +211,9 @@ The `image_price_per_image_usd` requirement is reported only when a Supported
 Model (after Model Mapping) has neither a positive per-image price nor an
 image-output token price. The save dialog names the model and the fields to set.
 The warning never blocks saving: "Save Anyway" keeps the channel as entered.
+The check covers generations, the endpoint the derived default serves. It does
+not warn that edits additionally need `image.price_per_image_usd`, since a
+channel used only for generations is complete without it.
 
 ## Settlement and channel pricing
 
@@ -229,8 +274,16 @@ buckets as follows:
   rates to give the image-input buckets. The catalog default is 8/5.
 
 This schema has no independent cached-image price field. Missing optional
-overrides inherit the provider defaults. Negative cached-input pricing keeps the
-existing free-cache convention. The tariff tables and settlement formulas for
+overrides inherit the provider's catalog price where the host has one: on native
+OpenAI, an entry without `cached_input_ratio` keeps OpenAI's cached-text price
+($1.25/M), even when its `ratio` changes the uncached text price, and an entry
+without `image.prompt_ratio` keeps 8/5. This differs from the general rule in
+`docs/arch/billing.md`, where an entry without `cached_input_ratio` bills cached
+input at the entry's own input price. On an operator-priced host (Azure and the
+AIProxy library for the GPT Image 2.6 IDs) there is no catalog price to inherit,
+so cached text is billed at the entry's input price unless the entry sets
+`cached_input_ratio`. Negative cached-input pricing keeps the existing
+free-cache convention. The tariff tables and settlement formulas for
 older image models are unchanged.
 
 Existing upstream-error and refund handling is preserved. This billing path does
@@ -244,6 +297,19 @@ not add streaming image generation or the Responses image-generation tool.
 - `image_default_reservation_relay_test.go` drives the derived default through
   the relay: `auto` and explicit holds, multi-image requests, channel
   token-price overrides, and the missing-usage settlement label.
+- `image_reference_input_relay_test.go` covers edits: unpriced multipart and
+  JSON edits (multiple large references and a mask, native and verbatim
+  compatible, token tariff only) are refused with no provider call and no
+  ledger movement, and priced edits keep the hold for a missing receipt, charge
+  an incomplete receipt at least its ceiling, refund or debit a complete one,
+  and refuse an unaffordable hold before the provider.
+- `image_edit_wire_relay_test.go` checks the bytes the provider receives for
+  Azure and model-mapped edits, multipart and JSON: every reference image and
+  the mask arrive intact, the model is the mapped one, and Azure omits its
+  undocumented controls.
+- `image_rendered_count_relay_test.go` pins the held image count for
+  re-encoded and verbatim bodies (`min_images`, unclamped `n`) and the native
+  cached-text price of a channel entry without `cached_input_ratio`.
 - `image25_review_test.go` covers wire JSON conversion, asymmetric caches,
   totals-only and partial input, ambiguous usage, and reservation replacement.
 - `image25_relay_review_test.go` uses a local HTTP upstream and SQLite to verify
