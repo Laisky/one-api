@@ -4,204 +4,21 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { API, isMobile, showError, showInfo, showSuccess, verifyJSON } from '../../helpers';
 import { CHANNEL_OPTIONS } from '../../constants';
 import Title from "@douyinfe/semi-ui/lib/es/typography/title";
-import { SideSheet, Space, Spin, Button, Input, Typography, Select, TextArea, Checkbox, Banner, Tooltip } from "@douyinfe/semi-ui";
-import { IconHelpCircle } from "@douyinfe/semi-icons";
+import { SideSheet, Space, Spin, Button, Input, Typography, Select, TextArea, Checkbox } from "@douyinfe/semi-ui";
 import ChannelDebugPanel from '../../components/ChannelDebugPanel';
 import { omitUnownedChannelFields } from '../../../../legacy/channel-update-payload.mjs';
 import { resolveOtherSave, snapshotOther, storedOtherOverride } from '../../helpers/channel-other';
+import { type2secretPrompt, validateModelConfigs } from './editChannelConfig';
+import LabelWithTooltip from './LabelWithTooltip';
+import ChannelProviderFields from './ChannelProviderFields';
+import ChannelAdvancedFields from './ChannelAdvancedFields';
 
-const MODEL_MAPPING_EXAMPLE = {
-    'gpt-3.5-turbo-0301': 'gpt-3.5-turbo',
-    'gpt-4-0314': 'gpt-4',
-    'gpt-4-32k-0314': 'gpt-4-32k'
-};
-
-const MODEL_CONFIGS_EXAMPLE = {
-    'gpt-3.5-turbo-0301': {
-        'ratio': 0.0015,
-        'completion_ratio': 2.0,
-        'max_tokens': 65536,
-    },
-    'gpt-4': {
-        'ratio': 0.03,
-        'completion_ratio': 2.0,
-        'max_tokens': 128000,
-    },
-    'deepseek-v4-flash': {
-        'ratio': 0.00000014,
-        'completion_ratio': 2.0,
-        'cached_input_ratio': 0.0000000028,
-    }
-};
-
-const isClockHHMM = (value) => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
-
-// MODEL_CONFIG_RECOGNIZED_KEYS lists the model_configs entry keys this editor accepts: the JSON keys
-// of the backend model.ModelConfigLocal (model/channel_pricing_config.go) plus this editor's
-// tool_whitelist/tool_pricing. Every field is optional server-side, so an entry such as
-// {"image":{"price_per_image_usd":0.2}}, or the {} the legacy image-price migration writes, is valid.
-const MODEL_CONFIG_RECOGNIZED_KEYS = new Set([
-    'per_call', 'per_page', 'ratio', 'completion_ratio', 'cached_input_ratio', 'cache_write_5m_ratio',
-    'cache_write_1h_ratio', 'tiers', 'max_tokens', 'context_length', 'video', 'audio', 'image', 'embedding',
-    'time_windows', 'tool_whitelist', 'tool_pricing',
-]);
-
-// Enhanced validation for model configs
-const validateModelConfigs = (configStr) => {
-    if (!configStr || configStr.trim() === '') {
-        return { valid: true };
-    }
-
-    try {
-        const configs = JSON.parse(configStr);
-
-        if (typeof configs !== 'object' || configs === null || Array.isArray(configs)) {
-            return { valid: false, error: '模型配置必须是JSON对象' };
-        }
-
-        for (const [modelName, config] of Object.entries(configs)) {
-            if (!modelName || modelName.trim() === '') {
-                return { valid: false, error: '模型名称不能为空' };
-            }
-
-            if (typeof config !== 'object' || config === null || Array.isArray(config)) {
-                return { valid: false, error: `模型"${modelName}"的配置必须是对象` };
-            }
-
-            // Validate ratio
-            if (config.ratio !== undefined) {
-                if (typeof config.ratio !== 'number' || config.ratio < 0) {
-                    return { valid: false, error: `模型"${modelName}"的ratio无效：必须是非负数` };
-                }
-            }
-
-            // Validate completion_ratio
-            if (config.completion_ratio !== undefined) {
-                if (typeof config.completion_ratio !== 'number' || config.completion_ratio < 0) {
-                    return { valid: false, error: `模型"${modelName}"的completion_ratio无效：必须是非负数` };
-                }
-            }
-
-            // Validate max_tokens
-            if (config.max_tokens !== undefined) {
-                if (!Number.isInteger(config.max_tokens) || config.max_tokens < 0) {
-                    return { valid: false, error: `模型"${modelName}"的max_tokens无效：必须是非负整数` };
-                }
-            }
-
-            if (config.time_windows !== undefined) {
-                if (!Array.isArray(config.time_windows)) {
-                    return { valid: false, error: `Model "${modelName}" time_windows must be an array` };
-                }
-                for (const [index, window] of config.time_windows.entries()) {
-                    if (typeof window !== 'object' || window === null || Array.isArray(window)) {
-                        return { valid: false, error: `Model "${modelName}" time window ${index + 1} must be an object` };
-                    }
-                    if (!Array.isArray(window.ranges) || window.ranges.length === 0) {
-                        return { valid: false, error: `Model "${modelName}" time window ${index + 1} ranges must be a non-empty array` };
-                    }
-                    for (const range of window.ranges) {
-                        if (typeof range !== 'object' || range === null || !isClockHHMM(range.start) || !isClockHHMM(range.end)) {
-                            return { valid: false, error: `Model "${modelName}" time window ${index + 1} ranges must use HH:MM strings` };
-                        }
-                    }
-                    if (typeof window.overlay !== 'object' || window.overlay === null || Array.isArray(window.overlay)) {
-                        return { valid: false, error: `Model "${modelName}" time window ${index + 1} overlay must be an object` };
-                    }
-                }
-            }
-
-            if (config.tool_whitelist !== undefined) {
-                if (!Array.isArray(config.tool_whitelist)) {
-                    return { valid: false, error: `模型"${modelName}"的tool_whitelist必须是字符串数组` };
-                }
-                for (const entry of config.tool_whitelist) {
-                    if (typeof entry !== 'string' || entry.trim() === '') {
-                        return { valid: false, error: `模型"${modelName}"的tool_whitelist包含无效条目` };
-                    }
-                }
-            }
-
-            if (config.tool_pricing !== undefined) {
-                if (typeof config.tool_pricing !== 'object' || config.tool_pricing === null || Array.isArray(config.tool_pricing)) {
-                    return { valid: false, error: `模型"${modelName}"的tool_pricing必须是对象` };
-                }
-                const entries = Object.entries(config.tool_pricing);
-                if (entries.length === 0) {
-                    return { valid: false, error: `模型"${modelName}"的tool_pricing不能为空` };
-                }
-                for (const [toolName, pricing] of entries) {
-                    if (!toolName || toolName.trim() === '') {
-                        return { valid: false, error: `模型"${modelName}"的tool_pricing存在空的工具名称` };
-                    }
-                    if (typeof pricing !== 'object' || pricing === null || Array.isArray(pricing)) {
-                        return { valid: false, error: `模型"${modelName}"的工具"${toolName}"的pricing必须是对象` };
-                    }
-                    const { usd_per_call, quota_per_call } = pricing;
-                    if (usd_per_call !== undefined && (typeof usd_per_call !== 'number' || usd_per_call < 0)) {
-                        return { valid: false, error: `模型"${modelName}"的工具"${toolName}"的usd_per_call必须是非负数` };
-                    }
-                    if (quota_per_call !== undefined && (typeof quota_per_call !== 'number' || quota_per_call < 0)) {
-                        return { valid: false, error: `模型"${modelName}"的工具"${toolName}"的quota_per_call必须是非负数` };
-                    }
-                    if (usd_per_call === undefined && quota_per_call === undefined) {
-                        return { valid: false, error: `模型"${modelName}"的工具"${toolName}"必须设置usd_per_call或quota_per_call` };
-                    }
-                }
-            }
-
-            // Accept an empty entry or one with at least one recognized key; reject only a non-empty
-            // entry whose keys are all unrecognized, which is almost always a typo the backend ignores.
-            const entryKeys = Object.keys(config);
-            if (entryKeys.length > 0 && !entryKeys.some((key) => MODEL_CONFIG_RECOGNIZED_KEYS.has(key))) {
-                return { valid: false, error: `Model "${modelName}" has no recognized configuration keys (unknown: ${entryKeys.join(', ')})` };
-            }
-        }
-
-        return { valid: true };
-    } catch (error) {
-        return { valid: false, error: `JSON格式无效：${error.message}` };
-    }
-};
-
-function type2secretPrompt(type) {
-    // inputs.type === 15 ? '按照如下格式输入：APIKey|SecretKey' : (inputs.type === 18 ? '按照如下格式输入：APPID|APISecret|APIKey' : '请输入渠道对应的鉴权密钥')
-    switch (type) {
-        case 15:
-            return '按照如下格式输入：APIKey|SecretKey';
-        case 18:
-            return '按照如下格式输入：APPID|APISecret|APIKey';
-        case 22:
-            return '按照如下格式输入：APIKey-AppId，例如：fastgpt-0sp2gtvfdgyi4k30jwlgwf1i-64f335d84283f05518e9e041';
-        case 23:
-            return '按照如下格式输入：AppId|SecretId|SecretKey';
-        default:
-            return '请输入渠道对应的鉴权密钥';
-    }
-}
-
-// Helper component for labels with tooltips
-const LabelWithTooltip = ({ label, helpText, children, ...props }) => (
-    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '8px' }}>
-        <Typography.Text strong {...props}>
-            {label}
-        </Typography.Text>
-        {helpText && (
-            <Tooltip content={helpText} position="top">
-                <IconHelpCircle
-                    style={{
-                        marginLeft: '6px',
-                        color: '#999',
-                        cursor: 'help',
-                        fontSize: '14px'
-                    }}
-                />
-            </Tooltip>
-        )}
-        {children}
-    </div>
-);
-
+/**
+ * EditChannel renders the Air side sheet that creates a channel or edits a stored one.
+ *
+ * @param {object} props The component props: editingChannel (the channel being edited, empty for a new one), visible, handleClose and refresh.
+ * @returns {JSX.Element} The channel editor side sheet.
+ */
 const EditChannel = (props) => {
     const navigate = useNavigate();
     const channelId = props.editingChannel.uuid || props.editingChannel.id;
@@ -666,82 +483,12 @@ const EditChannel = (props) => {
                             onChange={value => handleInputChange('type', value)}
                             style={{ width: '50%' }}
                         />
-                        {
-                            inputs.type === 3 && (
-                                <>
-                                    <div style={{ marginTop: 10 }}>
-                                        <Banner type={"warning"} description={
-                                            <>
-                                                注意，<strong>模型部署名称必须和模型名称保持一致</strong>，因为 One API 会把请求体中的
-                                                model
-                                                参数替换为你的部署名称（模型名称中的点会被剔除），<a target='_blank'
-                                                    href='https://github.com/Laisky/one-api/issues/133?notification_referrer_id=NT_kwDOAmJSYrM2NjIwMzI3NDgyOjM5OTk4MDUw#issuecomment-1571602271'>图片演示</a>。
-                                            </>
-                                        }>
-                                        </Banner>
-                                    </div>
-                                    <div style={{ marginTop: 10 }}>
-                                        <Typography.Text strong>AZURE_OPENAI_ENDPOINT：</Typography.Text>
-                                    </div>
-                                    <Input
-                                        label='AZURE_OPENAI_ENDPOINT'
-                                        name='azure_base_url'
-                                        placeholder={'请输入 AZURE_OPENAI_ENDPOINT，例如：https://docs-test-001.openai.azure.com'}
-                                        onChange={value => {
-                                            handleInputChange('base_url', value)
-                                        }}
-                                        value={inputs.base_url}
-                                        autoComplete='new-password'
-                                    />
-                                    <div style={{ marginTop: 10 }}>
-                                        <Typography.Text strong>默认 API 版本：</Typography.Text>
-                                    </div>
-                                    <Input
-                                        label='默认 API 版本'
-                                        name='azure_other'
-                                        placeholder={'请输入默认 API 版本，例如：2024-03-01-preview，该配置可以被实际的请求查询参数所覆盖'}
-                                        onChange={value => {
-                                            handleInputChange('other', value)
-                                        }}
-                                        value={inputs.other}
-                                        autoComplete='new-password'
-                                    />
-                                </>
-                            )
-                        }
-                        {
-                            inputs.type === 50 && (
-                                <>
-                                    <div style={{ marginTop: 10 }}>
-                                        <Typography.Text strong>Base URL：</Typography.Text>
-                                    </div>
-                                    <Input
-                                        name='base_url'
-                                        placeholder={'请输入 OpenAI 兼容渠道的 Base URL，例如：https://oneapi.laisky.com/v1'}
-                                        onChange={value => {
-                                            handleInputChange('base_url', value)
-                                        }}
-                                        value={inputs.base_url}
-                                        autoComplete='new-password'
-                                    />
-                                    <div style={{ marginTop: 10 }}>
-                                        <Typography.Text strong>上游 API 格式：</Typography.Text>
-                                    </div>
-                                    <Select
-                                        placeholder={'请选择上游 API 格式'}
-                                        optionList={[
-                                            { label: 'ChatCompletion（默认）', value: 'chat_completion' },
-                                            { label: 'Response', value: 'response' },
-                                        ]}
-                                        value={config.api_format}
-                                        onChange={value => handleConfigChange('api_format', value)}
-                                    />
-                                    <Typography.Text type='tertiary' style={{ fontSize: 12 }}>
-                                        ChatCompletion 适用于传统的 OpenAI 兼容接口；当上游仅支持 Response API 时请选择 Response。
-                                    </Typography.Text>
-                                </>
-                            )
-                        }
+                        <ChannelProviderFields
+                            inputs={inputs}
+                            config={config}
+                            handleInputChange={handleInputChange}
+                            handleConfigChange={handleConfigChange}
+                        />
                         <div style={{ marginTop: 10 }}>
                             <Typography.Text strong>名称：</Typography.Text>
                         </div>
@@ -849,163 +596,13 @@ const EditChannel = (props) => {
                                 }}
                             />
                         </div>
-                        <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <LabelWithTooltip
-                                label="模型重定向"
-                                helpText="将传入的模型请求重定向到不同的模型。例如，将'gpt-4-0314'映射到'gpt-4'以处理已弃用的模型名称。JSON格式：{&quot;请求模型&quot;: &quot;实际模型&quot;}"
-                            />
-                            <div>
-                                <Button
-                                    theme="borderless"
-                                    size="small"
-                                    onClick={() => {
-                                        const formatted = formatJSON(inputs.model_mapping);
-                                        handleInputChange('model_mapping', formatted);
-                                    }}
-                                    disabled={!inputs.model_mapping || inputs.model_mapping.trim() === ''}
-                                >
-                                    格式化JSON
-                                </Button>
-                            </div>
-                        </div>
-                        <TextArea
-                            placeholder={`此项可选，用于修改请求体中的模型名称，为一个 JSON 字符串，键为请求中模型名称，值为要替换的模型名称，例如：\n${JSON.stringify(MODEL_MAPPING_EXAMPLE, null, 2)}`}
-                            name='model_mapping'
-                            onChange={value => {
-                                handleInputChange('model_mapping', value)
-                            }}
-                            autosize
-                            value={inputs.model_mapping}
-                            autoComplete='new-password'
-                            style={{
-                                fontFamily: 'JetBrains Mono, Consolas, Monaco, "Courier New", monospace',
-                                fontSize: '13px',
-                                lineHeight: '1.4',
-                                backgroundColor: '#f8f9fa',
-                                border: `1px solid ${isValidJSON(inputs.model_mapping) ? 'var(--semi-color-border)' : 'var(--semi-color-danger)'}`,
-                            }}
+                        <ChannelAdvancedFields
+                            inputs={inputs}
+                            defaultPricing={defaultPricing}
+                            handleInputChange={handleInputChange}
+                            formatJSON={formatJSON}
+                            isValidJSON={isValidJSON}
                         />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '5px' }}>
-                            <Typography.Text style={{
-                                color: 'rgba(var(--semi-blue-5), 1)',
-                                fontSize: '12px'
-                            }}>
-                                此项可选，用于修改请求体中的模型名称。
-                            </Typography.Text>
-                            {inputs.model_mapping && inputs.model_mapping.trim() !== '' && (
-                                <Typography.Text style={{
-                                    color: isValidJSON(inputs.model_mapping) ? 'var(--semi-color-success)' : 'var(--semi-color-danger)',
-                                    fontWeight: 'bold',
-                                    fontSize: '11px'
-                                }}>
-                                    {isValidJSON(inputs.model_mapping) ? '✓ 有效JSON' : '✗ 无效JSON'}
-                                </Typography.Text>
-                            )}
-                        </div>
-                        <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <LabelWithTooltip
-                                label="模型配置"
-                                helpText="为每个模型配置定价和限制。'ratio'设置输入token成本，'completion_ratio'设置输出token成本倍数，'max_tokens'设置请求限制。覆盖默认定价。"
-                            />
-                            <div>
-                                <Button
-                                    theme="borderless"
-                                    size="small"
-                                    onClick={() => {
-                                        const formatted = formatJSON(defaultPricing.model_configs);
-                                        handleInputChange('model_configs', formatted);
-                                    }}
-                                    style={{ marginRight: 8 }}
-                                >
-                                    加载默认值
-                                </Button>
-                                <Button
-                                    theme="borderless"
-                                    size="small"
-                                    onClick={() => {
-                                        const formatted = formatJSON(inputs.model_configs);
-                                        handleInputChange('model_configs', formatted);
-                                    }}
-                                    disabled={!inputs.model_configs || inputs.model_configs.trim() === ''}
-                                >
-                                    格式化JSON
-                                </Button>
-                            </div>
-                        </div>
-                        <TextArea
-                            placeholder={`此项可选，统一的模型配置包括定价和属性。JSON格式，键为模型名称，值包含ratio、completion_ratio和max_tokens字段，例如：\n${JSON.stringify(MODEL_CONFIGS_EXAMPLE, null, 2)}`}
-                            name='model_configs'
-                            onChange={value => {
-                                handleInputChange('model_configs', value)
-                            }}
-
-                            autosize
-                            minRows={8}
-                            value={inputs.model_configs}
-                            autoComplete='new-password'
-                            style={{
-                                fontFamily: 'JetBrains Mono, Consolas, Monaco, "Courier New", monospace',
-                                fontSize: '13px',
-                                lineHeight: '1.4',
-                                backgroundColor: '#f8f9fa',
-                                border: `1px solid ${isValidJSON(inputs.model_configs) ? 'var(--semi-color-border)' : 'var(--semi-color-danger)'}`,
-                            }}
-                        />
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '5px' }}>
-                            <Typography.Text style={{
-                                color: 'rgba(var(--semi-blue-5), 1)',
-                                fontSize: '12px'
-                            }}>
-                                此项可选，统一的模型配置包括定价和属性。
-                            </Typography.Text>
-                            {inputs.model_configs && inputs.model_configs.trim() !== '' && (
-                                <Typography.Text style={{
-                                    color: isValidJSON(inputs.model_configs) ? 'var(--semi-color-success)' : 'var(--semi-color-danger)',
-                                    fontWeight: 'bold',
-                                    fontSize: '11px'
-                                }}>
-                                    {isValidJSON(inputs.model_configs) ? '✓ 有效JSON' : '✗ 无效JSON'}
-                                </Typography.Text>
-                            )}
-                        </div>
-                        <Typography.Text style={{
-                            color: 'rgba(var(--semi-blue-5), 1)',
-                            userSelect: 'none',
-                            cursor: 'pointer'
-                        }} onClick={
-                            () => {
-                                handleInputChange('model_configs', JSON.stringify(MODEL_CONFIGS_EXAMPLE, null, 2))
-                            }
-                        }>
-                            填入模板
-                        </Typography.Text>
-                        <div style={{ marginTop: 10 }}>
-                            <LabelWithTooltip
-                                label="系统提示词"
-                                helpText="为通过此渠道的所有请求强制设置特定的系统提示词。适用于创建专门的AI助手或强制执行特定的行为模式。"
-                            />
-                        </div>
-                        <TextArea
-                            placeholder={`此项可选，用于强制设置给定的系统提示词，请配合自定义模型 & 模型重定向使用，首先创建一个唯一的自定义模型名称并在上面填入，之后将该自定义模型重定向映射到该渠道一个原生支持的模型`}
-                            name='system_prompt'
-                            onChange={value => {
-                                handleInputChange('system_prompt', value)
-                            }}
-                            autosize
-                            value={inputs.system_prompt}
-                            autoComplete='new-password'
-                        />
-                        <Typography.Text style={{
-                            color: 'rgba(var(--semi-blue-5), 1)',
-                            userSelect: 'none',
-                            cursor: 'pointer'
-                        }} onClick={
-                            () => {
-                                handleInputChange('model_mapping', JSON.stringify(MODEL_MAPPING_EXAMPLE, null, 2))
-                            }
-                        }>
-                            填入模板
-                        </Typography.Text>
                         <div style={{ marginTop: 10 }}>
                             <Typography.Text strong>密钥：</Typography.Text>
                         </div>

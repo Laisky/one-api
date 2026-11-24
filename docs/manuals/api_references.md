@@ -5043,7 +5043,7 @@ curl -s "$BASE_URL/api/cost/request/2026060812000042-aBcD"
 
 ---
 
-**Source files used (repository paths):** `router/api.go`, `controller/user_self.go` (GetSelf, UpdateSelf, DeleteSelf, GenerateAccessToken, GetAffCode, TopUp), `controller/user_dashboard.go` (GetUserDashboard, GetDashboardUsers), `controller/user_totp.go` (SetupTotp, ConfirmTotp, DisableTotp, GetTotpStatus), `controller/model.go` (GetUserAvailableModels), `controller/passkey.go`, `controller/log.go` (GetUserLogs, SearchUserLogs, GetLogsSelfStat), `controller/tracing.go`, `controller/token.go` (GetRequestCost), `common/helper/helper.go` (RespondError), `model/user.go`, `model/user_metadata.go`, `model/log.go`, `model/trace.go`, `model/cost.go`, `common/random/main.go`, `common/helper/time.go`.
+**Source files used (repository paths):** `router/api.go`, `controller/user_self.go` (GetSelf, UpdateSelf, DeleteSelf, GenerateAccessToken, GetAffCode, TopUp), `controller/user_dashboard.go` (GetUserDashboard, GetDashboardUsers), `controller/user_totp.go` (SetupTotp, ConfirmTotp, DisableTotp, GetTotpStatus), `controller/model_available.go` (GetUserAvailableModels), `controller/passkey.go`, `controller/log.go` (GetUserLogs, SearchUserLogs, GetLogsSelfStat), `controller/tracing.go`, `controller/token.go` (GetRequestCost), `common/helper/helper.go` (RespondError), `model/user.go`, `model/user_metadata.go`, `model/log.go`, `model/trace.go`, `model/cost.go`, `common/random/main.go`, `common/helper/time.go`.
 
 
 ## API Key (Token) Management
