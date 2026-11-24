@@ -201,11 +201,13 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio: nativeRate(0.03),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.3),
+				CachedInputRatio:    nativeRate(0.06),
 				CompletionRatio:     10,
 				InputTokenThreshold: 32001,
 			},
 				{
 					Ratio:               nativeRate(0.6),
+					CachedInputRatio:    nativeRate(0.12),
 					CompletionRatio:     10,
 					InputTokenThreshold: 128001,
 				},
@@ -257,11 +259,13 @@ func qwenVisionModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio: nativeRate(0.2),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(1.5),
+				CachedInputRatio:    nativeRate(0.3),
 				CompletionRatio:     10,
 				InputTokenThreshold: 32001,
 			},
 				{
 					Ratio:               nativeRate(3),
+					CachedInputRatio:    nativeRate(0.6),
 					CompletionRatio:     10,
 					InputTokenThreshold: 128001,
 				},
