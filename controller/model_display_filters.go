@@ -1,9 +1,11 @@
 package controller
 
 import (
+	"math"
 	"strconv"
 	"strings"
 
+	"github.com/Laisky/errors/v2"
 	"github.com/gin-gonic/gin"
 )
 
@@ -92,6 +94,9 @@ func parseCSVQuery(c *gin.Context, key string) []string {
 	return out
 }
 
+// parseIntCSV returns the integer tokens of a comma-separated or repeated
+// query parameter, skipping tokens that are not integers. Parameters: c is the
+// request and key the parameter name. Returns: the parsed integers.
 func parseIntCSV(c *gin.Context, key string) []int {
 	raw := parseCSVQuery(c, key)
 	out := make([]int, 0, len(raw))
@@ -103,23 +108,36 @@ func parseIntCSV(c *gin.Context, key string) []int {
 	return out
 }
 
+// parseBoolQuery reports whether a query parameter is set to a truthy value
+// (1, true, yes, on; case-insensitive). Parameters: c is the request and key
+// the parameter name. Returns: true for a truthy value.
 func parseBoolQuery(c *gin.Context, key string) bool {
 	v := strings.ToLower(strings.TrimSpace(c.Query(key)))
 	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
 
+// parseInt32Query parses a non-negative int32 query parameter. A missing,
+// malformed, or negative value is 0 (no filter); a value beyond int32 is
+// clamped to math.MaxInt32 instead of wrapping around to a small number.
+// Parameters: c is the request and key the parameter name. Returns: the value.
 func parseInt32Query(c *gin.Context, key string) int32 {
 	v := strings.TrimSpace(c.Query(key))
 	if v == "" {
 		return 0
 	}
-	n, err := strconv.Atoi(v)
+	n, err := strconv.ParseInt(v, 10, 32)
+	if errors.Is(err, strconv.ErrRange) && n > 0 {
+		return math.MaxInt32
+	}
 	if err != nil || n < 0 {
 		return 0
 	}
 	return int32(n)
 }
 
+// parseFloatQuery parses a non-negative float query parameter; a missing,
+// malformed, or negative value is 0 (no filter). Parameters: c is the request
+// and key the parameter name. Returns: the value.
 func parseFloatQuery(c *gin.Context, key string) float64 {
 	v := strings.TrimSpace(c.Query(key))
 	if v == "" {
