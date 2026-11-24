@@ -46,6 +46,9 @@ type strictImageRelayCase struct {
 	usage string
 	// balance is the user's and the token's starting quota.
 	balance int64
+	// respond, when set, writes the provider's whole 2xx answer instead of
+	// the default one-image JSON receipt carrying usage.
+	respond func(w http.ResponseWriter)
 }
 
 // strictImageRelayResult is what the provider, the client, and the ledger
@@ -69,6 +72,11 @@ type strictImageRelayResult struct {
 	cost *model.UserRequestCost
 	// consume is the settled consume log, nil when none was recorded.
 	consume *model.Log
+	// clientStatus, clientContentType, and clientBody are what the client
+	// received from the gateway.
+	clientStatus      int
+	clientContentType string
+	clientBody        []byte
 }
 
 // runStrictImageRelay drives tc through RelayImageHelper with the real channel
@@ -117,6 +125,10 @@ func runStrictImageRelay(t *testing.T, tc strictImageRelayCase) strictImageRelay
 		}
 		userAt.Store(user.Quota)
 		tokenAt.Store(token.RemainQuota)
+		if tc.respond != nil {
+			tc.respond(w)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		if _, err := fmt.Fprintf(w, `{"created":1,"data":[{"b64_json":"AQ=="}],"usage":%s}`, tc.usage); err != nil {
 			fixtureErr.Store(true)
@@ -159,6 +171,9 @@ func runStrictImageRelay(t *testing.T, tc strictImageRelayCase) strictImageRelay
 	result := strictImageRelayResult{err: RelayImageHelper(c, mode)}
 	require.False(t, fixtureErr.Load(), "the fake provider must observe the ledger and answer")
 	result.calls = calls.Load()
+	result.clientStatus = recorder.Code
+	result.clientContentType = recorder.Header().Get("Content-Type")
+	result.clientBody = recorder.Body.Bytes()
 	result.userAtUpstream, result.tokenAtUpstream = userAt.Load(), tokenAt.Load()
 	mu.Lock()
 	result.sentBody, result.sentContentType, result.sentURL = sent, sentContentType, sentURL

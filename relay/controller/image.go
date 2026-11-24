@@ -287,7 +287,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	imageUsageConfig := resolveStrictGPTImageUsageConfig(imageModel, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)
 	defaultImageFallback := false
 	if megapixelCharge == nil && usesStrictGPTImageTokenBilling(imageModel) {
-		rendered := strictGPTImageRenderedRequest(c, imageRequest, strictGPTImageClientValues{
+		rendered := strictGPTImageRenderedRequest(imageRequest, strictGPTImageClientValues{
 			Size: clientImageSize, Quality: clientImageQuality, N: clientImageN,
 		}, billedCount, bodyReencoded)
 		// Hold, and charge without a usable receipt, the images the provider
@@ -521,6 +521,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 
 	// do response
 	usage, respErr := adaptor.DoResponse(c, resp, meta)
+	usage = annotateImageStreamUsage(c, usage, billedCount, requestedPartialImages(imageRequest))
 	if respErr != nil {
 		// If upstream already responded and usage is available but the client canceled (write failed),
 		// compute usedQuota here so the logging goroutine can record requestId and cost.
@@ -688,7 +689,8 @@ func formatImageBillingLog(params imageBillingLogParams) string {
 				source = "default_fallback"
 			}
 		case params.EstimateReason == strictImageModalityUpperBoundReason,
-			params.EstimateReason == strictImageIncompleteReceiptReason:
+			params.EstimateReason == strictImageIncompleteReceiptReason,
+			params.EstimateReason == imageStreamReceiptsSummedReason:
 			source = "provider_tokens_upper_bound"
 		}
 		fmt.Fprintf(&builder, " billing_source=%s reserved_usd=%.4f fallback_unit_usd=%.4f",

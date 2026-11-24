@@ -285,16 +285,21 @@ func finalizeImageQuota(baseQuota int64, perImageBilling bool, imageModel string
 	summary.TokenQuotaFloat = tokenQuotaFloat
 	summary.TokenQuota = tokenQuota
 
+	streamIncomplete := usage.BillingEstimateReason == imageStreamReceiptIncompleteReason
 	if strict {
 		// A complete receipt (input and output counted, buckets consistent)
 		// settles its bucket price, flagged when the modality/cache split was
-		// only bounded. Anything less settles the larger of the operator
-		// fallback and the receipt's own ceiling, so an incomplete or
-		// inconsistent receipt never charges less than the tokens it reports.
-		if usage.CompletionTokens > 0 && tokenQuota > 0 && strictGPTImageInputTokens(usage) > 0 {
+		// only bounded or several streamed receipts were summed. Anything less,
+		// including an interrupted stream whose receipts may omit paid work,
+		// settles the larger of the operator fallback and the receipt's own
+		// ceiling, so it never charges less than the tokens it reports.
+		if !streamIncomplete && usage.CompletionTokens > 0 && tokenQuota > 0 && strictGPTImageInputTokens(usage) > 0 {
 			summary.TotalQuota = tokenQuota
-			if upperBound {
+			switch {
+			case upperBound:
 				summary.EstimateReason = strictImageModalityUpperBoundReason
+			case usage.BillingEstimateReason == imageStreamReceiptsSummedReason:
+				summary.EstimateReason = imageStreamReceiptsSummedReason
 			}
 			return summary
 		}
@@ -310,6 +315,12 @@ func finalizeImageQuota(baseQuota int64, perImageBilling bool, imageModel string
 		return summary
 	}
 
+	if streamIncomplete {
+		// The receipts of an interrupted stream may omit paid work: the charge
+		// is flagged as an estimate and never settles below the hold.
+		summary.EstimateReason = imageStreamReceiptIncompleteReason
+	}
+
 	if perImageBilling {
 		if tokenQuota > 0 {
 			summary.TotalQuota += tokenQuota
@@ -319,6 +330,9 @@ func finalizeImageQuota(baseQuota int64, perImageBilling bool, imageModel string
 
 	if tokenQuota > 0 {
 		summary.TotalQuota = tokenQuota
+		if streamIncomplete {
+			summary.TotalQuota = max(tokenQuota, baseQuota)
+		}
 		return summary
 	}
 

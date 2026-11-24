@@ -5,11 +5,7 @@ import (
 	"time"
 
 	"github.com/Laisky/errors/v2"
-	gmw "github.com/Laisky/gin-middlewares/v7"
-	"github.com/Laisky/zap"
-	"github.com/gin-gonic/gin"
 
-	"github.com/Laisky/one-api/common"
 	"github.com/Laisky/one-api/model"
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
@@ -50,18 +46,19 @@ type strictGPTImageRendered struct {
 // re-encoded body carries the normalized request, so its size, quality, and
 // clamped count are what the provider receives. A body forwarded verbatim
 // (edits, OpenAI-compatible channel types) carries the client's values
-// instead: an omitted size or quality is the provider's own default, auto; the
-// client's own positive n is rendered, whether the gateway's copy raised it to
-// a channel min_images or clamped it to max_images; and any requested streamed
-// partial images add output tokens. Parameters: c carries the reusable client
-// body, req the normalized request, client the pre-default client values,
-// billedCount the normalized billed count, and reencoded whether the body was
-// re-encoded. Returns: the rendered request.
-func strictGPTImageRenderedRequest(c *gin.Context, req *relaymodel.ImageRequest, client strictGPTImageClientValues, billedCount int, reencoded bool) strictGPTImageRendered {
+// instead: an omitted size or quality is the provider's own default, auto; and
+// the client's own positive n is rendered, whether the gateway's copy raised it
+// to a channel min_images or clamped it to max_images. Both bodies carry the
+// client's streamed partial_images, which add output tokens. Parameters: req is
+// the normalized request, client the pre-default client values, billedCount
+// the normalized billed count, and reencoded whether the body was re-encoded.
+// Returns: the rendered request.
+func strictGPTImageRenderedRequest(req *relaymodel.ImageRequest, client strictGPTImageClientValues, billedCount int, reencoded bool) strictGPTImageRendered {
 	rendered := strictGPTImageRendered{
-		Size:    normalizeImageSizeKey(req.Size),
-		Quality: normalizeImageQualityKey(req.Quality),
-		Count:   billedCount,
+		Size:          normalizeImageSizeKey(req.Size),
+		Quality:       normalizeImageQualityKey(req.Quality),
+		Count:         billedCount,
+		PartialImages: requestedPartialImages(req),
 	}
 	if reencoded {
 		return rendered
@@ -78,17 +75,18 @@ func strictGPTImageRenderedRequest(c *gin.Context, req *relaymodel.ImageRequest,
 		// or renders its own default of at least one image.
 		rendered.Count = client.N
 	}
-	var streaming struct {
-		PartialImages int `json:"partial_images" form:"partial_images"`
-	}
-	if err := common.UnmarshalBodyReusable(c, &streaming); err != nil {
-		// The body already decoded as the image request; an unreadable
-		// partial_images field is priced at its documented maximum.
-		gmw.GetLogger(c).Debug("price unreadable partial_images at the maximum", zap.Error(err))
-		streaming.PartialImages = strictGPTImageMaxPartialImages
-	}
-	rendered.PartialImages = min(max(streaming.PartialImages, 0), strictGPTImageMaxPartialImages)
 	return rendered
+}
+
+// requestedPartialImages returns the streamed partial images a GPT Image
+// request asks for per image, clamped to the documented 0 to 3, since the
+// provider rejects any other value. Parameters: req is the decoded request.
+// Returns: the partial image count, zero when omitted.
+func requestedPartialImages(req *relaymodel.ImageRequest) int {
+	if req == nil || req.PartialImages == nil {
+		return 0
+	}
+	return min(max(*req.PartialImages, 0), strictGPTImageMaxPartialImages)
 }
 
 // strictGPTImageDefaultReservationUSD derives the per-image reservation and

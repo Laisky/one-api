@@ -76,6 +76,10 @@ func buildOpenAIImageRequest(req *relaymodel.ImageRequest) openai.ImageRequest {
 	if isOpenAIGPTImageModel(req.Model) {
 		request.OutputFormat = req.OutputFormat
 		request.Complexity = req.Complexity
+		// Only GPT Image models stream; the relay forwards the event stream
+		// and bills its final-image receipts.
+		request.Stream = req.Stream
+		request.PartialImages = req.PartialImages
 		return request
 	}
 	if req.ResponseFormat != nil {

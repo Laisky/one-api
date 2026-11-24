@@ -64,9 +64,12 @@ The default prices what the provider will actually render:
   reference image and the mask, is forwarded as sent, under the client's own
   multipart boundary.
   An omitted size or quality is the provider's own default, `auto`, whatever
-  the channel defaults say. Each requested streamed partial image
-  (`partial_images`, at most 3) adds the documented 100 output tokens per
-  image.
+  the channel defaults say.
+
+Both bodies carry the client's `stream` and `partial_images`: a re-encoded GPT
+Image body keeps them (the legacy DALL-E schema, Baidu, and xAI drop them, since
+those cannot stream). Each requested streamed partial image (`partial_images`,
+at most 3) adds the documented 100 output tokens per image to the hold.
 
 The image count follows the same rule for both reservation sources, the derived
 default and an explicit `price_per_image_usd`: the hold, and the charge when the
@@ -286,8 +289,39 @@ so cached text is billed at the entry's input price unless the entry sets
 free-cache convention. The tariff tables and settlement formulas for
 older image models are unchanged.
 
+### Streamed responses (`stream=true`)
+
+A GPT Image model answers `stream=true` with a `text/event-stream` of
+`image_generation.*` (or `image_edit.*`) events. The relay forwards every event
+to the client as it arrives, with heartbeat comments while the provider is
+silent, and copies only correlation and rate-limit headers (never provider
+cookies). It reads the events only for billing (`imageStreamHandler` in
+`relay/adaptor/openai/image_stream.go`, `annotateImageStreamUsage` in
+`relay/controller/image_stream_settlement.go`):
+
+- The usage of each final-image event (`*.completed`) is summed. OpenAI does
+  not document whether, for `n > 1`, each final event's usage covers one image
+  or the whole request, so the sum, the largest consistent reading, is charged
+  and flagged `gpt_image_stream_receipts_summed_upper_bound`
+  (`billing_source=provider_tokens_upper_bound`). A single final event is
+  exact.
+- Partial images add 100 image output tokens each, counting the larger of the
+  partial images streamed and those requested for every image: OpenAI documents
+  them as additional output tokens but not whether a receipt includes them.
+- The stream receipt is incomplete when the transport fails, the client
+  connection drops, an `error` event arrives, an event cannot be read (or is
+  larger than 64 MiB), a final event carries no usage, or fewer final events
+  arrive than images were requested. An incomplete receipt settles like any
+  incomplete receipt, `max(hold, ceiling)`, and is flagged as an estimate; on
+  older GPT Image models it never settles below the hold
+  (`image_stream_receipt_incomplete`).
+
+The client already holds a `200` event stream when a later failure is found, so
+the relay ends the stream instead of answering with a JSON error; the attempt is
+settled and never retried on another channel.
+
 Existing upstream-error and refund handling is preserved. This billing path does
-not add streaming image generation or the Responses image-generation tool.
+not add the Responses image-generation tool.
 
 ## Behavioral regression coverage
 
@@ -307,6 +341,13 @@ not add streaming image generation or the Responses image-generation tool.
   Azure and model-mapped edits, multipart and JSON: every reference image and
   the mask arrive intact, the model is the mapped one, and Azure omits its
   undocumented controls.
+- `image_stream_relay_test.go` streams generations and edits (native
+  re-encoded, verbatim compatible, priced edit) and checks the client's event
+  stream, the `stream`/`partial_images` the provider receives, exact and
+  summed settlement, and that partial-only, failed, interrupted, and short
+  streams never settle below the hold. `relay/adaptor/openai/image_stream_test.go`
+  covers the event framing, oversized events, and every incomplete-receipt
+  signal.
 - `image_rendered_count_relay_test.go` pins the held image count for
   re-encoded and verbatim bodies (`min_images`, unclamped `n`) and the native
   cached-text price of a channel entry without `cached_input_ratio`.
