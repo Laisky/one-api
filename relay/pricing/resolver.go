@@ -326,6 +326,10 @@ func ResolveModelConfigRatioOnly(modelName string, channelConfigs map[string]mod
 	return adaptor.ModelConfig{}, false
 }
 
+// convertLocalModelConfigRatioOnly converts a channel model config into the
+// token-billing subset: token ratios, tiers, embedding prices, and time
+// windows, without image, audio, or video metadata. Parameters: local is the
+// persisted channel config. Returns: the adaptor config.
 func convertLocalModelConfigRatioOnly(local model.ModelConfigLocal) adaptor.ModelConfig {
 	cfg := adaptor.ModelConfig{
 		Ratio:             local.Ratio,
@@ -354,6 +358,11 @@ func convertLocalModelConfigRatioOnly(local model.ModelConfigLocal) adaptor.Mode
 			}
 			return cfg.Tiers[i].InputTokenThreshold < cfg.Tiers[j].InputTokenThreshold
 		})
+	}
+	if local.Embedding != nil {
+		// Embedding prices are token prices, which token billing applies; the
+		// provider-default branch keeps them too.
+		cfg.Embedding = convertLocalEmbedding(local.Embedding)
 	}
 	if len(local.TimeWindows) > 0 {
 		cfg.TimeWindows = convertLocalTimeWindows(local.TimeWindows)

@@ -181,6 +181,11 @@ func RelayVideoHelper(c *gin.Context) *relaymodel.ErrorWithStatusCode {
 		}
 		if ok && resolvedCfg.Video != nil && resolvedCfg.Video.HasData() {
 			videoPricing = resolvedCfg.Video
+		} else if providerHasConfig && providerCfg.Video != nil && providerCfg.Video.HasData() {
+			// A channel entry without a video block (a scalar ratio, say)
+			// keeps the provider's per-second tariff, as image and
+			// output-video pricing do; a channel video block replaces it.
+			videoPricing = providerCfg.Video
 		}
 		if videoPricing == nil {
 			return openai.ErrorWrapper(errors.Errorf("video pricing missing for model %s", meta.ActualModelName), "video_pricing_missing", http.StatusBadRequest)
