@@ -20,7 +20,7 @@ func retentionTestCatalog(servable map[string]bool, calls *[][]string) ChannelRe
 	return ChannelResetCatalog{
 		Defaults: []string{"Foo", "Bar"},
 		Known:    []string{" Priced ", "Foo", "Unpriced", "", "Bad,Name", "Mapped", "Bar", "Priced"},
-		Servable: func(_ context.Context, _ *Channel, candidates []string) (map[string]bool, error) {
+		Servable: func(_ context.Context, _ *Channel, _ map[string]string, _ map[string]ModelConfigLocal, candidates []string) (map[string]bool, error) {
 			if calls != nil {
 				*calls = append(*calls, candidates)
 			}
@@ -41,7 +41,7 @@ func TestPlanChannelModelResetRetainsExplicitlyServableModels(t *testing.T) {
 		Type:                   channeltype.AwsClaude,
 		Models:                 "Custom,Unpriced,Foo,Priced",
 		HiddenModels:           resetTestString(`["Priced"]`),
-		ModelMapping:           resetTestString(`{"Mapped":"Foo","Foo":"Unpriced"}`),
+		ModelMapping:           resetTestString(`{"Mapped":"Foo","Foo":"Priced"}`),
 		ModelConfigs:           resetTestString(`{"Priced":{"ratio":1,"completion_ratio":2}}`),
 		InferenceProfileArnMap: resetTestString(`{"Priced":"private-arn"}`),
 		TestingModel:           resetTestString("Priced"),
@@ -49,9 +49,10 @@ func TestPlanChannelModelResetRetainsExplicitlyServableModels(t *testing.T) {
 	before := channel
 	var calls [][]string
 	planned, retained, err := planChannelModelReset(context.Background(), &channel,
-		retentionTestCatalog(map[string]bool{"Priced": true, "Mapped": true}, &calls))
+		retentionTestCatalog(map[string]bool{"Priced": true, "Mapped": true, "Foo": true}, &calls))
 	require.NoError(t, err)
-	require.Equal(t, [][]string{{"Priced", "Unpriced", "Mapped"}}, calls, "candidates are referenced non-defaults in catalog order")
+	require.Equal(t, [][]string{{"Priced", "Unpriced", "Mapped", "Foo"}}, calls,
+		"candidates are referenced non-defaults in catalog order, then defaults that are mapping keys")
 	require.Equal(t, []string{"Priced", "Mapped"}, retained)
 	require.Equal(t, "Foo,Bar,Priced,Mapped", planned.Models, "an injected name outside the candidates is ignored")
 	require.Nil(t, planned.HiddenModels)
@@ -95,6 +96,9 @@ func TestPlanChannelModelResetRetentionConflicts(t *testing.T) {
 		{"legacy output ratio", Channel{CompletionRatio: resetTestString(`{"Unpriced":1}`)}, "tariff_incomplete", "completion_ratio", []string{"Unpriced"}},
 		{"legacy unsupported", Channel{ModelRatio: resetTestString(`{"Retired":1}`)}, "pricing_conflict", "model_ratio", []string{"Retired"}},
 		{"mapping alias unservable", Channel{ModelMapping: resetTestString(`{"Unpriced":"Unpriced"}`)}, "tariff_incomplete", "model_mapping", []string{"Unpriced"}},
+		{"default alias with an unservable target", Channel{ModelMapping: resetTestString(`{"Foo":"Unpriced"}`)}, "tariff_incomplete", "model_mapping", []string{"Foo"}},
+		{"default and non-default aliases unservable", Channel{ModelMapping: resetTestString(`{"Foo":"Unpriced","Unpriced":"Bar"}`)}, "tariff_incomplete", "model_mapping", []string{"Foo", "Unpriced"}},
+		{"unsupported target wins over an unservable default alias", Channel{ModelMapping: resetTestString(`{"Foo":"Unpriced","Bar":"Retired"}`)}, "mapping_conflict", "model_mapping", []string{"Retired"}},
 		{"mapping alias unsupported", Channel{ModelMapping: resetTestString(`{"Alias":"Foo"}`)}, "mapping_conflict", "model_mapping", []string{"Alias"}},
 		{"mapping target unsupported", Channel{ModelMapping: resetTestString(`{"Foo":"Retired"}`)}, "mapping_conflict", "model_mapping", []string{"Retired"}},
 		{"mapping alias and target unsupported", Channel{ModelMapping: resetTestString(`{"Alias":"Retired","Unpriced":"Foo"}`)}, "mapping_conflict", "model_mapping", []string{"Alias", "Retired"}},
@@ -123,9 +127,12 @@ func TestPlanChannelModelResetRetentionConflicts(t *testing.T) {
 	}
 
 	t.Run("mapping target outside the kept set is allowed", func(t *testing.T) {
-		channel := Channel{Type: channeltype.AwsClaude, Models: "Foo", ModelMapping: resetTestString(`{"Foo":"Unpriced"}`)}
-		planned, retained, err := planChannelModelReset(context.Background(), &channel, retentionTestCatalog(servable, nil))
+		channel := Channel{Type: channeltype.AwsClaude, Models: "Foo", ModelMapping: resetTestString(`{"Foo":"Priced"}`)}
+		var calls [][]string
+		planned, retained, err := planChannelModelReset(context.Background(), &channel,
+			retentionTestCatalog(map[string]bool{"Priced": true, "Foo": true}, &calls))
 		require.NoError(t, err)
+		require.Equal(t, [][]string{{"Foo"}}, calls, "only the mapped default is evaluated")
 		require.Empty(t, retained)
 		require.Equal(t, "Foo,Bar", planned.Models)
 	})
@@ -154,7 +161,7 @@ func TestPlanChannelModelResetWithoutServability(t *testing.T) {
 // an operational failure rather than a policy conflict.
 func TestPlanChannelModelResetServabilityFailure(t *testing.T) {
 	catalog := retentionTestCatalog(nil, nil)
-	catalog.Servable = func(context.Context, *Channel, []string) (map[string]bool, error) {
+	catalog.Servable = func(context.Context, *Channel, map[string]string, map[string]ModelConfigLocal, []string) (map[string]bool, error) {
 		return nil, errors.New("readiness unavailable")
 	}
 	channel := Channel{Type: channeltype.OpenAI, Models: "Foo,Priced"}
@@ -197,7 +204,7 @@ func TestResetChannelModelsToDefaultsPersistsRetainedModels(t *testing.T) {
 
 	failing := func(int) ChannelResetCatalog {
 		value := retentionTestCatalog(nil, nil)
-		value.Servable = func(context.Context, *Channel, []string) (map[string]bool, error) {
+		value.Servable = func(context.Context, *Channel, map[string]string, map[string]ModelConfigLocal, []string) (map[string]bool, error) {
 			return nil, errors.New("readiness unavailable")
 		}
 		return value
@@ -210,4 +217,78 @@ func TestResetChannelModelsToDefaultsPersistsRetainedModels(t *testing.T) {
 	var after Channel
 	require.NoError(t, db.First(&after, "id = ?", channel.Id).Error)
 	require.Equal(t, before, after)
+}
+
+// TestPlanChannelModelResetServabilityUsesDecodedOverrides verifies the
+// servability check receives the mapping and pricing the reset decoded and
+// validated, never the raw text: whitespace-only and null fields arrive unset
+// exactly as validation treats them, and configured fields arrive decoded.
+func TestPlanChannelModelResetServabilityUsesDecodedOverrides(t *testing.T) {
+	tests := []struct {
+		name        string
+		mapping     *string
+		configs     *string
+		wantMapping map[string]string
+		wantConfigs map[string]ModelConfigLocal
+	}{
+		{name: "whitespace-only fields are unset", mapping: resetTestString(" \n\t "), configs: resetTestString("  ")},
+		{name: "null fields are unset", mapping: resetTestString("null"), configs: resetTestString(" null ")},
+		{
+			name:        "configured fields are decoded",
+			mapping:     resetTestString(`{"Mapped":"Foo"}`),
+			configs:     resetTestString(`{"Priced":{"ratio":1,"completion_ratio":2}}`),
+			wantMapping: map[string]string{"Mapped": "Foo"},
+			wantConfigs: map[string]ModelConfigLocal{"Priced": {Ratio: 1, CompletionRatio: 2}},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			channel := Channel{Type: channeltype.OpenAI, Models: "Foo,Priced", ModelMapping: test.mapping, ModelConfigs: test.configs}
+			before := channel
+			catalog := retentionTestCatalog(nil, nil)
+			calls := 0
+			catalog.Servable = func(_ context.Context, locked *Channel, mapping map[string]string, configs map[string]ModelConfigLocal, candidates []string) (map[string]bool, error) {
+				calls++
+				require.Equal(t, before, *locked)
+				require.Equal(t, test.wantMapping, mapping)
+				require.Equal(t, test.wantConfigs, configs)
+				servable := make(map[string]bool, len(candidates))
+				for _, name := range candidates {
+					servable[name] = true
+				}
+				return servable, nil
+			}
+			planned, _, err := planChannelModelReset(context.Background(), &channel, catalog)
+			require.NoError(t, err)
+			require.Equal(t, 1, calls)
+			require.Contains(t, planned.Models, "Priced")
+			require.Equal(t, before, channel)
+		})
+	}
+}
+
+// TestPlanChannelModelResetEvaluatesOnlyMappedDefaults verifies that a reset
+// evaluates a default only when it is a model_mapping key, so unmapped
+// defaults never reach the servability check, and that a catalog without a
+// servability check leaves default aliases unevaluated.
+func TestPlanChannelModelResetEvaluatesOnlyMappedDefaults(t *testing.T) {
+	var calls [][]string
+	channel := Channel{Type: channeltype.OpenAI, Models: "Foo"}
+	planned, retained, err := planChannelModelReset(context.Background(), &channel, retentionTestCatalog(nil, &calls))
+	require.NoError(t, err)
+	require.Empty(t, retained)
+	require.Empty(t, calls, "an unmapped zero-config channel needs no servability check")
+	require.Equal(t, "Foo,Bar", planned.Models)
+
+	channel.ModelMapping = resetTestString(`{"Bar":"Foo"}`)
+	planned, _, err = planChannelModelReset(context.Background(), &channel, retentionTestCatalog(map[string]bool{"Bar": true}, &calls))
+	require.NoError(t, err)
+	require.Equal(t, [][]string{{"Bar"}}, calls)
+	require.Equal(t, "Foo,Bar", planned.Models)
+
+	catalog := retentionTestCatalog(nil, nil)
+	catalog.Servable = nil
+	planned, _, err = planChannelModelReset(context.Background(), &channel, catalog)
+	require.NoError(t, err)
+	require.Equal(t, "Foo,Bar", planned.Models)
 }

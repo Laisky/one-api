@@ -23,6 +23,9 @@ const (
 	resetRetentionValidTariff = `{"minimaxai/minimax-m2.7":{"ratio":1,"completion_ratio":2}}`
 	// resetRetentionGroups are the groups every reset scenario channel serves.
 	resetRetentionGroups = "default,vip"
+	// resetRetentionDefaultAlias is a Groq zero-config default that scenarios
+	// map onto other models.
+	resetRetentionDefaultAlias = "openai/gpt-oss-20b"
 )
 
 // resetRetentionScenario describes one Groq channel configuration, the reset
@@ -64,6 +67,8 @@ func resetRetentionScenarios(t *testing.T) []resetRetentionScenario {
 	_, defaults := groqResetDefaults(t)
 	first := defaults[0]
 	withMiniMax := append(slices.Clone(defaults), resetRetentionMiniMax)
+	require.Contains(t, defaults, resetRetentionDefaultAlias, "the alias fixture must be a Groq default")
+	otherDefault := defaults[slices.IndexFunc(defaults, func(name string) bool { return name != resetRetentionDefaultAlias })]
 	return []resetRetentionScenario{
 		{
 			name:         "listed explicitly priced excluded model is retained",
@@ -134,6 +139,50 @@ func resetRetentionScenarios(t *testing.T) []resetRetentionScenario {
 			name:       "ordinary zero-config channel drops the unpriced model",
 			models:     first + "," + resetRetentionMiniMax,
 			wantModels: defaults,
+		},
+		{
+			name:         "whitespace-only mapping is unset and a priced listed model is retained",
+			models:       first + "," + resetRetentionMiniMax,
+			modelMapping: resetRetentionString(" \n\t "),
+			modelConfigs: resetRetentionString(resetRetentionValidTariff),
+			wantModels:   withMiniMax,
+		},
+		{
+			name:         "whitespace-only pricing is unset and an unpriced listed model is dropped",
+			models:       first + "," + resetRetentionMiniMax,
+			modelConfigs: resetRetentionString("   "),
+			wantModels:   defaults,
+		},
+		{
+			name:         "malformed non-blank mapping is refused",
+			models:       first + "," + resetRetentionMiniMax,
+			modelMapping: resetRetentionString(`{"openai/gpt-oss-20b":`),
+			modelConfigs: resetRetentionString(resetRetentionValidTariff),
+			wantCode:     "invalid_configuration",
+			wantField:    "model_mapping",
+		},
+		{
+			name:            "default alias mapped to an unpriced excluded model is refused",
+			models:          first,
+			modelMapping:    resetRetentionString(fmt.Sprintf(`{%q:%q}`, resetRetentionDefaultAlias, resetRetentionMiniMax)),
+			wantCode:        "tariff_incomplete",
+			wantField:       "model_mapping",
+			wantConflicting: []string{resetRetentionDefaultAlias},
+		},
+		{
+			name:            "default alias mapped to an incompletely priced excluded model is refused",
+			models:          first,
+			modelMapping:    resetRetentionString(fmt.Sprintf(`{%q:%q}`, resetRetentionDefaultAlias, resetRetentionMiniMax)),
+			modelConfigs:    resetRetentionString(`{"minimaxai/minimax-m2.7":{"ratio":1,"completion_ratio":0}}`),
+			wantCode:        "tariff_incomplete",
+			wantField:       "model_mapping",
+			wantConflicting: []string{resetRetentionDefaultAlias},
+		},
+		{
+			name:         "default alias mapped to another default is unaffected",
+			models:       first,
+			modelMapping: resetRetentionString(fmt.Sprintf(`{%q:%q}`, resetRetentionDefaultAlias, otherDefault)),
+			wantModels:   defaults,
 		},
 	}
 }

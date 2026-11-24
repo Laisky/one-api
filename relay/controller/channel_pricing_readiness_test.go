@@ -50,8 +50,11 @@ func TestEvaluateChannelPricingReadinessCases(t *testing.T) {
 		configs     map[string]model.ModelConfigLocal
 		want        []string
 	}{
-		// Without a per-image price, admission derives the default reservation
-		// from the catalog token tariff, so the channel is ready.
+		// Without a per-image price, generation admission derives the default
+		// reservation from the catalog token tariff, so the channel is ready.
+		// Readiness covers generations only: /v1/images/edits still requires
+		// an explicit positive image.price_per_image_usd or a megapixel
+		// tariff and otherwise answers 503 image_billing_not_configured.
 		{name: "openai_strict_image_unpriced_uses_default", channelType: channeltype.OpenAI,
 			models: []string{"gpt-image-2.5-sunburst", "gpt-4o"}},
 		{name: "openai_strict_image_priced", channelType: channeltype.OpenAI,

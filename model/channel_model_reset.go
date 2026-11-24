@@ -21,7 +21,8 @@ type ChannelModelResetTarget struct {
 // ResetChannelModelsToDefaults atomically validates the current channel, replaces
 // its models with the provider defaults plus every non-default catalog model the
 // channel explicitly lists or configures and can serve, and rebuilds routing
-// abilities. No override is rewritten. The catalog callback is supplied by the
+// abilities. No override is rewritten, and a default alias whose mapped target
+// admission would refuse is reported as a conflict instead of written. The catalog callback is supplied by the
 // controller to avoid a model/relay import cycle; it maps a channel type to its
 // ChannelResetCatalog. Parameters: ctx bounds the transaction, id is the channel
 // ID, and catalog resolves the provider knowledge. It returns the persisted row

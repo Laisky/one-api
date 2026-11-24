@@ -26,11 +26,17 @@ type ChannelResetCatalog struct {
 	Known []string
 	// Servable reports which candidate models the channel's own explicit
 	// configuration makes servable, meaning admission would not refuse them for
-	// missing pricing under the channel's model_mapping and model_configs. It
-	// receives the locked, unmodified channel and must not change it. A nil
-	// Servable makes no candidate servable. It returns a membership map, or an
-	// error that aborts the reset without changes.
-	Servable func(ctx context.Context, channel *Channel, candidates []string) (map[string]bool, error)
+	// missing pricing under the channel's model_mapping and model_configs. The
+	// candidates are the non-default catalog models the channel lists or
+	// configures, followed by the defaults that are model_mapping keys. It
+	// receives the locked, unmodified channel plus the mapping and pricing the
+	// reset already decoded and validated (nil when unset, including
+	// whitespace-only or null text), so the check and the validation never
+	// disagree about the stored text; it must change none of them. A nil
+	// Servable retains no non-default model and evaluates no default alias. It
+	// returns a membership map, or an error that aborts the reset without
+	// changes.
+	Servable func(ctx context.Context, channel *Channel, mapping map[string]string, configs map[string]ModelConfigLocal, candidates []string) (map[string]bool, error)
 }
 
 // ChannelModelResetConflict describes a configuration that cannot safely survive
@@ -55,7 +61,7 @@ func (conflict *ChannelModelResetConflict) Error() string {
 	case "inference_profile_conflict":
 		return "Inference profiles reference models this provider does not support. Update the profiles before resetting."
 	case "tariff_incomplete":
-		return "Custom pricing for models that require an operator tariff is incomplete. Complete the tariff or remove the entry before resetting."
+		return "A model this channel configures needs an operator tariff that is missing or incomplete. Complete the tariff in model_configs, or change or remove the mapping or entry in the named field, before resetting."
 	default:
 		return "Channel configuration is invalid. Correct it before resetting models."
 	}
@@ -216,15 +222,17 @@ func resetMembershipConflict[T any](entries map[string]T, kept, known map[string
 
 // validateResetMembership checks every override against the planned model set
 // without rewriting any override. Mapping keys, pricing keys, legacy ratio
-// keys, and inference profile keys must be kept; mapping targets need only be
-// recognized by the provider. Parameters: overrides are the decoded overrides,
-// kept the planned model set, and known the provider catalog, a superset of
-// kept. Returns: nil, or the first conflict in field order.
-func validateResetMembership(overrides *resetOverrides, kept, known map[string]bool) error {
+// keys, and inference profile keys must be kept, and a kept default that is a
+// mapping key must also be servable through its mapping; mapping targets need
+// only be recognized by the provider. Parameters: overrides are the decoded
+// overrides, kept the planned model set, known the provider catalog (a
+// superset of kept), and refusedAliases the kept defaults whose mapping
+// admission would refuse. Returns: nil, or the first conflict in field order.
+func validateResetMembership(overrides *resetOverrides, kept, known, refusedAliases map[string]bool) error {
 	var unknown, incomplete []string
 	for alias, target := range overrides.mapping {
 		switch {
-		case kept[alias]:
+		case kept[alias] && !refusedAliases[alias]:
 		case known[alias]:
 			incomplete = append(incomplete, alias)
 		default:
@@ -275,13 +283,18 @@ func resetCatalogNames(names []string, seen map[string]bool) (accepted []string,
 	return accepted, invalid
 }
 
-// resetRetainedModels returns the non-default catalog models the channel
-// explicitly lists or configures and can serve, in catalog order. Parameters:
-// ctx bounds the servability check, channel is the locked row, overrides its
-// decoded overrides, catalog the provider knowledge, and extras the catalog
-// models outside the defaults, in catalog order. Returns: the retained models,
-// or a wrapped error from catalog.Servable.
-func resetRetainedModels(ctx context.Context, channel *Channel, overrides *resetOverrides, catalog ChannelResetCatalog, extras []string) ([]string, error) {
+// resetRetainedModels evaluates, with one servability check over the decoded
+// mapping and pricing, the non-default catalog models the channel explicitly
+// lists or configures and the defaults that are model_mapping keys. A reset
+// writes every default, so a default alias whose mapped target admission
+// would refuse must be reported rather than written. Parameters: ctx bounds
+// the servability check, channel is the locked row, overrides its decoded
+// overrides, catalog the provider knowledge, defaults the accepted default
+// names in order, and extras the catalog models outside the defaults, in
+// catalog order. Returns: the retained non-default models in catalog order,
+// the default aliases admission would refuse, or a wrapped error from
+// catalog.Servable.
+func resetRetainedModels(ctx context.Context, channel *Channel, overrides *resetOverrides, catalog ChannelResetCatalog, defaults, extras []string) (retained []string, refusedAliases map[string]bool, err error) {
 	referenced := make(map[string]bool)
 	for _, name := range channel.GetSupportedModelNames() {
 		referenced[name] = true
@@ -289,33 +302,47 @@ func resetRetainedModels(ctx context.Context, channel *Channel, overrides *reset
 	for _, name := range overrides.keys() {
 		referenced[name] = true
 	}
-	var candidates []string
+	var candidates, aliases []string
 	for _, name := range extras {
 		if referenced[name] {
 			candidates = append(candidates, name)
 		}
 	}
-	if len(candidates) == 0 || catalog.Servable == nil {
-		return nil, nil
+	for _, name := range defaults {
+		if _, ok := overrides.mapping[name]; ok {
+			aliases = append(aliases, name)
+		}
 	}
-	servable, err := catalog.Servable(ctx, channel, slices.Clone(candidates))
+	if len(candidates)+len(aliases) == 0 || catalog.Servable == nil {
+		return nil, nil, nil
+	}
+	servable, err := catalog.Servable(ctx, channel, overrides.mapping, overrides.prices, slices.Concat(candidates, aliases))
 	if err != nil {
-		return nil, errors.Wrap(err, "evaluate servability of explicitly configured models")
+		return nil, nil, errors.Wrap(err, "evaluate servability of explicitly configured models")
 	}
-	retained := make([]string, 0, len(candidates))
+	retained = make([]string, 0, len(candidates))
 	for _, name := range candidates {
 		if servable[name] {
 			retained = append(retained, name)
 		}
 	}
-	return retained, nil
+	for _, name := range aliases {
+		if !servable[name] {
+			if refusedAliases == nil {
+				refusedAliases = make(map[string]bool, len(aliases))
+			}
+			refusedAliases[name] = true
+		}
+	}
+	return retained, refusedAliases, nil
 }
 
 // planChannelModelReset validates a channel against its provider's catalog and
 // returns a copy whose model list is the default models followed by every
 // non-default catalog model the channel explicitly lists or configures and can
 // serve. Overrides are never rewritten, so a reset refuses rather than silently
-// dropping a model that pricing, mappings, or profiles still reference. The
+// dropping a model that pricing, mappings, or profiles still reference, or
+// writing a default alias whose mapped target admission would refuse. The
 // original row and catalog remain untouched, including on failure; unrelated
 // channel settings are retained. Parameters: ctx bounds the servability check,
 // channel is the locked current row, and catalog the provider knowledge.
@@ -346,7 +373,7 @@ func planChannelModelReset(ctx context.Context, channel *Channel, catalog Channe
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "validate channel before model reset")
 	}
-	retained, err := resetRetainedModels(ctx, channel, overrides, catalog, extras)
+	retained, refusedAliases, err := resetRetainedModels(ctx, channel, overrides, catalog, names, extras)
 	if err != nil {
 		return nil, nil, errors.Wrap(err, "plan retained models")
 	}
@@ -354,7 +381,7 @@ func planChannelModelReset(ctx context.Context, channel *Channel, catalog Channe
 	for _, name := range retained {
 		kept[name] = true
 	}
-	if err := validateResetMembership(overrides, kept, known); err != nil {
+	if err := validateResetMembership(overrides, kept, known, refusedAliases); err != nil {
 		return nil, nil, errors.Wrap(err, "validate channel before model reset")
 	}
 

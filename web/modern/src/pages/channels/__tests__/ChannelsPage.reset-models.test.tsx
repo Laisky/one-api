@@ -95,8 +95,9 @@ describe('ChannelsPage default model reset', () => {
   it.each([
     ['mapping_conflict', 'model_mapping', 'Model mappings reference models this provider does not support.'],
     ['pricing_conflict', 'model_configs', 'Custom pricing references models this provider does not support.'],
-    ['tariff_incomplete', 'model_configs', 'Custom pricing for models that require an operator tariff is incomplete.'],
-    ['tariff_incomplete', 'model_ratio', 'Custom pricing for models that require an operator tariff is incomplete.'],
+    ['tariff_incomplete', 'model_configs', 'A model this channel configures needs an operator tariff that is missing or incomplete.'],
+    ['tariff_incomplete', 'model_ratio', 'A model this channel configures needs an operator tariff that is missing or incomplete.'],
+    ['tariff_incomplete', 'model_mapping', 'A model this channel configures needs an operator tariff that is missing or incomplete.'],
     ['unsupported_channel', 'type', 'Custom compatible channels cannot be reset to provider defaults.'],
   ])('shows a persistent, actionable %s rejection without a success message', async (code, field, reason) => {
     mockPost.mockRejectedValue({ response: { status: 409, data: { success: false, message: 'Rejected', conflict: { code, field, models: ['Alias'] } } } });
