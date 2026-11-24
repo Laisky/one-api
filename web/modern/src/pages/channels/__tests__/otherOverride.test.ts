@@ -10,19 +10,34 @@ import {
   OTHER_OVERRIDE_KEY_BY_TYPE,
   otherOverrideKeyFor,
   readOtherOverride,
+  removeOtherOverrides,
   snapshotStoredOther,
 } from '../otherOverride';
 import type { ChannelForm } from '../schemas';
+
+/** OverrideShadow is an earlier spelling of the override key that the later config key overrides. */
+interface OverrideShadow {
+  key: string;
+  value: string;
+}
+
+/** OverrideState is the stored or submitted `other` value, override, and optional shadowed spelling. */
+interface OverrideState {
+  other: string;
+  override: string | null;
+  shadowed?: OverrideShadow | null;
+}
 
 /** OtherOverrideCase is one entry of the shared Go/frontend contract fixture. */
 interface OtherOverrideCase {
   name: string;
   type: number;
   override_key: string;
-  stored: { other: string; override: string | null };
+  config_key?: string;
+  stored: OverrideState;
   edit: string | null;
   displayed: string;
-  payload: { other: string; override: string | null };
+  payload: OverrideState;
   effective: string;
 }
 
@@ -31,9 +46,21 @@ const fixture = JSON.parse(readFileSync(resolve(repoRoot, 'test/testdata/channel
   cases: OtherOverrideCase[];
 };
 
-/** storedConfig builds the stored config object of a fixture case. */
-const storedConfig = (testCase: OtherOverrideCase): Record<string, unknown> =>
-  testCase.stored.override === null ? { kept: 1 } : { kept: 1, [testCase.override_key]: testCase.stored.override };
+/** expectedEntries lists the override spellings a fixture state places in config, in order. */
+const expectedEntries = (testCase: OtherOverrideCase, state: OverrideState): [string, string][] => [
+  ...(state.shadowed ? [[state.shadowed.key, state.shadowed.value] as [string, string]] : []),
+  ...(state.override === null ? [] : [[testCase.config_key ?? testCase.override_key, state.override] as [string, string]]),
+];
+
+/** overrideEntries lists, in config order, every key of config that spells the override key in any letter case. */
+const overrideEntries = (config: Record<string, unknown>, key: string): [string, unknown][] =>
+  Object.entries(config).filter(([name]) => name.toLowerCase() === key);
+
+/** storedConfig builds the stored config object of a fixture case: an unrelated key, then the override spellings. */
+const storedConfig = (testCase: OtherOverrideCase): Record<string, unknown> => ({
+  kept: 1,
+  ...Object.fromEntries(expectedEntries(testCase, testCase.stored)),
+});
 
 /** baseForm returns a validated channel form for the payload builder. */
 const baseForm = (overrides: Partial<ChannelForm>): ChannelForm =>
@@ -74,6 +101,24 @@ describe('OTHER_OVERRIDE_KEY_BY_TYPE', () => {
 });
 
 describe('effectiveOtherValue and readOtherOverride', () => {
+  it('match override keys the way Go encoding/json decodes the relay config', () => {
+    // Pinned against model.Channel.LoadConfig on Go 1.27: keys match case-insensitively with
+    // Unicode simple folding (U+017F long s folds to s), underscores stay significant, keys apply
+    // in document order so the last string wins, and null or non-string values are skipped.
+    expect(readOtherOverride(3, { API_VERSION: 'upper' })).toBe('upper');
+    expect(readOtherOverride(3, { Api_Version: 'mixed' })).toBe('mixed');
+    expect(readOtherOverride(3, { ['api_ver\u017fion']: 'long-s' })).toBe('long-s');
+    expect(readOtherOverride(3, { APIVERSION: 'x', 'api-version': 'y', apiversion: 'z' })).toBe('');
+    expect(readOtherOverride(3, { api_version: 'a', API_VERSION: 'b' })).toBe('b');
+    expect(readOtherOverride(3, { API_VERSION: 'b', api_version: 'a' })).toBe('a');
+    expect(readOtherOverride(3, { api_version: 'a', API_VERSION: '' })).toBe('');
+    expect(readOtherOverride(3, { api_version: 'a', API_VERSION: null })).toBe('a');
+    expect(readOtherOverride(3, { api_version: 'a', API_VERSION: 5 })).toBe('a');
+    expect(readOtherOverride(17, { PLUGIN: 'p' })).toBe('p');
+    expect(readOtherOverride(21, { LIBRARY_ID: 'l', library_id: '' })).toBe('');
+    expect(effectiveOtherValue(3, 'legacy', { API_VERSION: '2024-10-21' })).toBe('2024-10-21');
+  });
+
   it('prefer a non-empty override and fall back to other like the relay', () => {
     expect(effectiveOtherValue(3, '2024-02-01', { api_version: '2024-10-21' })).toBe('2024-10-21');
     expect(effectiveOtherValue(3, '2024-02-01', { api_version: '' })).toBe('2024-02-01');
@@ -100,17 +145,54 @@ describe('applyOtherFieldEdit', () => {
       const result = applyOtherFieldEdit(stored, testCase.type, formOther, config);
 
       expect(result.other).toBe(testCase.payload.other);
-      if (testCase.payload.override === null) {
-        expect(result.config).not.toHaveProperty(testCase.override_key);
-      } else {
-        expect(result.config[testCase.override_key]).toBe(testCase.payload.override);
-      }
+      expect(overrideEntries(result.config, testCase.override_key)).toEqual(expectedEntries(testCase, testCase.payload));
       expect(result.config.kept).toBe(1);
       expect(effectiveOtherValue(testCase.type, result.other, result.config)).toBe(testCase.effective);
       // The input config is never mutated.
       expect(config).toEqual(storedConfig(testCase));
     }
   );
+
+  it('restores the stored order of override spellings when the form reorders config keys', () => {
+    // The form schema emits its known keys (api_version) before unknown ones (API_VERSION), which
+    // would let the stale spelling win in Go; the save must keep the stored relative order.
+    const stored = { kept: 1, API_VERSION: 'stale', api_version: 'win' };
+    const reordered = { api_version: 'win', kept: 1, API_VERSION: 'stale' };
+    const binding = snapshotStoredOther(3, 'legacy', stored);
+
+    const untouched = applyOtherFieldEdit(binding, 3, 'win', reordered);
+    expect(overrideEntries(untouched.config, 'api_version')).toEqual([
+      ['API_VERSION', 'stale'],
+      ['api_version', 'win'],
+    ]);
+    expect(untouched.other).toBe('legacy');
+
+    const edited = applyOtherFieldEdit(binding, 3, 'next', reordered);
+    expect(overrideEntries(edited.config, 'api_version')).toEqual([
+      ['API_VERSION', 'stale'],
+      ['api_version', 'next'],
+    ]);
+    expect(readOtherOverride(3, edited.config)).toBe('next');
+
+    const cleared = applyOtherFieldEdit(binding, 3, '', reordered);
+    expect(overrideEntries(cleared.config, 'api_version')).toEqual([]);
+    expect(cleared.config.kept).toBe(1);
+    expect(reordered).toEqual({ api_version: 'win', kept: 1, API_VERSION: 'stale' });
+  });
+
+  it('updates the winning spelling in place when no reordering happened', () => {
+    const config = { API_VERSION: 'win', kept: 1, after: true };
+    const edited = applyOtherFieldEdit(snapshotStoredOther(3, '', config), 3, 'next', config);
+    expect(Object.keys(edited.config)).toEqual(['API_VERSION', 'kept', 'after']);
+    expect(edited.config.API_VERSION).toBe('next');
+    expect(edited.config).not.toHaveProperty('api_version');
+  });
+
+  it('removes every spelling of every override key', () => {
+    const config = { kept: 1, API_VERSION: 'a', Plugin: 'b', library_id: 'c', APIVERSION: 'unrelated' };
+    expect(removeOtherOverrides(config)).toEqual({ kept: 1, APIVERSION: 'unrelated' });
+    expect(config).toHaveProperty('API_VERSION', 'a');
+  });
 
   it('passes form values through when creating or after a channel type change', () => {
     expect(applyOtherFieldEdit(null, 3, 'typed', { api_version: 'x' })).toEqual({ other: 'typed', config: { api_version: 'x' } });

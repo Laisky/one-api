@@ -10,7 +10,6 @@ import { CHANNEL_TYPES_WITH_DEDICATED_BASE_URL } from '../constants';
 import {
   buildChannelSubmitPayload,
   type BuildChannelSubmitPayloadOptions,
-  CONFIG_OVERRIDES_OF_OTHER,
   isValidJSON,
   normalizeChannelType,
   parsePrivateChannelJSON,
@@ -21,7 +20,7 @@ import {
   toInt,
   validateModelConfigs,
 } from '../helpers';
-import { effectiveOtherValue, snapshotStoredOther, type StoredOtherBinding } from '../otherOverride';
+import { effectiveOtherValue, removeOtherOverrides, snapshotStoredOther, type StoredOtherBinding } from '../otherOverride';
 import { createChannelSchema, type ChannelConfigForm, type ChannelForm, type ChannelFormInput, type EndpointInfo } from '../schemas';
 import { loadChannelModelCatalogs, type ChannelModelCatalog } from './channelModelCatalogs';
 import { collectChannelSaveWarnings, type ChannelPricingGap, type ChannelSaveWarnings } from './channelSaveWarnings';
@@ -338,10 +337,10 @@ export const useChannelForm = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId, loadDefaultPricing]);
 
+  // loadModelsCatalog publishes each catalog as soon as its own request settles, so slow default
+  // suggestions never delay the complete catalog.
   const loadModelsCatalog = useCallback(async () => {
-    const catalogs = await loadChannelModelCatalogs();
-    setModelsCatalog(catalogs.full);
-    setDefaultModelsCatalog(catalogs.defaults);
+    await loadChannelModelCatalogs({ onFull: setModelsCatalog, onDefaults: setDefaultModelsCatalog });
   }, []);
 
   // The group catalog is loaded by ChannelGroups itself through useGroupCatalog.
@@ -637,12 +636,11 @@ export const useChannelForm = () => {
         shouldValidate: true,
         shouldDirty: true,
       });
-      // Clear related fields that may not be compatible with the new type, including the typed
-      // config overrides of `other`, which the relay would otherwise apply to the new type.
+      // Clear related fields that may not be compatible with the new type, including every
+      // spelling of the typed config overrides of `other`, which the relay would otherwise apply.
       setValue('base_url', '');
       setValue('other', '');
-      const config: Record<string, unknown> = { ...(getValues('config') ?? {}) };
-      CONFIG_OVERRIDES_OF_OTHER.forEach((key) => delete config[key]);
+      const config = removeOtherOverrides(getValues('config'));
       setValue('config', config as ChannelFormInput['config']);
       setPendingTypeChange(null);
     }

@@ -281,15 +281,16 @@ let channelDefaultModels = undefined;
 /**
  * loadChannelModels caches the full provider catalog from /api/models, which feeds model
  * suggestions, and the zero-config recommendations from /api/models/defaults, which fill
- * related models. A failed catalog request is rethrown for the caller to report.
+ * related models. Each result is cached as soon as its own request settles, so a slow or failed
+ * defaults request never delays or drops the catalog. The returned promise settles with the
+ * catalog request alone; a failed catalog request is rethrown for the caller to report.
  */
 export async function loadChannelModels() {
-  const [catalog, defaults] = await Promise.allSettled([API.get('/api/models'), API.get('/api/models/defaults')]);
-  storeChannelDefaultModels(defaults);
-  if (catalog.status === 'rejected') {
-    throw catalog.reason;
-  }
-  const { success, data } = catalog.value.data;
+  API.get('/api/models/defaults')
+    .then((response) => storeChannelDefaultModels({ status: 'fulfilled', value: response }))
+    .catch((reason) => storeChannelDefaultModels({ status: 'rejected', reason }));
+  const catalog = await API.get('/api/models');
+  const { success, data } = catalog.data;
   if (!success) {
     return;
   }
@@ -300,19 +301,24 @@ export async function loadChannelModels() {
 /**
  * storeChannelDefaultModels caches a successful /api/models/defaults result. Any other outcome
  * drops stale defaults so getChannelDefaultModels falls back to the full catalog; the API
- * interceptor has already reported a failed request, so only a string summary is logged.
+ * interceptor has already reported a failed request, so only a string summary is logged. It
+ * runs detached from loadChannelModels, so it never throws: a storage failure is logged instead.
  */
 function storeChannelDefaultModels(result) {
-  const body = result.status === 'fulfilled' ? result.value?.data : undefined;
-  if (body?.success && body.data && typeof body.data === 'object') {
-    channelDefaultModels = body.data;
-    localStorage.setItem('channel_default_models', JSON.stringify(body.data));
-    return;
+  try {
+    const body = result.status === 'fulfilled' ? result.value?.data : undefined;
+    if (body?.success && body.data && typeof body.data === 'object') {
+      channelDefaultModels = body.data;
+      localStorage.setItem('channel_default_models', JSON.stringify(body.data));
+      return;
+    }
+    const reason = result.status === 'rejected' ? String(result.reason?.message || result.reason) : 'unsuccessful response';
+    console.warn('Default channel models are unavailable, so related models fall back to the full catalog: ' + reason);
+    channelDefaultModels = undefined;
+    localStorage.removeItem('channel_default_models');
+  } catch (error) {
+    console.warn('Default channel models could not be cached: ' + String(error?.message || error));
   }
-  const reason = result.status === 'rejected' ? String(result.reason?.message || result.reason) : 'unsuccessful response';
-  console.warn('Default channel models are unavailable, so related models fall back to the full catalog: ' + reason);
-  channelDefaultModels = undefined;
-  localStorage.removeItem('channel_default_models');
 }
 
 /** getChannelDefaultModels returns the zero-config recommended models for type, or the full catalog's models when no defaults are cached. */

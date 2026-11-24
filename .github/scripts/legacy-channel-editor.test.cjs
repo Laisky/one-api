@@ -23,10 +23,16 @@ const RENDERED_FIELDS = theme === 'air'
   ? { 3: 'input[name="azure_other"]', 18: 'input[name="other"]', 21: 'input[name="other"]' }
   : { 3: '#channel-other-label', 17: '#channel-other-label', 18: '#channel-other-label', 24: '#channel-other-label' };
 
+/** expectedEntries lists the override spellings a fixture state places in config, in order. */
+function expectedEntries(entry, state) {
+  const entries = state.shadowed ? [[state.shadowed.key, state.shadowed.value]] : [];
+  if (state.override !== null) entries.push([entry.config_key ?? entry.override_key, state.override]);
+  return entries;
+}
+
 /** storedChannel returns the GET /api/channel/:id body for the supplied fixture case. */
 function storedChannel(entry) {
-  const config = { api_format: 'chat_completion', future_backend_key: 'kept' };
-  if (entry.stored.override !== null) config[entry.override_key] = entry.stored.override;
+  const config = { api_format: 'chat_completion', future_backend_key: 'kept', ...Object.fromEntries(expectedEntries(entry, entry.stored)) };
   return {
     id: 7, uuid: 'channel-7', name: 'Stored channel', type: entry.type, key: '', status: 1,
     base_url: 'https://upstream.example.test', other: entry.stored.other, models: 'stored-model', group: 'default',
@@ -35,8 +41,11 @@ function storedChannel(entry) {
   };
 }
 
-/** transport returns a recording API double that answers the editor's loading requests and records update bodies. */
-function transport(channel, extra = () => undefined) {
+/** acceptUpdate answers every save request as accepted. */
+const acceptUpdate = () => ({ success: true, message: '' });
+
+/** transport returns a recording API double that answers the editor's loading requests and records update bodies; answerUpdate decides each save response. */
+function transport(channel, extra = () => undefined, answerUpdate = acceptUpdate) {
   const updates = [];
   const { API, requests } = createTransport(request => {
     const answered = extra(request);
@@ -48,10 +57,10 @@ function transport(channel, extra = () => undefined) {
     if (request.path === '/api/channel/pricing/channel-7') return { success: true, data: { model_ratio: {}, completion_ratio: {} } };
     throw new Error(`Unexpected request ${request.path}`);
   });
-  /** put records one update body and answers it as accepted. */
-  API.put = async (url, body) => { updates.push({ url, body }); return { data: { success: true, message: '' } }; };
-  /** post records one create body and answers it as accepted. */
-  API.post = async (url, body) => { updates.push({ url, body }); return { data: { success: true, message: '' } }; };
+  /** put records one update body and answers it through answerUpdate. */
+  API.put = async (url, body) => { updates.push({ url, body }); return { data: await answerUpdate(updates.length) }; };
+  /** post records one create body and answers it through answerUpdate. */
+  API.post = async (url, body) => { updates.push({ url, body }); return { data: await answerUpdate(updates.length) }; };
   return { API, requests, updates };
 }
 
@@ -63,9 +72,9 @@ function findButton(label) {
 }
 
 /** mountEditor mounts the theme's real channel editor and returns interaction helpers plus recorded traffic. */
-async function mountEditor({ channel, extra, before }) {
+async function mountEditor({ channel, extra, before, answerUpdate }) {
   const failures = [];
-  const { API, requests, updates } = transport(channel, extra);
+  const { API, requests, updates } = transport(channel, extra, answerUpdate);
   /** recordFailure keeps UI-reported failures for the absence assertion. */
   const recordFailure = error => { failures.push(error); };
   let element;
@@ -136,6 +145,13 @@ async function finishCloseAnimations() {
   await settle();
 }
 
+/** savedOverrideEntries lists, in order, every key of the submitted config JSON that spells key in any letter case. */
+function savedOverrideEntries(body, key) {
+  const config = JSON.parse(body.config);
+  assert.equal(config.future_backend_key, 'kept', 'Unrelated config keys round-trip');
+  return Object.entries(config).filter(([name]) => name.toLowerCase() === key);
+}
+
 /** savedOverride returns the override value in the submitted config JSON, or null when the key is absent. */
 function savedOverride(body, key) {
   const config = JSON.parse(body.config);
@@ -172,7 +188,35 @@ for (const entry of fixture.cases) {
       assert.equal(editor.updates.length, 1, 'The editor sends one update');
       const { body } = editor.updates[0];
       assert.equal(body.other, entry.payload.other, 'The update carries the contract `other` value');
-      assert.equal(savedOverride(body, entry.override_key), entry.payload.override, 'The update carries the contract override');
+      assert.deepEqual(savedOverrideEntries(body, entry.override_key), expectedEntries(entry, entry.payload), 'The update carries the contract override spellings');
+    } finally {
+      await editor.unmount();
+    }
+  });
+}
+
+// A failed save must leave the form, and so the untouched-field comparison, exactly as loaded:
+// otherwise the retry reads the resolved legacy value as an edit and writes it into the override.
+for (const failure of theme === 'berry' ? ['unsuccessful', 'rejected'] : ['unsuccessful']) {
+  test(`${theme}: a failed (${failure}) save leaves the field and the next untouched save unchanged`, async () => {
+    const entry = fixture.cases.find(item => item.name === 'azure_conflict_unrelated_save');
+    /** answerUpdate fails the first save and accepts the retry. */
+    const answerUpdate = attempt => {
+      if (attempt > 1) return acceptUpdate();
+      if (failure === 'rejected') throw new Error('synthetic network failure');
+      return { success: false, message: 'synthetic save failure' };
+    };
+    const editor = await mountEditor({ channel: storedChannel(entry), answerUpdate });
+    try {
+      await editor.submit();
+      assert.equal(editor.updates.length, 1, 'The first save is sent');
+      assert.equal(editor.field(entry.type).value, entry.displayed, 'A failed save keeps the field on the effective value');
+      await editor.submit();
+      assert.equal(editor.updates.length, 2, 'The retry is sent');
+      for (const { body } of editor.updates) {
+        assert.equal(body.other, entry.payload.other, 'Each attempt resends the stored `other` value');
+        assert.deepEqual(savedOverrideEntries(body, entry.override_key), expectedEntries(entry, entry.payload), 'Each attempt resends the stored override');
+      }
     } finally {
       await editor.unmount();
     }
@@ -279,6 +323,43 @@ if (theme === 'berry') {
       await editor.unmount();
     }
   });
+
+  /** raceTimeout resolves to the outcome of promise, or to 'timed out' when it has not settled within 200 ms. */
+  const raceTimeout = promise => Promise.race([
+    promise.then(() => 'loaded', error => `rejected: ${error.message}`),
+    new Promise(resolve => setTimeout(() => resolve('timed out'), 200)),
+  ]);
+
+  for (const outcome of ['loaded', 'rejected: catalog unavailable']) {
+    test(`berry: the catalog request settles (${outcome}) without waiting for a slow defaults request`, async () => {
+      clearModelCaches();
+      let releaseDefaults = () => {};
+      const pendingDefaults = new Promise(resolve => { releaseDefaults = resolve; });
+      const { API } = transport(undefined, request => {
+        if (request.path === '/api/models') {
+          if (outcome !== 'loaded') throw new Error('catalog unavailable');
+          return { success: true, message: '', data: catalog };
+        }
+        if (request.path === '/api/models/defaults') return pendingDefaults;
+        return undefined;
+      });
+      const common = loadModule('web/berry/src/utils/common.js', { 'web/berry/src/utils/api.js': { API }, notistack: { enqueueSnackbar: () => {} } });
+      try {
+        assert.equal(await raceTimeout(common.loadChannelModels()), outcome, 'The catalog outcome must not wait for the defaults request');
+        if (outcome === 'loaded') {
+          assert.deepEqual(JSON.parse(localStorage.getItem('channel_models')), catalog, 'The catalog is cached as soon as it arrives');
+          assert.deepEqual(common.getChannelDefaultModels(1), catalog[1], 'Until the defaults arrive, fill-related uses the full catalog');
+        }
+        releaseDefaults({ success: true, message: '', data: defaults });
+        await settle();
+        assert.deepEqual(JSON.parse(localStorage.getItem('channel_default_models')), defaults, 'The defaults are cached when they arrive');
+        assert.deepEqual(common.getChannelDefaultModels(1), defaults[1]);
+      } finally {
+        releaseDefaults({ success: true, message: '', data: defaults });
+        clearModelCaches();
+      }
+    });
+  }
 
   test('berry: fill-related falls back to the persisted full catalog when no defaults are cached', async () => {
     clearModelCaches();

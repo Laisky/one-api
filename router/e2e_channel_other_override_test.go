@@ -1,6 +1,7 @@
 package router
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -45,23 +46,36 @@ const (
 	overrideAliPath = "/api/v1/services/aigc/text-generation/generation"
 )
 
+// overrideShadow is an earlier spelling of the override key that a config
+// stores before the case's config key, so encoding/json's last-wins rule lets
+// the later spelling override it.
+type overrideShadow struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
 // overrideState is the stored or submitted pair of the legacy `other` value
-// and the typed config override (nil when the key is absent from config).
+// and the typed config override (nil when the key is absent from config),
+// plus an optional shadowed earlier spelling of the override key.
 type overrideState struct {
-	Other    string  `json:"other"`
-	Override *string `json:"override"`
+	Other    string          `json:"other"`
+	Override *string         `json:"override"`
+	Shadowed *overrideShadow `json:"shadowed"`
 }
 
 // overrideCase is one case of the shared contract fixture.
 type overrideCase struct {
-	Name        string        `json:"name"`
-	Type        int           `json:"type"`
-	OverrideKey string        `json:"override_key"`
-	Stored      overrideState `json:"stored"`
-	Edit        *string       `json:"edit"`
-	Displayed   string        `json:"displayed"`
-	Payload     overrideState `json:"payload"`
-	Effective   string        `json:"effective"`
+	Name        string `json:"name"`
+	Type        int    `json:"type"`
+	OverrideKey string `json:"override_key"`
+	// ConfigKey is the exact spelling the override is stored and saved under;
+	// empty means OverrideKey.
+	ConfigKey string        `json:"config_key"`
+	Stored    overrideState `json:"stored"`
+	Edit      *string       `json:"edit"`
+	Displayed string        `json:"displayed"`
+	Payload   overrideState `json:"payload"`
+	Effective string        `json:"effective"`
 }
 
 // overrideProvider describes how one channel type is served and observed.
@@ -183,18 +197,80 @@ func resolveOverride(state overrideState) string {
 	return state.Other
 }
 
-// overrideConfigJSON renders a channel config holding the kept custom header
-// and, when override is non-nil, the override key. Parameters: t owns
-// assertions, key is the override key and override its value. Returns: JSON.
-func overrideConfigJSON(t *testing.T, key string, override *string) string {
-	t.Helper()
-	cfg := map[string]any{"custom_headers": map[string]string{overrideKeptHeader: "kept"}}
-	if override != nil {
-		cfg[key] = *override
+// configKey returns the exact config key spelling tc stores and saves its
+// override under. Parameters: tc is the fixture case. Returns: the spelling.
+func (tc overrideCase) configKey() string {
+	if tc.ConfigKey != "" {
+		return tc.ConfigKey
 	}
-	raw, err := json.Marshal(cfg)
+	return tc.OverrideKey
+}
+
+// overrideEntries returns the override spellings state places in a config, in
+// document order: the shadowed spelling first, then the case's config key.
+// Parameters: tc names the spelling and state is the pair. Returns: key/value pairs.
+func overrideEntries(tc overrideCase, state overrideState) [][2]string {
+	var entries [][2]string
+	if state.Shadowed != nil {
+		entries = append(entries, [2]string{state.Shadowed.Key, state.Shadowed.Value})
+	}
+	if state.Override != nil {
+		entries = append(entries, [2]string{tc.configKey(), *state.Override})
+	}
+	return entries
+}
+
+// overrideConfigJSON renders a channel config holding the override spellings
+// of state in order, then the kept custom header. Parameters: t owns
+// assertions, tc names the spelling and state is the pair. Returns: JSON.
+func overrideConfigJSON(t *testing.T, tc overrideCase, state overrideState) string {
+	t.Helper()
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	for _, entry := range overrideEntries(tc, state) {
+		key, err := json.Marshal(entry[0])
+		require.NoError(t, err)
+		value, err := json.Marshal(entry[1])
+		require.NoError(t, err)
+		buf.Write(key)
+		buf.WriteByte(':')
+		buf.Write(value)
+		buf.WriteByte(',')
+	}
+	headers, err := json.Marshal(map[string]string{overrideKeptHeader: "kept"})
 	require.NoError(t, err)
-	return string(raw)
+	buf.WriteString(`"custom_headers":`)
+	buf.Write(headers)
+	buf.WriteByte('}')
+	return buf.String()
+}
+
+// persistedOverrideEntries returns, in document order, every root key of the
+// config JSON raw that encoding/json decodes into the override field key
+// (a case-insensitive match), with its string value. Parameters: t owns
+// assertions, raw is the config JSON and key the override key. Returns: pairs.
+func persistedOverrideEntries(t *testing.T, raw, key string) [][2]string {
+	t.Helper()
+	dec := json.NewDecoder(strings.NewReader(raw))
+	open, err := dec.Token()
+	require.NoError(t, err)
+	require.Equal(t, json.Delim('{'), open, "config must be an object; config=%s", raw)
+	var entries [][2]string
+	for dec.More() {
+		token, err := dec.Token()
+		require.NoError(t, err)
+		name, ok := token.(string)
+		require.True(t, ok, "config key must be a string; config=%s", raw)
+		var value json.RawMessage
+		require.NoError(t, dec.Decode(&value))
+		if !strings.EqualFold(name, key) {
+			continue
+		}
+		var text string
+		require.NoError(t, json.Unmarshal(value, &text), "config.%s must be a string; config=%s", name, raw)
+		entries = append(entries, [2]string{name, text})
+	}
+	return entries
 }
 
 // newOverrideEnv stores the channel of tc in state stored and mounts the admin
@@ -220,7 +296,7 @@ func newOverrideEnv(t *testing.T, tc overrideCase, stored overrideState) *overri
 	other, baseURL, priority := stored.Other, provider.baseURL, int64(0)
 	row := &model.Channel{Id: overrideChannelID, UUID: uuid.NewString(), Type: tc.Type, Status: model.ChannelStatusEnabled,
 		Name: "override-" + tc.Name, Models: provider.modelName, Group: "default", BaseURL: &baseURL, Key: overrideChannelKey(tc.Type),
-		Priority: &priority, Other: &other, Config: overrideConfigJSON(t, provider.key, stored.Override)}
+		Priority: &priority, Other: &other, Config: overrideConfigJSON(t, tc, stored)}
 	require.NoError(t, model.DB.Create(row).Error)
 	require.NoError(t, row.AddAbilities())
 	require.NoError(t, model.DB.Create(&model.User{Id: overrideAdminID, UUID: uuid.NewString(), Username: "e2e-override-admin",
@@ -258,18 +334,17 @@ func overrideChannelKey(channelType int) string {
 }
 
 // save submits payload through PUT /api/channel/ exactly as the editors do:
-// the stored config with the override key set or removed, the new `other`,
-// a renamed channel and no key (an empty key keeps the stored secret).
+// the stored config with the override spellings set or removed, the new
+// `other`, a renamed channel and no key (an empty key keeps the stored secret).
 // Parameters: t owns assertions, tc names the channel and payload is the
 // submitted pair. Returns: the persisted channel row.
 func (e *overrideEnv) save(t *testing.T, tc overrideCase, payload overrideState) model.Channel {
 	t.Helper()
-	provider := overrideProviders[tc.Type]
 	var stored model.Channel
 	require.NoError(t, model.DB.Where("id = ?", overrideChannelID).Take(&stored).Error)
 	body, err := json.Marshal(map[string]any{
 		"uuid": stored.UUID, "name": "override-saved", "type": tc.Type, "base_url": stored.GetBaseURL(), "models": stored.Models,
-		"group": "default", "other": payload.Other, "config": overrideConfigJSON(t, provider.key, payload.Override),
+		"group": "default", "other": payload.Other, "config": overrideConfigJSON(t, tc, payload),
 	})
 	require.NoError(t, err)
 	req := httptest.NewRequest(http.MethodPut, "/api/channel/", strings.NewReader(string(body)))
@@ -285,7 +360,8 @@ func (e *overrideEnv) save(t *testing.T, tc overrideCase, payload overrideState)
 	return saved
 }
 
-// requirePersisted asserts the saved row holds payload unchanged and kept the
+// requirePersisted asserts the saved row holds payload unchanged: the same
+// `other`, exactly the payload's override spellings in the same order, the
 // unrelated config key and the stored key. Parameters: t owns assertions, tc
 // names the channel, payload is the submitted pair and saved the read-back row.
 func requirePersisted(t *testing.T, tc overrideCase, payload overrideState, saved model.Channel) {
@@ -295,15 +371,10 @@ func requirePersisted(t *testing.T, tc overrideCase, payload overrideState, save
 	require.Equal(t, overrideChannelKey(tc.Type), saved.Key, "an omitted key keeps the stored secret")
 	require.NotNil(t, saved.Other, "other must be persisted")
 	require.Equal(t, payload.Other, *saved.Other, "persisted other")
+	require.Equal(t, overrideEntries(tc, payload), persistedOverrideEntries(t, saved.Config, provider.key),
+		"persisted override spellings of config.%s; config=%s", provider.key, saved.Config)
 	var cfg map[string]any
 	require.NoError(t, json.Unmarshal([]byte(saved.Config), &cfg), "persisted config=%s", saved.Config)
-	value, present := cfg[provider.key]
-	if payload.Override == nil {
-		require.False(t, present, "the override key must be absent; config=%s", saved.Config)
-	} else {
-		require.True(t, present, "the override key must be present; config=%s", saved.Config)
-		require.Equal(t, *payload.Override, value, "persisted config.%s", provider.key)
-	}
 	require.Equal(t, map[string]any{overrideKeptHeader: "kept"}, cfg["custom_headers"], "unrelated config keys must survive the save")
 }
 
@@ -347,9 +418,12 @@ func (e *overrideEnv) requireEffective(t *testing.T, tc overrideCase, effective 
 // editor contract for every fixture case: the stored channel is saved through
 // the shipped admin API with the payload the editors send, the row holds that
 // payload unchanged, and the relay (distributor plus the real provider
-// request) uses the effective value. A final case pins the reviewer's bug at
-// the backend boundary: an editor that edits only `other` while a conflicting
-// override is stored leaves the provider on the stale override.
+// request) uses the effective value, including overrides stored under another
+// letter case and a shadowed earlier spelling. The final cases pin the
+// reviewers' bugs at the backend boundary: an editor that edits only `other`
+// while a conflicting override is stored, or that clears only the exact
+// lowercase key while another spelling is stored, leaves the provider on a
+// stale override.
 func TestE2EChannelOtherOverrideContract(t *testing.T) {
 	cases := loadOverrideCases(t)
 	for _, tc := range cases {
@@ -357,6 +431,13 @@ func TestE2EChannelOtherOverrideContract(t *testing.T) {
 			provider, ok := overrideProviders[tc.Type]
 			require.True(t, ok, "fixture type %d has no provider surface", tc.Type)
 			require.Equal(t, provider.key, tc.OverrideKey, "the fixture override key must match the distributor rule")
+			require.True(t, strings.EqualFold(tc.configKey(), tc.OverrideKey), "config_key must be a spelling of the override key")
+			for _, state := range []overrideState{tc.Stored, tc.Payload} {
+				if state.Shadowed != nil {
+					require.True(t, strings.EqualFold(state.Shadowed.Key, tc.OverrideKey), "a shadowed key must be a spelling of the override key")
+					require.NotEqual(t, tc.configKey(), state.Shadowed.Key, "a shadowed key must differ from config_key")
+				}
+			}
 			require.Equal(t, resolveOverride(tc.Stored), tc.Displayed, "displayed must be the stored effective value")
 			require.Equal(t, resolveOverride(tc.Payload), tc.Effective, "effective must follow distributor precedence")
 			if tc.Edit == nil {
@@ -394,5 +475,24 @@ func TestE2EChannelOtherOverrideContract(t *testing.T) {
 		saved := env.save(t, conflict, stale)
 		requirePersisted(t, conflict, stale, saved)
 		env.requireEffective(t, conflict, *conflict.Stored.Override)
+	})
+
+	t.Run("pre_fix_exact_key_clear_keeps_shadowed_spelling", func(t *testing.T) {
+		var cleared overrideCase
+		for _, tc := range cases {
+			if tc.Name == "ali_shadowed_spelling_cleared" {
+				cleared = tc
+			}
+		}
+		require.NotNil(t, cleared.Stored.Shadowed, "the fixture must keep ali_shadowed_spelling_cleared")
+		require.Nil(t, cleared.Payload.Override)
+		// The pre-fix editors deleted only the exact lowercase key, so the
+		// shadowed spelling survived the clear and the relay applied it.
+		stale := overrideState{Other: "", Shadowed: cleared.Stored.Shadowed}
+
+		env := newOverrideEnv(t, cleared, cleared.Stored)
+		saved := env.save(t, cleared, stale)
+		requirePersisted(t, cleared, stale, saved)
+		env.requireEffective(t, cleared, cleared.Stored.Shadowed.Value)
 	})
 }

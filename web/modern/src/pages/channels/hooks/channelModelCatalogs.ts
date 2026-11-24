@@ -67,28 +67,51 @@ const requestChannelModelCatalog = async (endpoint: string): Promise<ChannelMode
 const describeError = (reason: unknown): string => (reason instanceof Error ? reason.message : String(reason));
 
 /**
- * loadChannelModelCatalogs requests the complete provider catalog and the default suggestions in
- * parallel and resolves to both; it never rejects. A failed complete catalog resolves to an empty
- * catalog (so mapping target checks are skipped rather than guessed) after a string-only console
- * error. Failed default suggestions fall back to the complete catalog, after a string-only console
- * warning, so the Fill actions keep working against an older server.
+ * ChannelModelCatalogListener receives each catalog as soon as it is known: `onFull` with the
+ * complete catalog, and `onDefaults` with the default suggestions (or with the complete catalog
+ * once both the suggestions failed and the complete catalog has settled).
  */
-export const loadChannelModelCatalogs = async (): Promise<ChannelModelCatalogs> => {
-  const [fullResult, defaultsResult] = await Promise.allSettled([
-    requestChannelModelCatalog(CHANNEL_MODELS_CATALOG_ENDPOINT),
-    requestChannelModelCatalog(CHANNEL_DEFAULT_MODELS_ENDPOINT),
-  ]);
-  let full: ChannelModelCatalog = {};
-  if (fullResult.status === 'fulfilled') {
-    full = fullResult.value;
-  } else {
-    console.error(`Error loading models catalog: ${describeError(fullResult.reason)}`);
-  }
-  if (defaultsResult.status === 'fulfilled') {
-    return { full, defaults: defaultsResult.value };
-  }
-  console.warn(
-    `[channel-models] default model suggestions unavailable, Fill uses the complete catalog: ${describeError(defaultsResult.reason)}`
+export interface ChannelModelCatalogListener {
+  onFull?: (catalog: ChannelModelCatalog) => void;
+  onDefaults?: (catalog: ChannelModelCatalog) => void;
+}
+
+/**
+ * loadChannelModelCatalogs requests the complete provider catalog and the default suggestions in
+ * parallel and hands each to the listener as soon as its own request settles, so a slow or failed
+ * suggestions request never delays the complete catalog. It takes an optional listener and
+ * resolves to both catalogs once both requests settled; it never rejects. A failed complete
+ * catalog resolves to an empty catalog (so mapping target checks are skipped rather than guessed)
+ * after a string-only console error. Failed default suggestions fall back to the complete catalog,
+ * after a string-only console warning, so the Fill actions keep working against an older server.
+ */
+export const loadChannelModelCatalogs = async (listener: ChannelModelCatalogListener = {}): Promise<ChannelModelCatalogs> => {
+  // Whichever request settles second publishes the fallback, so it is published exactly once.
+  let settledFull: ChannelModelCatalog | null = null;
+  let defaultsFailed = false;
+  const fullSettled = requestChannelModelCatalog(CHANNEL_MODELS_CATALOG_ENDPOINT)
+    .catch((reason: unknown): ChannelModelCatalog => {
+      console.error(`Error loading models catalog: ${describeError(reason)}`);
+      return {};
+    })
+    .then((full) => {
+      settledFull = full;
+      listener.onFull?.(full);
+      if (defaultsFailed) listener.onDefaults?.(full);
+      return full;
+    });
+  const defaultsSettled = requestChannelModelCatalog(CHANNEL_DEFAULT_MODELS_ENDPOINT).then(
+    (defaults) => {
+      listener.onDefaults?.(defaults);
+      return defaults;
+    },
+    (reason: unknown) => {
+      console.warn(`[channel-models] default model suggestions unavailable, Fill uses the complete catalog: ${describeError(reason)}`);
+      defaultsFailed = true;
+      if (settledFull !== null) listener.onDefaults?.(settledFull);
+      return fullSettled;
+    }
   );
-  return { full, defaults: full };
+  const [full, defaults] = await Promise.all([fullSettled, defaultsSettled]);
+  return { full, defaults };
 };

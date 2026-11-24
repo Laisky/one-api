@@ -200,52 +200,55 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
     try {
       setSubmitting(true);
-      if (values.base_url && values.base_url.endsWith('/')) {
-        values.base_url = values.base_url.slice(0, values.base_url.length - 1);
+      // The request body is a copy: Formik's values stay as displayed, so a failed save leaves the
+      // form, and the untouched-field comparison of the next save, unchanged.
+      const body = { ...values };
+      if (body.base_url && body.base_url.endsWith('/')) {
+        body.base_url = body.base_url.slice(0, body.base_url.length - 1);
       }
       // An untouched field resends the stored values; an edit also replaces a stored override.
       const otherSave = resolveOtherSave(otherSnapshot.current, values.type, values.other, values.config);
-      values.other = otherSave.other;
+      body.other = otherSave.other;
       // The legacy defaults apply only when no typed override supplies the value.
       const overridden = storedOtherOverride(values.type, otherSave.config) !== '';
-      if (!overridden && values.type === 3 && values.other === '') {
-        values.other = '2023-09-01-preview';
+      if (!overridden && body.type === 3 && body.other === '') {
+        body.other = '2023-09-01-preview';
       }
-      if (!overridden && values.type === 18 && values.other === '') {
-        values.other = 'v2.1';
+      if (!overridden && body.type === 18 && body.other === '') {
+        body.other = 'v2.1';
       }
-      if (values.key === '') {
+      if (body.key === '') {
         if (values.config.ak && values.config.sk && values.config.region) {
-          values.key = `${values.config.ak}|${values.config.sk}|${values.config.region}`;
+          body.key = `${values.config.ak}|${values.config.sk}|${values.config.region}`;
         } else if (values.config.region && values.config.vertex_ai_project_id && values.config.vertex_ai_adc) {
-          values.key = `${values.config.region}|${values.config.vertex_ai_project_id}|${values.config.vertex_ai_adc}`;
+          body.key = `${values.config.region}|${values.config.vertex_ai_project_id}|${values.config.vertex_ai_adc}`;
         }
       }
 
       let res;
       const modelsStr = values.models.map((model) => model.id).join(',');
       const configStr = JSON.stringify(otherSave.config);
-      values.group = values.groups.join(',');
+      body.group = values.groups.join(',');
 
       // Handle pricing fields - convert empty strings to null for the API
-      if (values.model_ratio === '') {
-        values.model_ratio = null;
+      if (body.model_ratio === '') {
+        body.model_ratio = null;
       }
-      if (values.completion_ratio === '') {
-        values.completion_ratio = null;
+      if (body.completion_ratio === '') {
+        body.completion_ratio = null;
       }
-      if (values.model_configs === '') {
-        values.model_configs = null;
+      if (body.model_configs === '') {
+        body.model_configs = null;
       }
       if (channelId) {
         res = await API.put(`/api/channel/`, omitUnownedChannelFields({
-          ...values,
+          ...body,
           uuid: channelId,
           models: modelsStr,
           config: configStr
         }));
       } else {
-        res = await API.post(`/api/channel/`, { ...values, models: modelsStr, config: configStr });
+        res = await API.post(`/api/channel/`, { ...body, models: modelsStr, config: configStr });
       }
       const { success, message } = res.data;
       if (success) {

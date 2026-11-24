@@ -36,8 +36,11 @@ const FULL_CATALOG = { [GROQ]: ['llama-3.1-8b-instant', 'openai/gpt-oss-120b', P
 const DEFAULT_SUGGESTIONS = { [GROQ]: ['llama-3.1-8b-instant', 'openai/gpt-oss-120b'], 1: ['gpt-4o'] };
 const TARGET_PRICING = '{"minimaxai/minimax-m2.7":{"ratio":0.15,"completion_ratio":4}}';
 
-/** mockGroqEditor serves the editor's GETs for a stored Groq channel; `defaults` decides what /api/models/defaults does. */
-const mockGroqEditor = (defaults: 'ok' | 'reject' | 'unsuccessful' = 'ok') => {
+/**
+ * mockGroqEditor serves the editor's GETs for a stored Groq channel; `defaults` decides what /api/models/defaults does
+ * (a promise answers it when settled), and `full`, when supplied, answers /api/models instead of the catalog.
+ */
+const mockGroqEditor = (defaults: 'ok' | 'reject' | 'unsuccessful' | Promise<unknown> = 'ok', full?: Promise<unknown>) => {
   mockApiGet.mockImplementation((url: string) => {
     if (url.startsWith('/api/channel/1')) {
       return Promise.resolve({
@@ -48,11 +51,13 @@ const mockGroqEditor = (defaults: 'ok' | 'reject' | 'unsuccessful' = 'ok') => {
       });
     }
     if (url.startsWith('/api/models/defaults')) {
+      if (typeof defaults !== 'string') return defaults;
       if (defaults === 'reject') return Promise.reject(new Error('Request failed with status code 404'));
       if (defaults === 'unsuccessful') return Promise.resolve({ data: { success: false, message: 'not found' } });
       return Promise.resolve({ data: { success: true, data: DEFAULT_SUGGESTIONS } });
     }
     if (url.startsWith('/api/models')) {
+      if (full) return full;
       return Promise.resolve({ data: { success: true, data: FULL_CATALOG } });
     }
     if (url.startsWith('/api/channel/default-pricing')) {
@@ -127,6 +132,40 @@ describe('useChannelForm model catalogs', () => {
       expect(typeof catalogWarnings[0][0]).toBe('string');
     }
   );
+
+  it('publishes the complete catalog without waiting for slow default suggestions', async () => {
+    let releaseDefaults: (value: unknown) => void = () => {};
+    mockGroqEditor(new Promise((resolve) => (releaseDefaults = resolve)));
+    try {
+      const { result } = await renderLoadedEditor();
+      expect(result.current.modelsCatalog).toEqual(FULL_CATALOG);
+      expect(result.current.defaultModelsCatalog).toEqual({});
+
+      await act(async () => releaseDefaults({ data: { success: true, data: DEFAULT_SUGGESTIONS } }));
+      await waitFor(() => expect(result.current.defaultModelsCatalog).toEqual(DEFAULT_SUGGESTIONS));
+      expect(result.current.modelsCatalog).toEqual(FULL_CATALOG);
+    } finally {
+      releaseDefaults({ data: { success: true, data: DEFAULT_SUGGESTIONS } });
+    }
+  });
+
+  it('falls back to the complete catalog once it arrives after the default suggestions failed', async () => {
+    let releaseFull: (value: unknown) => void = () => {};
+    mockGroqEditor('reject', new Promise((resolve) => (releaseFull = resolve)));
+    const { result } = renderHook(() => useChannelForm());
+    try {
+      await waitFor(() =>
+        expect(warn.mock.calls.some((call: unknown[]) => String(call[0]).includes('default model suggestions'))).toBe(true)
+      );
+      expect(result.current.defaultModelsCatalog).toEqual({});
+
+      await act(async () => releaseFull({ data: { success: true, data: FULL_CATALOG } }));
+      await waitFor(() => expect(result.current.defaultModelsCatalog).toEqual(FULL_CATALOG));
+      expect(result.current.modelsCatalog).toEqual(FULL_CATALOG);
+    } finally {
+      releaseFull({ data: { success: true, data: FULL_CATALOG } });
+    }
+  });
 
   it('saves a new alias to an explicitly priced target excluded from the defaults without any warning', async () => {
     mockGroqEditor();

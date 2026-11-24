@@ -32,15 +32,23 @@ const mockApiGet = vi.mocked(api.get);
 const mockApiPost = vi.mocked(api.post);
 const mockApiPut = vi.mocked(api.put);
 
+/** OverrideState is the stored or submitted `other` value, override, and optional shadowed spelling. */
+interface OverrideState {
+  other: string;
+  override: string | null;
+  shadowed?: { key: string; value: string } | null;
+}
+
 /** OtherOverrideCase is one entry of the shared Go/frontend contract fixture. */
 interface OtherOverrideCase {
   name: string;
   type: number;
   override_key: string;
-  stored: { other: string; override: string | null };
+  config_key?: string;
+  stored: OverrideState;
   edit: string | null;
   displayed: string;
-  payload: { other: string; override: string | null };
+  payload: OverrideState;
   effective: string;
 }
 
@@ -49,16 +57,26 @@ const fixture = JSON.parse(readFileSync(resolve(repoRoot, 'test/testdata/channel
   cases: OtherOverrideCase[];
 };
 
+/** expectedEntries lists the override spellings a fixture state places in config, in order. */
+const expectedEntries = (testCase: OtherOverrideCase, state: OverrideState): [string, string][] => [
+  ...(state.shadowed ? [[state.shadowed.key, state.shadowed.value] as [string, string]] : []),
+  ...(state.override === null ? [] : [[testCase.config_key ?? testCase.override_key, state.override] as [string, string]]),
+];
+
+/** overrideEntries lists, in config order, every key of config that spells the override key in any letter case. */
+const overrideEntries = (config: Record<string, unknown>, key: string): [string, unknown][] =>
+  Object.entries(config).filter(([name]) => name.toLowerCase() === key);
+
 /**
  * mockStoredChannel serves the editor's GET requests for one stored channel whose `other` and
- * typed config override come from the fixture case; the config also carries an unrelated key that
- * must round-trip.
+ * typed config override spellings come from the fixture case; the config also carries an
+ * unrelated key that must round-trip.
  */
 const mockStoredChannel = (testCase: OtherOverrideCase) => {
-  const config: Record<string, unknown> = { future_backend_key: 'kept' };
-  if (testCase.stored.override !== null) {
-    config[testCase.override_key] = testCase.stored.override;
-  }
+  const config: Record<string, unknown> = {
+    future_backend_key: 'kept',
+    ...Object.fromEntries(expectedEntries(testCase, testCase.stored)),
+  };
   mockApiGet.mockImplementation((url: string) => {
     if (url.startsWith('/api/channel/1')) {
       return Promise.resolve({
@@ -134,11 +152,7 @@ describe('channel editor binding of the legacy other field to its typed config o
       const body = mockApiPut.mock.calls[0][1] as { other: unknown; config: string };
       expect(body.other).toBe(testCase.payload.other);
       const submittedConfig = JSON.parse(body.config) as Record<string, unknown>;
-      if (testCase.payload.override === null) {
-        expect(submittedConfig).not.toHaveProperty(testCase.override_key);
-      } else {
-        expect(submittedConfig[testCase.override_key]).toBe(testCase.payload.override);
-      }
+      expect(overrideEntries(submittedConfig, testCase.override_key)).toEqual(expectedEntries(testCase, testCase.payload));
       expect(submittedConfig.future_backend_key).toBe('kept');
     }
   );
@@ -170,39 +184,43 @@ describe('channel editor binding of the legacy other field to its typed config o
     expect(JSON.parse(body.config)).not.toHaveProperty('api_version');
   });
 
-  it('keeps clearing every typed override when the channel type changes', async () => {
-    mockStoredChannel({
-      name: 'azure_type_change',
-      type: 3,
-      override_key: 'api_version',
-      stored: { other: '2024-02-01', override: '2024-10-21' },
-      edit: null,
-      displayed: '2024-10-21',
-      payload: { other: '', override: null },
-      effective: '',
-    });
+  it.each([undefined, 'API_VERSION'])(
+    'keeps clearing every typed override when the channel type changes (config key %s)',
+    async (configKey) => {
+      mockStoredChannel({
+        name: 'azure_type_change',
+        type: 3,
+        override_key: 'api_version',
+        config_key: configKey,
+        stored: { other: '2024-02-01', override: '2024-10-21', shadowed: { key: 'Api_Version', value: '2023-05-15' } },
+        edit: null,
+        displayed: '2024-10-21',
+        payload: { other: '', override: null },
+        effective: '',
+      });
 
-    const { result } = renderHook(() => useChannelForm());
-    await waitFor(() => {
-      expect(result.current.loading).toBe(false);
-    });
+      const { result } = renderHook(() => useChannelForm());
+      await waitFor(() => {
+        expect(result.current.loading).toBe(false);
+      });
 
-    act(() => {
-      result.current.requestTypeChange(1);
-    });
-    act(() => {
-      result.current.confirmTypeChange();
-    });
-    await act(async () => {
-      await result.current.form.handleSubmit(result.current.onSubmit)();
-    });
+      act(() => {
+        result.current.requestTypeChange(1);
+      });
+      act(() => {
+        result.current.confirmTypeChange();
+      });
+      await act(async () => {
+        await result.current.form.handleSubmit(result.current.onSubmit)();
+      });
 
-    expect(mockApiPut).toHaveBeenCalledTimes(1);
-    const body = mockApiPut.mock.calls[0][1] as { type: number; other: unknown; config: string };
-    expect(body.type).toBe(1);
-    expect(body.other).toBe('');
-    const submittedConfig = JSON.parse(body.config) as Record<string, unknown>;
-    expect(submittedConfig).not.toHaveProperty('api_version');
-    expect(submittedConfig.future_backend_key).toBe('kept');
-  });
+      expect(mockApiPut).toHaveBeenCalledTimes(1);
+      const body = mockApiPut.mock.calls[0][1] as { type: number; other: unknown; config: string };
+      expect(body.type).toBe(1);
+      expect(body.other).toBe('');
+      const submittedConfig = JSON.parse(body.config) as Record<string, unknown>;
+      expect(overrideEntries(submittedConfig, 'api_version')).toEqual([]);
+      expect(submittedConfig.future_backend_key).toBe('kept');
+    }
+  );
 });
