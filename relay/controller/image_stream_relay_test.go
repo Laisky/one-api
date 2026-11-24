@@ -172,6 +172,14 @@ func TestStrictGPTImageStreamedResponses(t *testing.T) {
 			},
 		},
 		{
+			// Two final images, one with an empty usage object: that image's
+			// cost is unknown, so the summed receipt is incomplete and the
+			// two-image hold settles instead of one image's price.
+			name: "empty_usage_for_one_image_keeps_the_hold", count: 2, extra: `,"n":2`,
+			stream: imageStreamFrames(false, 0, strictImageStreamUsage, `{}`), source: "default_fallback",
+			chargeFn: func(hold int64) int64 { return hold },
+		},
+		{
 			// Two images requested, one receipt: the receipt may cover only
 			// one image, so the two-image hold settles.
 			name: "missing_receipt_for_a_requested_image_keeps_the_hold", count: 2, extra: `,"n":2`,

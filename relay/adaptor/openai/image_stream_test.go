@@ -159,6 +159,21 @@ func TestImageHandlerRelaysEventStreams(t *testing.T) {
 			receipt: adaptor.ImageStreamReceipt{Completed: 1, Interrupted: true},
 		},
 		{
+			// An empty usage object prices nothing: not a receipt.
+			name:    "final_image_with_empty_usage",
+			stream:  "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"AQ==\",\"usage\":{}}\n\n",
+			receipt: adaptor.ImageStreamReceipt{Completed: 1, Interrupted: true},
+			billed:  true,
+		},
+		{
+			// Output only: its counters are kept for the ceiling, but it
+			// is not a complete receipt.
+			name:    "final_image_with_output_only_usage",
+			stream:  "data: {\"type\":\"image_generation.completed\",\"b64_json\":\"AQ==\",\"usage\":{\"output_tokens\":1756}}\n\n",
+			receipt: adaptor.ImageStreamReceipt{Completed: 1, Interrupted: true},
+			billed:  true,
+		},
+		{
 			name:    "error_event",
 			stream:  imageStreamPartial("image_generation.partial_image", 0) + "event: error\ndata: {\"type\":\"error\",\"error\":{\"message\":\"server_error\"}}\n\n",
 			receipt: adaptor.ImageStreamReceipt{Partials: 1, Failed: true},

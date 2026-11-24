@@ -107,6 +107,25 @@ func buildOpenAIImageRequestForChannel(req *relaymodel.ImageRequest, channelType
 	return request
 }
 
+// verbatimImageBilledCount returns the image count the hold and the
+// missing-receipt charge cover. A re-encoded body sends the normalized count.
+// A verbatim body sends the client's own n, which a channel max_images clamp
+// only applied to the gateway's copy: strict GPT Image models render exactly
+// that n, and every other model is held for the larger of it and the
+// normalized count, since a min_images raise may reflect a provider minimum.
+// Parameters: normalized is the normalized billed count, client the client's
+// n, reencoded whether the body was re-encoded, and strict whether the model
+// uses strict GPT Image billing. Returns: the count to bill.
+func verbatimImageBilledCount(normalized, client int, reencoded, strict bool) int {
+	if reencoded || client <= 0 {
+		return normalized
+	}
+	if strict {
+		return client
+	}
+	return max(normalized, client)
+}
+
 // normalizeImageSizeKey canonicalizes an image size for pricing lookups.
 // Parameters: value is a provider-facing size string. Returns: a lowercase,
 // whitespace-free key using "x" as the dimension separator.

@@ -282,6 +282,7 @@ func RelayImageHelper(c *gin.Context, relayMode int) *relaymodel.ErrorWithStatus
 	if meta.ChannelType == channeltype.Replicate && billedCount > 1 {
 		billedCount = 1
 	}
+	billedCount = verbatimImageBilledCount(billedCount, clientImageN, bodyReencoded, usesStrictGPTImageTokenBilling(imageModel))
 	// Strict GPT Image settlement prices the receipt with the request-start
 	// token tariff; the default reservation below is priced from the same one.
 	imageUsageConfig := resolveStrictGPTImageUsageConfig(imageModel, channelModelConfigs, channelModelRatio, pricingAdaptor, meta.StartTime)

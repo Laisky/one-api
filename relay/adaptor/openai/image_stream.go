@@ -235,9 +235,23 @@ func (r *imageStreamRelay) dispatch(lg glog.Logger) {
 			r.receipt.Interrupted = true
 			return
 		}
-		r.receipt.Receipts++
+		if !imageStreamUsageUsable(event.Usage) {
+			// The image's cost is unknown, so the stream is not a complete
+			// receipt. Its counters still raise the ceiling settlement charges.
+			r.receipt.Interrupted = true
+		} else {
+			r.receipt.Receipts++
+		}
 		r.usage = addImageStreamUsage(r.usage, event.Usage.Convert2GeneralUsage())
 	}
+}
+
+// imageStreamUsageUsable reports whether a final-image usage states both an
+// output count and an input count (input_tokens, or a total above the output),
+// the minimum that prices one image. Parameters: usage is the event usage.
+// Returns: true when the usage can count as that image's receipt.
+func imageStreamUsageUsable(usage *ImageUsage) bool {
+	return usage.OutputTokens > 0 && (usage.InputTokens > 0 || usage.TotalTokens > usage.OutputTokens)
 }
 
 // imageStreamSink forwards an oversized data payload to the client while

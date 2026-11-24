@@ -78,7 +78,10 @@ re-encoded body sends the normalized `n` (raised to the channel's `min_images`,
 clamped to `max_images`). A verbatim body sends the client's own positive `n`,
 so a `min_images` that only raised the gateway's copy is neither held nor
 charged, and an `n` above `max_images` that reaches the provider unclamped is
-held in full.
+held in full. Every other per-image billed model (a flat price or a megapixel
+tariff) whose body is forwarded verbatim is held for the larger of the client's
+`n` and the normalized count, since a `min_images` raise there may reflect a
+provider minimum (`verbatimImageBilledCount`).
 
 ### Calculator formula
 
@@ -311,10 +314,15 @@ cookies). It reads the events only for billing (`imageStreamHandler` in
 - The stream receipt is incomplete when the transport fails, the client
   connection drops, an `error` event arrives, an event cannot be read (or is
   larger than 64 MiB), a final event carries no usage, or fewer final events
-  arrive than images were requested. An incomplete receipt settles like any
-  incomplete receipt, `max(hold, ceiling)`, and is flagged as an estimate; on
-  older GPT Image models it never settles below the hold
-  (`image_stream_receipt_incomplete`).
+  arrive than images were requested; a final event whose usage lacks an
+  output or input count is not counted as a receipt either. An incomplete
+  stream that returned final-image usage settles like any incomplete receipt,
+  `max(hold, ceiling)` with the partial-image tokens added, and is flagged as
+  an estimate; on older GPT Image models it never settles below the hold
+  (`image_stream_receipt_incomplete`). A stream that returned no final-image
+  usage at all (only partial images, or a failure before the final event)
+  settles at the hold alone, which already covers the requested partial
+  images.
 
 The client already holds a `200` event stream when a later failure is found, so
 the relay ends the stream instead of answering with a JSON error; the attempt is
