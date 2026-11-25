@@ -58,14 +58,38 @@ func TestGetModelsDisplayLocalTokenTariffMatchesBilling(t *testing.T) {
 			resolved, ok := pricing.ResolveModelConfig(f.name, configs, provider, at)
 			require.True(t, ok)
 			displayedInput, displayedOutput, displayedCache := info.InputPrice, info.OutputPrice, info.CachedInputPrice
-			if f.kind == "own_window" {
+			completion := f.local.CompletionRatio
+			switch {
+			case f.kind == "own_window":
 				require.Len(t, info.TimeWindows, 1)
 				require.Equal(t, "local-always", info.ActiveTimeWindow)
 				require.Equal(t, "local-always", info.TimeWindows[0].Name)
 				displayedInput = info.TimeWindows[0].Overlay.InputPrice
 				displayedOutput = info.TimeWindows[0].Overlay.OutputPrice
 				displayedCache = info.TimeWindows[0].Overlay.CachedInputPrice
-			} else {
+			case f.local.Ratio == 0:
+				// An entry without ratio inherits the provider's schedule as a unit
+				// (relaypricing.InheritProviderSchedule), windows included; the
+				// window billing applies now must be the displayed active one.
+				windows := provider.GetDefaultModelPricing()[f.name].TimeWindows
+				require.Len(t, info.TimeWindows, len(windows), "an entry without ratio inherits the provider's windows")
+				active := -1
+				for i, window := range windows {
+					if pricing.MatchTimeWindow(window, at) {
+						active = i
+						break
+					}
+				}
+				require.NotEqual(t, -1, active, "DeepSeek publishes an always-on off-peak window")
+				require.Equal(t, windows[active].Name, info.ActiveTimeWindow)
+				overlay := info.TimeWindows[active].Overlay
+				require.Positive(t, overlay.InputPrice)
+				require.Positive(t, overlay.OutputPrice)
+				require.Positive(t, overlay.CachedInputPrice, "the entry's stated cache price is never undercut")
+				displayedInput, displayedOutput, displayedCache = overlay.InputPrice, overlay.OutputPrice, overlay.CachedInputPrice
+				// A window never undercuts the entry's stated completion ratio.
+				completion = max(completion, windows[active].Overlay.CompletionRatio)
+			default:
 				require.Empty(t, info.TimeWindows, "a saved local token tariff must not advertise inherited provider schedules")
 				require.Empty(t, info.ActiveTimeWindow)
 			}
@@ -77,7 +101,7 @@ func TestGetModelsDisplayLocalTokenTariffMatchesBilling(t *testing.T) {
 				expectedCache = 0
 			}
 			require.InDelta(t, input/ratio.MilliTokensUsd, displayedInput, 1e-12)
-			require.InDelta(t, input*f.local.CompletionRatio/ratio.MilliTokensUsd, displayedOutput, 1e-12)
+			require.InDelta(t, input*completion/ratio.MilliTokensUsd, displayedOutput, 1e-12)
 			require.InDelta(t, expectedCache/ratio.MilliTokensUsd, displayedCache, 1e-12)
 			billed := quota.Compute(quota.ComputeInput{Usage: &relaymodel.Usage{PromptTokens: 10000, CompletionTokens: 5000, PromptTokensDetails: &relaymodel.UsagePromptTokensDetails{CachedTokens: 2000}}, ModelName: f.name, ModelRatio: input, ChannelModelRatio: f.ch.GetModelRatioFromConfigs(), ChannelCompletionRatio: f.ch.GetCompletionRatioFromConfigs(), GroupRatio: 1, ChannelModelConfigs: configs, PricingAdaptor: provider, RequestTime: at})
 			displayedQuota := int64(math.Ceil((8000*displayedInput + 2000*displayedCache + 5000*displayedOutput) * ratio.MilliTokensUsd))

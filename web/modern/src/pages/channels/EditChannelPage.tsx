@@ -27,6 +27,7 @@ export function EditChannelPage() {
     loading,
     isSubmitting,
     modelsCatalog,
+    defaultModelsCatalog,
     defaultPricing,
     defaultTooling,
     defaultBaseURL,
@@ -77,11 +78,13 @@ export function EditChannelPage() {
     );
   }
 
+  // Selector options and known mapping targets come from the complete provider catalog; the Fill
+  // actions add only the zero-config default suggestions.
   const availableModels = (modelsCatalog[normalizedChannelType ?? -1] ?? [])
     .map((model) => ({ id: model, name: model }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  const currentCatalogModels = modelsCatalog[normalizedChannelType ?? -1] ?? [];
+  const defaultModels = defaultModelsCatalog[normalizedChannelType ?? -1] ?? [];
 
   // RHF invalid handler
   const onInvalid = (errors: any) => {
@@ -170,7 +173,7 @@ export function EditChannelPage() {
                 <ChannelModelSettings
                   form={form}
                   availableModels={availableModels}
-                  currentCatalogModels={currentCatalogModels}
+                  defaultModels={defaultModels}
                   defaultPricing={defaultPricing}
                   tr={tr}
                   notify={notify}

@@ -425,7 +425,14 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 		c.Set(ctxkey.RateLimit, 0)
 	}
 
-	cfg, _ := channel.LoadConfig()
+	cfg, err := channel.LoadConfig()
+	if err != nil {
+		// Keep the established degraded behavior (whatever parsed, then the
+		// legacy fallbacks below) but never hide the misconfiguration. The
+		// error names the channel and the parse failure, not config values.
+		lg.Warn("channel config is malformed; typed config overrides are ignored",
+			zap.Int("channel_id", channel.Id), zap.Error(err))
+	}
 	// this is for backward compatibility
 	if channel.Other != nil {
 		switch channel.Type {

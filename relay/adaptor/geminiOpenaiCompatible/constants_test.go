@@ -119,7 +119,8 @@ func TestGemini31FlashLivePreviewPricing(t *testing.T) {
 	require.InDelta(t, 4.50/0.75, cfg.CompletionRatio, 1e-12)
 	require.NotNil(t, cfg.Audio, "expected live preview audio pricing metadata")
 	require.InDelta(t, 3.00/0.75, cfg.Audio.PromptRatio, 1e-12)
-	require.InDelta(t, 12.00/4.50, cfg.Audio.CompletionRatio, 1e-12)
+	// Audio output $12.00 relative to audio input $3.00 (not to text output).
+	require.InDelta(t, 12.00/3.00, cfg.Audio.CompletionRatio, 1e-12)
 }
 
 func TestGetModelModalitiesGeminiVersionCutoff(t *testing.T) {

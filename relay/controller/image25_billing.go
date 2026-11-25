@@ -29,8 +29,9 @@ const (
 
 // usesStrictGPTImageTokenBilling reports whether name is a verified GPT Image
 // 2.5/2.6 token-priced ID settled under the strict policy: provider token
-// buckets replace the reservation, an operator per-image fallback is required
-// at admission, and unused reservation is refunded. Parameters: name is the
+// buckets replace the reservation, admission reserves the operator per-image
+// fallback or the calculator-derived default (strictGPTImageDefaultReservationUSD),
+// and unused reservation is refunded. Parameters: name is the
 // mapped provider model. Returns: whether the strict policy applies.
 func usesStrictGPTImageTokenBilling(name string) bool {
 	switch name {
@@ -231,16 +232,17 @@ func strictGPTImageReceiptCeiling(usage *relaymodel.Usage, prices gptImageTokenB
 }
 
 // validateStrictGPTImageBilling checks admission before quota lookup or upstream I/O.
-// Parameters: name is the mapped model; fallbackUSD, tier, group, and count define
-// the operator's reservation/fallback tariff. Returns: a configuration error when
-// the operator fallback is missing or no finite, representable reservation
-// exists for a paid group; nil for a free group (ratio 0) and for other models.
+// Parameters: name is the mapped model; fallbackUSD (the operator's price or the
+// derived default), tier, group, and count define the reservation/fallback
+// tariff. Returns: a configuration error when the fallback is missing or no
+// finite, representable reservation exists for a paid group; nil for a free
+// group (ratio 0) and for other models.
 func validateStrictGPTImageBilling(name string, fallbackUSD, tier, group float64, count int) error {
 	if !usesStrictGPTImageTokenBilling(name) {
 		return nil
 	}
 	if fallbackUSD <= 0 || tier <= 0 || count <= 0 {
-		return errors.New("GPT Image 2.5/2.6 requires a positive image.price_per_image_usd reservation/fallback tariff in channel model_configs; this is operator policy, not an official per-image price")
+		return errors.New("GPT Image 2.5/2.6 requires a positive reservation/fallback: price the model's image output tokens so the default is derived from OpenAI's token calculator, or set a positive image.price_per_image_usd in channel model_configs")
 	}
 	if group < 0 {
 		return errors.New("GPT Image 2.5/2.6 billing requires a non-negative group ratio")

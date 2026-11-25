@@ -53,7 +53,7 @@ func TestResetChannelModelsUsesServerCatalog(t *testing.T) {
 
 	var stored model.Channel
 	require.NoError(t, model.DB.First(&stored, "id = ?", fixture.channel.Id).Error)
-	expected := (&model.Channel{Models: strings.Join(channelId2Models[channeltype.OpenAI], ",")}).GetSupportedModelNames()
+	expected := (&model.Channel{Models: strings.Join(channelId2DefaultModels[channeltype.OpenAI], ",")}).GetSupportedModelNames()
 	require.NotEmpty(t, expected)
 	require.ElementsMatch(t, expected, stored.GetSupportedModelNames())
 	require.Nil(t, stored.HiddenModels)

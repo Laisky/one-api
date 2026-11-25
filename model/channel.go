@@ -2,7 +2,6 @@ package model
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -14,7 +13,6 @@ import (
 	"github.com/Laisky/one-api/common/helper"
 	"github.com/Laisky/one-api/common/identity"
 	"github.com/Laisky/one-api/common/logger"
-	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 // ChannelTestingModelSkip is the sentinel testing_model value that excludes a
@@ -262,6 +260,9 @@ func BatchInsertChannels(channels []Channel) error {
 			return errors.Wrapf(err, "normalize hidden models for channel at index %d", i)
 		}
 		channels[i].TestingModel = channels[i].NormalizeTestingModel(channels[i].TestingModel)
+		if err := channels[i].canonicalizeConfig(); err != nil {
+			return errors.Wrapf(err, "canonicalize config of channel at batch index %d", i)
+		}
 		if err := validateJinaChannelConfiguration(&channels[i]); err != nil {
 			return errors.Wrapf(err, "validate channel at batch index %d", i)
 		}
@@ -418,6 +419,9 @@ func (channel *Channel) Insert() error {
 			channel.Ref())
 	}
 	channel.TestingModel = channel.NormalizeTestingModel(channel.TestingModel)
+	if err := channel.canonicalizeConfig(); err != nil {
+		return identity.Tag(errors.Wrap(err, "canonicalize new channel config"), channel.Ref())
+	}
 	if err := validateJinaChannelConfiguration(channel); err != nil {
 		return errors.Wrap(err, "validate new channel")
 	}
@@ -456,6 +460,10 @@ func (channel *Channel) UpdateWithContext(ctx context.Context) error {
 		return identity.Tag(
 			errors.Wrapf(err, "failed to normalize hidden models for channel: id=%d, name=%s", channel.Id, channel.Name),
 			channel.Ref())
+	}
+	// An empty config keeps the stored one; any other config is stored canonically.
+	if err := channel.canonicalizeConfig(); err != nil {
+		return identity.Tag(errors.Wrap(err, "canonicalize updated channel config"), channel.Ref())
 	}
 	// A client disconnect must not abort a half-applied update, so the write is detached
 	// from cancellation, but it stays bounded: the caller's deadline or
@@ -653,25 +661,6 @@ func (channel *Channel) Delete() error {
 	return nil
 }
 
-// LoadConfig decodes stored channel settings and applies provider-specific URL
-// security policy, including when Config is empty and only BaseURL is present.
-func (channel *Channel) LoadConfig() (ChannelConfig, error) {
-	var cfg ChannelConfig
-	if channel.Config != "" {
-		if err := json.Unmarshal([]byte(channel.Config), &cfg); err != nil {
-			return cfg, identity.Tag(
-				errors.Wrapf(err, "unmarshal channel %d config", channel.Id),
-				channel.Ref())
-		}
-	}
-	if channel.Type == channeltype.Jina {
-		if err := channeltype.ValidateJinaURLs(channel.GetBaseURL(), cfg.EndpointURLs); err != nil {
-			return cfg, identity.Tag(errors.Wrap(err, "validate Jina channel configuration"), channel.Ref())
-		}
-	}
-	return cfg, nil
-}
-
 // GetSupportedEndpoints returns the effective supported endpoints for this channel.
 // If the channel has custom endpoints configured, those are returned.
 // Otherwise, the default endpoints for the channel type are returned.
@@ -694,23 +683,6 @@ func (channel *Channel) GetSupportedEndpointsWithContext(ctx context.Context) []
 	}
 	// Return nil to indicate default endpoints should be used
 	// The caller should use channeltype.DefaultEndpointNamesForChannelType(channel.Type)
-	return nil
-}
-
-// storeConfig persists the provided ChannelConfig into the serialized Config
-// column, clearing the field when the configuration is effectively empty.
-func (channel *Channel) storeConfig(cfg ChannelConfig) error {
-	data, err := json.Marshal(cfg)
-	if err != nil {
-		return identity.Tag(
-			errors.Wrapf(err, "marshal channel %d config", channel.Id),
-			channel.Ref())
-	}
-	if len(data) == 0 || string(data) == "{}" {
-		channel.Config = ""
-		return nil
-	}
-	channel.Config = string(data)
 	return nil
 }
 

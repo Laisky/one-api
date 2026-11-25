@@ -53,6 +53,10 @@ type ImageRequest struct {
 	Complexity string `json:"complexity,omitempty"`
 	// SafetyIdentifier is the end-user identifier OpenAI recommends in place of User.
 	SafetyIdentifier string `json:"safety_identifier,omitempty"`
+	// Stream requests a GPT Image server-sent event stream.
+	Stream bool `json:"stream,omitempty"`
+	// PartialImages is the GPT Image streamed partial image count (0 to 3).
+	PartialImages *int `json:"partial_images,omitempty"`
 }
 
 type WhisperJSONResponse struct {

@@ -64,7 +64,7 @@ interface TestHarnessProps {
   onReady: (form: ChannelFormMethods) => void;
   defaultValues?: Partial<ChannelForm>;
   availableModels?: { id: string; name: string }[];
-  currentCatalogModels?: string[];
+  defaultModels?: string[];
 }
 
 /**
@@ -73,7 +73,7 @@ interface TestHarnessProps {
  * @param onReady - callback to expose the form instance.
  * @returns The rendered ChannelModelSettings component.
  */
-const TestHarness = ({ defaultPricing, onReady, defaultValues, availableModels = [], currentCatalogModels = [] }: TestHarnessProps) => {
+const TestHarness = ({ defaultPricing, onReady, defaultValues, availableModels = [], defaultModels = [] }: TestHarnessProps) => {
   const form = useForm<ChannelFormInput, unknown, ChannelForm>({
     defaultValues: {
       ...baseDefaults,
@@ -94,7 +94,7 @@ const TestHarness = ({ defaultPricing, onReady, defaultValues, availableModels =
       <ChannelModelSettings
         form={form}
         availableModels={availableModels}
-        currentCatalogModels={currentCatalogModels}
+        defaultModels={defaultModels}
         defaultPricing={defaultPricing}
         tr={tr}
         notify={vi.fn()}
@@ -137,7 +137,7 @@ describe('ChannelModelSettings', () => {
           { id: 'public-alias', name: 'public-alias' },
           { id: 'missing-model', name: 'missing-model' },
         ]}
-        currentCatalogModels={['public-alias']}
+        defaultModels={['public-alias']}
       />
     );
 
@@ -157,7 +157,7 @@ describe('ChannelModelSettings', () => {
           model_mapping: '{"ghost-alias":"gpt-4o","public-alias":"gpt-4o"}',
         }}
         availableModels={[{ id: 'public-alias', name: 'public-alias' }]}
-        currentCatalogModels={['public-alias']}
+        defaultModels={['public-alias']}
       />
     );
 
@@ -248,7 +248,7 @@ describe('ChannelModelSettings', () => {
           model_mapping: '{"public-alias":"gpt-4o"}',
         }}
         availableModels={[{ id: 'public-alias', name: 'public-alias' }]}
-        currentCatalogModels={['public-alias']}
+        defaultModels={['public-alias']}
       />
     );
 
@@ -279,5 +279,67 @@ describe('ChannelModelSettings', () => {
     expect(
       screen.getByText('These mapping targets are not recognized as models for this channel: public-alias → gpt-4o')
     ).toBeInTheDocument();
+  });
+
+  describe('complete catalog versus default suggestions', () => {
+    // availableModels is the complete provider catalog; defaultModels the zero-config suggestions.
+    const fullCatalog = ['llama-3.1-8b-instant', 'openai/gpt-oss-120b', 'minimaxai/minimax-m2.7'].map((id) => ({ id, name: id }));
+    const defaultModels = ['llama-3.1-8b-instant', 'openai/gpt-oss-120b'];
+
+    it('offers the complete catalog while Fill Related and Fill All add only the default suggestions', async () => {
+      const user = userEvent.setup();
+      let formRef: ChannelFormMethods | null = null;
+      render(
+        <TestHarness
+          defaultPricing=""
+          onReady={(form) => {
+            formRef = form;
+          }}
+          defaultValues={{ models: ['custom-alias'] }}
+          availableModels={fullCatalog}
+          defaultModels={defaultModels}
+        />
+      );
+
+      expect(screen.getByTitle('minimaxai/minimax-m2.7')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Fill Related (2)' }));
+      expect(formRef!.getValues('models')).toEqual(['custom-alias', ...defaultModels]);
+
+      formRef!.setValue('models', ['custom-alias']);
+      await user.click(screen.getByRole('button', { name: 'Fill All (2)' }));
+      expect(formRef!.getValues('models')).toEqual(['custom-alias', ...defaultModels]);
+    });
+
+    it('recognizes an explicitly priced target that is not a default suggestion', () => {
+      render(
+        <TestHarness
+          defaultPricing=""
+          onReady={() => {}}
+          defaultValues={{ models: ['m2'], model_mapping: '{"m2":"minimaxai/minimax-m2.7"}' }}
+          availableModels={fullCatalog}
+          defaultModels={defaultModels}
+        />
+      );
+
+      expect(screen.queryByText(/mapping targets are not recognized/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/are not in Supported Models/)).not.toBeInTheDocument();
+    });
+
+    it('still flags a genuinely unknown target', () => {
+      render(
+        <TestHarness
+          defaultPricing=""
+          onReady={() => {}}
+          defaultValues={{ models: ['m2'], model_mapping: '{"m2":"minimaxai/minimax-m2.7-typo"}' }}
+          availableModels={fullCatalog}
+          defaultModels={defaultModels}
+        />
+      );
+
+      expect(
+        screen.getByText('These mapping targets are not recognized as models for this channel: m2 → minimaxai/minimax-m2.7-typo')
+      ).toBeInTheDocument();
+    });
   });
 });

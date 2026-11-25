@@ -333,6 +333,8 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, request *model.ImageReques
 	request.OutputFormat = ""
 	request.Complexity = ""
 	request.SafetyIdentifier = ""
+	request.Stream = false
+	request.PartialImages = nil
 
 	return request, nil
 }

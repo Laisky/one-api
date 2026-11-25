@@ -150,12 +150,15 @@ var (
 		CompletionRatio:  2.50 / 0.30,
 		CachedInputRatio: 0.03 * ratio.MilliTokensUsd,
 	}
+	// gemini31FlashLivePreviewPricing: text $0.75 in / $4.50 out, audio $3.00
+	// in / $12.00 out. Audio.CompletionRatio is relative to the audio input
+	// price (output audio = text input x PromptRatio x CompletionRatio).
 	gemini31FlashLivePreviewPricing = adaptor.ModelConfig{
 		Ratio:           0.75 * ratio.MilliTokensUsd,
 		CompletionRatio: 4.50 / 0.75,
 		Audio: &adaptor.AudioPricingConfig{
 			PromptRatio:     3.00 / 0.75,
-			CompletionRatio: 12.00 / 4.50,
+			CompletionRatio: 12.00 / 3.00,
 		},
 	}
 	// gemini31FlashLitePricing applies to both the preview snapshot and the GA tier.
@@ -172,13 +175,14 @@ var (
 	}
 	// gemini25FlashNativeAudioPricing covers all native-audio preview snapshots.
 	// Source: https://ai.google.dev/gemini-api/docs/pricing — text input $0.50, text output $2.00,
-	// audio in/out $3.00 / $12.00.
+	// audio in/out $3.00 / $12.00; Audio.CompletionRatio is relative to the
+	// audio input price.
 	gemini25FlashNativeAudioPricing = adaptor.ModelConfig{
 		Ratio:           0.50 * ratio.MilliTokensUsd,
 		CompletionRatio: 2.0 / 0.50,
 		Audio: &adaptor.AudioPricingConfig{
 			PromptRatio:     3.0 / 0.50,
-			CompletionRatio: 12.0 / 2.0,
+			CompletionRatio: 12.0 / 3.0,
 		},
 	}
 	// geminiRoboticsER15Pricing is documented as a Flash-tier billing surface in Google's pricing table.

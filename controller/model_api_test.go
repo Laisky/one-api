@@ -86,6 +86,48 @@ func TestDashboardListModels(t *testing.T) {
 	}
 }
 
+// TestDashboardListDefaultModels pins the split between the two admin model
+// endpoints: /api/models keeps the documented full catalog, so operator-priced
+// models stay addable, while /api/models/defaults serves the same
+// channel-type-keyed shape restricted to zero-config servable models.
+// Parameters: t is the test handle. Returns: none.
+func TestDashboardListDefaultModels(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	router.GET("/api/models", DashboardListModels)
+	router.GET("/api/models/defaults", DashboardListDefaultModels)
+	// fetch decodes one endpoint. Parameters: path is the route. Returns: data.
+	fetch := func(path string) map[int][]string {
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, httptest.NewRequest(http.MethodGet, path, nil))
+		require.Equal(t, http.StatusOK, w.Code)
+		var response struct {
+			Success bool             `json:"success"`
+			Message string           `json:"message"`
+			Data    map[int][]string `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+		require.True(t, response.Success)
+		require.Empty(t, response.Message)
+		return response.Data
+	}
+	catalog, defaults := fetch("/api/models"), fetch("/api/models/defaults")
+	require.Len(t, defaults, len(catalog))
+	for channelType, models := range defaults {
+		require.Positive(t, channelType)
+		require.Subset(t, catalog[channelType], models)
+	}
+	for channelType, name := range map[int]string{
+		channeltype.Ali:       "qwen-audio-turbo",
+		channeltype.Groq:      "minimaxai/minimax-m2.7",
+		channeltype.Gemini:    "gemini-3.1-flash-live-preview",
+		channeltype.VertextAI: "gemini-live-2.5-flash-native-audio",
+	} {
+		require.Contains(t, catalog[channelType], name, "/api/models is the full catalog")
+		require.NotContains(t, defaults[channelType], name, "/api/models/defaults omits operator-priced models")
+	}
+}
+
 func TestListAllModels(t *testing.T) {
 	// Initialize the database for testing
 	model.InitDB()

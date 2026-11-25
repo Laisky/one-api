@@ -27,6 +27,7 @@ import (
 // decoding, final balances, and persisted costs together. Parameters: t runs the
 // cases. Returns: none. It is serial because the existing fixture swaps global DBs.
 func TestGPTImage25ReviewRelayAccounting(t *testing.T) {
+	defaultAutoHold := expectedDefaultImageHold(23719, 30, 5, len("A lighthouse"), 1)
 	const cachedUsage = `{"input_tokens":2000,"output_tokens":1000,"total_tokens":3000,"input_tokens_details":{"text_tokens":1000,"image_tokens":1000,"cached_tokens":1000,"cached_tokens_details":{"text_tokens":0,"image_tokens":1000}}}`
 	for _, tc := range []struct {
 		name, model, usage string
@@ -36,10 +37,14 @@ func TestGPTImage25ReviewRelayAccounting(t *testing.T) {
 		reserved, charged  int64
 		fallback           bool
 	}{
-		{"unconfigured_sunburst", "gpt-image-2.5-sunburst", `{}`, 0, 1_000_000, 1, 503, 0, 0, false},
-		{"unconfigured_sunburst_snapshot", "gpt-image-2.5-sunburst-2026-09-08", `{}`, 0, 1_000_000, 1, 503, 0, 0, false},
-		{"unconfigured_flare", "gpt-image-2.5-flare", `{}`, 0, 1_000_000, 1, 503, 0, 0, false},
-		{"unconfigured_flare_snapshot", "gpt-image-2.5-flare-2026-09-08", `{}`, 0, 1_000_000, 1, 503, 0, 0, false},
+		// Without an operator price, auto/auto reserves the calculator maximum
+		// (23,719 output tokens) plus the 12-byte prompt; an unusable receipt
+		// keeps that hold.
+		{"unconfigured_sunburst", "gpt-image-2.5-sunburst", `{}`, 0, 1_000_000, 1, 200, defaultAutoHold, defaultAutoHold, true},
+		{"unconfigured_sunburst_snapshot", "gpt-image-2.5-sunburst-2026-09-08", `{}`, 0, 1_000_000, 1, 200, defaultAutoHold, defaultAutoHold, true},
+		{"unconfigured_flare", "gpt-image-2.5-flare", `{}`, 0, 1_000_000, 1, 200, defaultAutoHold, defaultAutoHold, true},
+		{"unconfigured_flare_snapshot", "gpt-image-2.5-flare-2026-09-08", `{}`, 0, 1_000_000, 1, 200, defaultAutoHold, defaultAutoHold, true},
+		{"unconfigured_insufficient_credit", "gpt-image-2.5-flare", `{}`, 0, defaultAutoHold - 1, 1, 403, 0, 0, false},
 		{"insufficient_credit", "gpt-image-2.5-sunburst", cachedUsage, 0.1, 3, 1, 403, 0, 0, false},
 		{"reserve_then_refund_unused", "gpt-image-2.5-sunburst", cachedUsage, 0.1, 1_000_000, 2, 200, 100_000, 18_500, false},
 		// Totals-only input is priced at the image input rate (upper bound).
@@ -142,7 +147,11 @@ func TestGPTImage25ReviewRelayAccounting(t *testing.T) {
 				require.NoError(t, model.LOG_DB.Where("request_id = ? AND type = ?", requestID, model.LogTypeConsume).First(&entry).Error)
 				require.Equal(t, int(tc.charged), entry.Quota)
 				if tc.fallback {
-					require.Contains(t, entry.Content, "billing_source=configured_fallback")
+					source := "billing_source=configured_fallback"
+					if tc.tariff == 0 {
+						source = "billing_source=default_fallback"
+					}
+					require.Contains(t, entry.Content, source)
 				}
 			}
 			var user model.User

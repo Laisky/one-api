@@ -77,9 +77,9 @@
         },
         "heading": "Configuration Azure OpenAI",
         "version": {
-          "help": "Version API par défaut utilisée lorsque la requête n'en spécifie pas (ex: 2024-03-01-preview).",
+          "help": "Version API que ce canal envoie à Azure dans le paramètre de requête api-version (ex: 2024-03-01-preview).",
           "label": "Version API",
-          "note": "Défaut : 2024-03-01-preview. Peut être remplacé par les paramètres de requête.",
+          "note": "Défaut : 2024-03-01-preview. Les paramètres de requête du client ne peuvent pas la remplacer ; les modèles o1, o3, o4 et ceux limités à Responses utilisent la version qu'ils exigent.",
           "placeholder": "2024-03-01-preview",
           "warning_label": "Important :",
           "warning_text": "Le nom du modèle doit être votre nom de déploiement, pas le nom du modèle d'origine."
@@ -408,7 +408,7 @@
         "pricing_description": "Les requêtes vers les modèles suivants seront refusées tant que ce canal ne leur aura pas attribué de prix dans les Configurations de modèle :",
         "pricing_hint": "Ajoutez maintenant les prix manquants, ou enregistrez quand même et tarifez ces modèles avant de leur envoyer du trafic.",
         "pricing_requirement": {
-          "image_price_per_image_usd": "Définissez un image.price_per_image_usd positif (le prix de réservation et de repli par image).",
+          "image_price_per_image_usd": "Tarifez les jetons de sortie image de ce modèle (ratio et completion_ratio) afin que la réservation par image par défaut soit calculée, ou définissez un image.price_per_image_usd positif.",
           "live_tariff": "Définissez les prix Live : ratio, completion_ratio, les ratios prompt et completion audio, et le prompt_ratio image.",
           "tariff_supplement": "Définissez les prix de cache exigés par ce fournisseur : cached_input_ratio et, si nécessaire, cache_write_5m_ratio et cache_write_1h_ratio.",
           "token_tariff": "Définissez un ratio et un completion_ratio positifs, y compris pour chaque palier."
@@ -538,6 +538,7 @@
         "mapping_targets_not_recognized": "Ces cibles de mappage ne sont pas reconnues comme modèles de ce canal : {{entries}}",
         "model_configs_message": "Les configurations de modèle sont invalides.",
         "model_configs_title": "Configurations invalides",
+        "model_configs_unrecognized_keys": "Le modèle « {{model}} » ne contient aucune clé de configuration reconnue (inconnues : {{keys}})",
         "model_mapping_invalid": "Le mappage de modèles contient un JSON invalide.",
         "model_mapping_invalid_entries": "Ces entrées de Model Mapping ont des valeurs vides ou non chaînes : {{keys}}",
         "model_mapping_parse_error": "Le JSON de Model Mapping est invalide : {{error}}",

@@ -22,6 +22,12 @@ type ImageRequest struct {
 	// identifier for OpenAI abuse detection; it supersedes the deprecated User.
 	// It is user-identifying and must never be logged.
 	SafetyIdentifier string `json:"safety_identifier,omitempty" form:"safety_identifier"`
+	// Stream asks a GPT Image model to stream server-sent partial and final
+	// image events. It is decoded so a re-encoded GPT Image body keeps it.
+	Stream bool `json:"stream,omitempty" form:"stream"`
+	// PartialImages is the GPT Image count of streamed partial images (0 to
+	// 3), each billed as additional image output tokens; nil when omitted.
+	PartialImages *int `json:"partial_images,omitempty" form:"partial_images"`
 	// IsEdit records the normalized relay operation for endpoint-specific billing.
 	// It is internal metadata and is never serialized to upstream providers.
 	IsEdit bool `json:"-" form:"-"`

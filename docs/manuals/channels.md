@@ -72,13 +72,27 @@ Open **Channels → Create Channel** or select an existing channel and choose **
 
 `config` stores provider-specific metadata as JSON. The UI renders dedicated inputs based on the channel type:
 
-- **Azure OpenAI**: region endpoint, API version (defaults to `2024-03-01-preview` if blank).
+- **Azure OpenAI**: region endpoint and API version (see [Legacy `other` and config overrides](#legacy-other-and-config-overrides)).
 - **AWS Bedrock**: region plus access/secret keys (channel key is derived as `AK|SK|Region`).
 - **Vertex AI**: region, project ID, and service account JSON.
 - **Coze**: choose between Personal Access Token (entered in API Key field) or OAuth JWT JSON blob.
 - **Cloudflare**, **plugin** providers, and others expose single-purpose fields like Account ID or plugin parameters.
 
 Any new provider that requires extra configuration will appear in this section after selecting the channel type.
+
+#### Legacy `other` and config overrides
+
+A few types can store one setting in two places: the legacy `other` column and a typed `config` key. At request time (`middleware/distributor.go`) a **non-empty** `config` key wins; an empty or absent key falls back to `other`.
+
+| Channel type          | Editor field      | `config` key  |
+| --------------------- | ----------------- | ------------- |
+| Azure OpenAI (3)      | API Version       | `api_version` |
+| iFlytek Spark (18)    | Spark Version     | `api_version` |
+| Google Gemini (24)    | none (API only)   | `api_version` |
+| AI Proxy Library (21) | Knowledge ID      | `library_id`  |
+| Ali / DashScope (17)  | Plugin Parameters | `plugin`      |
+
+The editor field shows the effective value (the `config` key when it is non-empty, otherwise `other`). Saving without touching the field leaves both values unchanged. Typing a new value writes it to `other` and, when the `config` key is present, to that key as well, so the relay uses what you typed. Clearing the field clears `other` and removes the `config` key. The shared contract and its backend regression test are `test/testdata/channel_other_override_cases.json` and `router/e2e_channel_other_override_test.go`.
 
 ### 2.3 Advanced JSON Fields
 
@@ -214,7 +228,7 @@ The UI offers helper buttons:
 - Every JSON field is validated client-side with human-readable error messages. Invalid JSON blocks submission.
 - Numeric fields (priority, weight, rate limit) accept integers only; blank values become `0`.
 - Coze OAuth JWT requires a full JSON object with `client_type`, `client_id`, `coze_www_base`, `coze_api_base`, `private_key`, and `public_key_id`.
-- Azure `other` field defaults to the latest supported API version if left blank.
+- Azure **API Version**: when both `other` and `config.api_version` are blank, the editor saves a default in `other` (`2024-03-01-preview` in Modern and Air, `2023-09-01-preview` in Berry). A stored `config.api_version` always takes precedence (see [Legacy `other` and config overrides](#legacy-other-and-config-overrides)).
 - Clearing sensitive fields: leaving the API key empty when editing keeps the stored value. To remove credentials entirely, disable or delete the channel. The same convention applies to global options whose key ends in `Token`, `Secret`, or `Password`: an empty string in the form is ignored on save.
 - Hidden Models is a non-blocking warning field. If you hide a name that is not listed in **Models**, One-API treats it as a no-op. If you hide a name that is also a **Model Mapping** source, the public alias becomes unreachable.
 - Model routing and Model Mapping keys are case-sensitive. Hidden Models is intentionally case-insensitive so a legacy entry such as `modela` continues to hide a configured model named `ModelA`.

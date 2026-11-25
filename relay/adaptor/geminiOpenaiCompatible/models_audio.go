@@ -22,9 +22,10 @@ var audioModelRatios = map[string]adaptor.ModelConfig{
 	"gemini-3.5-live-translate-preview": {
 		Ratio:           3.50 * ratio.MilliTokensUsd,
 		CompletionRatio: 21.0 / 3.50,
+		// Audio $3.50 in / $21.00 out; CompletionRatio is relative to audio input.
 		Audio: &adaptor.AudioPricingConfig{
 			PromptRatio:     1,
-			CompletionRatio: 1,
+			CompletionRatio: 21.0 / 3.50,
 		},
 		ContextLength:               131_072,
 		MaxOutputTokens:             65_536,

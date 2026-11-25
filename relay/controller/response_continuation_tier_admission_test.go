@@ -210,7 +210,9 @@ func TestSecurityResponseContinuationTierCounters(t *testing.T) {
 				quote, applies, quoteErr := quoteResponseTierAdmission(c, meta, request, 999, body)
 				require.NoError(t, quoteErr)
 				require.True(t, applies)
-				require.EqualValues(t, 2486, quote)
+				// Parent 456 + 20 plus incremental 10 = 486 tokens reach the
+				// 100-token tier: 486*5 + 20*5*100 = 12,430 at group 1.
+				require.EqualValues(t, 12430, quote)
 				require.Equal(t, 10, meta.PromptTokens, "synthetic settlement still uses only actual current-body estimate")
 				require.Equal(t, previous, *request.PreviousResponseId)
 			}
