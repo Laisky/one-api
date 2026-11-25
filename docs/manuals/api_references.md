@@ -2622,7 +2622,7 @@ curl "$BASE_URL/v1/models/gpt-4o-mini" \
 
 ### GET /openrouter/v1/models
 
-Public model catalog in the OpenRouter upstream-provider listing schema. OpenRouter scrapes this during provider onboarding and periodic refresh; it enumerates every model advertised by the gateway's adaptors (plus the OpenAI-compatible channels), deduplicated by case-insensitive id and sorted by lowercased name.
+Public model catalog in the OpenRouter upstream-provider listing schema. OpenRouter scrapes this during provider onboarding and periodic refresh; it enumerates every model advertised by the gateway's adaptors (plus the OpenAI-compatible channels), deduplicated by case-insensitive id and sorted by lowercased name. Each adaptor is priced as its own channel type, and every price is the tariff billing applies at listing time: the schema has no field for dated or time-of-day schedules, so a model under an active time window (for example native OpenAI's GPT-5.6 Sol standard rate from 2026-12-01) is listed at that window's price.
 
 **Auth:** Public - no auth.
 
@@ -8772,7 +8772,7 @@ All filters are optional; CSV and repeated parameters are both accepted. Boolean
 | channel_name | `channel_name` | string | The entry's map key: `type:name`, or `type:name#N` for a later channel sharing that type and name |
 | channel_type | `channel_type` | integer | Numeric channel type id |
 | models | `models` | object | Map of model name to model display info |
-| input_price | `input_price` | number | USD per 1M input tokens (always present) |
+| input_price | `input_price` | number | USD per 1M input tokens billed at server display time (always present). While a time window is active this is the window's tariff, not the base schedule; the same holds for every other top-level price field (`cached_input_price`, cache-write prices, `output_price`, `tiers`, `image_price` and the media/unit pricing objects) |
 | cached_input_price | `cached_input_price` | number | USD per 1M cached input tokens (always present; falls back to input price) |
 | output_price | `output_price` | number | USD per 1M output tokens (always present) |
 | max_tokens | `max_tokens` | integer | Max token limit; `0` means unlimited (always present) |
@@ -8783,8 +8783,9 @@ All filters are optional; CSV and repeated parameters are both accepted. Boolean
 | image_price | `image_price` | number | USD per image, image models only (omitted if 0) |
 | per_call_pricing | `per_call_pricing` | object | Flat per-invocation pricing `{usd_per_thousand_calls, usd_per_call}` (mutually exclusive with token pricing; omitted if absent) |
 | per_page_pricing | `per_page_pricing` | object | Flat per-processed-page pricing `{usd_per_thousand_pages, usd_per_page}` for page-priced document models (mutually exclusive with token and per-call pricing; omitted if absent) |
-| time_windows | `time_windows` | object[] | Ordered time-of-day pricing windows. Each item contains `name`, `timezone`, `ranges`, optional `days_of_week`/`date_from`/`date_to`, and an `overlay` object rendered as display prices. |
+| time_windows | `time_windows` | object[] | Ordered time-of-day pricing windows. Each item contains `name`, `timezone`, `ranges`, optional `days_of_week`/`date_from`/`date_to`, an `overlay` object rendered as sparse display prices, and `effective_pricing`: the complete price list (same fields as the top-level prices) billing charges while that window is the first match. |
 | active_time_window | `active_time_window` | string | Name of the first window matching server display time (the window billing applies); empty when no window matches or the first match is unnamed. Historical billing still uses the request's own start time. |
+| inactive_base_pricing | `inactive_base_pricing` | object | The base schedule's complete price list (same fields as the top-level prices). Present only while a time window is active at server display time; it is then not what billing charges. Omitted otherwise, when the top-level prices are the base schedule. |
 
 Other optional nested fields present where applicable (all `omitempty`): `cache_write_5m_price`, `cache_write_1h_price`, `max_output_tokens`, `max_reasoning_tokens`, `supported_sampling_parameters`, `supported_reasoning_efforts`, `default_reasoning_effort`, `quantization`, `hugging_face_id`, `description`, `tiers`, `time_windows`, `active_time_window`, `video_pricing`, `audio_pricing`, `image_pricing`, `embedding_pricing`.
 

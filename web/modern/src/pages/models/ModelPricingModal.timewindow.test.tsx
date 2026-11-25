@@ -273,7 +273,7 @@ describe('December GPT-5.6 pricing', () => {
           ranges: [{ start: '00:00', end: '00:00' }],
           date_from: '2026-12-01',
           overlay: {},
-          token_pricing: {
+          effective_pricing: {
             input_price: 5,
             output_price: 30,
             cached_input_price: 0.5,

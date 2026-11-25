@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ModelDisplayData, TimeWindowData } from './ModelPricingModal';
-import {
-  UNRESOLVED_TIME_WINDOWS,
-  resolveActiveTimeWindowIndex,
-  resolveTimeWindowSnapshot,
-  timeWindowScheduleSignature,
-} from './time-window';
+import { resolveTimeWindowSnapshot, timeWindowScheduleSignature, type TimeWindowSchedule, type TimeWindowSnapshot } from './time-window';
 
-/** useTimeWindowSnapshot tracks active/history membership from one instant and cleans up its timer. */
-export function useTimeWindowSnapshot(windows: TimeWindowData[] | undefined) {
+/**
+ * useTimeWindowSnapshot tracks active/history window membership from one instant,
+ * re-evaluating it every second and cleaning up its timer on unmount.
+ * Parameters: windows is the ordered window list of the model being displayed.
+ * Returns: the live snapshot; one call per pricing view keeps the current tariff
+ * and the window cards on the same active index.
+ */
+export function useTimeWindowSnapshot(windows: TimeWindowSchedule[] | undefined): TimeWindowSnapshot {
   const windowsRef = useRef(windows);
   windowsRef.current = windows;
   const signature = useMemo(() => timeWindowScheduleSignature(windows), [windows]);
   const [snapshot, setSnapshot] = useState(() => ({ signature, ...resolveTimeWindowSnapshot(windows, new Date()) }));
 
   useEffect(() => {
+    // A model without windows has nothing to re-evaluate.
     if (!signature) return;
     const evaluate = () => {
       const next = resolveTimeWindowSnapshot(windowsRef.current, new Date());
@@ -36,23 +37,14 @@ export function useTimeWindowSnapshot(windows: TimeWindowData[] | undefined) {
   return snapshot.signature === signature ? snapshot : resolveTimeWindowSnapshot(windows, new Date());
 }
 
-/** activeDisplayWindow returns the matched window, or the server snapshot when the browser cannot evaluate it. */
-export function activeDisplayWindow(
-  windows: TimeWindowData[] | undefined,
-  index: number,
-  fallbackName?: string
-): TimeWindowData | undefined {
-  return index === UNRESOLVED_TIME_WINDOWS && fallbackName ? windows?.find((window) => window.name === fallbackName) : windows?.[index];
-}
-
-/** displayTokenPricing selects the complete active quote without merging price fields in the browser. */
-export function displayTokenPricing(model: ModelDisplayData, at: Date | number) {
-  const index = typeof at === 'number' ? at : resolveActiveTimeWindowIndex(model.time_windows, at);
-  return activeDisplayWindow(model.time_windows, index, model.active_time_window)?.token_pricing ?? model;
-}
-
-/** usePricingMinute updates the catalog once per wall-clock minute when it has scheduled quotes. */
-export function usePricingMinute(enabled: boolean) {
+/**
+ * usePricingMinute returns the current instant and advances it at every
+ * wall-clock minute while enabled, so a list that quotes scheduled tariffs
+ * re-selects them when a minute-granular window starts or ends.
+ * Parameters: enabled turns the minute timer on (any model has time windows).
+ * Returns: the instant the caller should select tariffs at.
+ */
+export function usePricingMinute(enabled: boolean): Date {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     if (!enabled) return;

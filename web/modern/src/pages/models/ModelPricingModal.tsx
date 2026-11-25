@@ -12,12 +12,35 @@ import type { PerPagePricingData } from './PerPagePricing';
 
 // ---- Types matching the backend ModelDisplayInfo ----
 
-export interface ModelDisplayData {
+/**
+ * ModelDisplayTariffData is one complete display price list, mirroring the
+ * backend ModelDisplayTariff: what billing charges while one tariff state is in
+ * effect, either the base schedule or a time window while it is the first match.
+ * Token prices are USD per 1M tokens; flat-unit fields carry their own units.
+ */
+export interface ModelDisplayTariffData {
   input_price: number;
   cached_input_price?: number;
   cache_write_5m_price?: number;
   cache_write_1h_price?: number;
   output_price: number;
+  image_price?: number;
+  tiers?: TierData[];
+  video_pricing?: VideoPricingData;
+  audio_pricing?: AudioPricingData;
+  image_pricing?: ImagePricingData;
+  embedding_pricing?: EmbeddingPricingData;
+  per_call_pricing?: PerCallPricingData;
+  per_page_pricing?: PerPagePricingData;
+}
+
+/**
+ * ModelDisplayData mirrors the backend ModelDisplayInfo. Its top-level price
+ * fields are the tariff billing applied at the server's display instant (the
+ * first-matching window's complete tariff, otherwise the base schedule), and
+ * inactive_base_pricing carries the base schedule only while a window was active.
+ */
+export interface ModelDisplayData extends ModelDisplayTariffData {
   max_tokens?: number;
   context_length?: number;
   max_output_tokens?: number;
@@ -31,16 +54,9 @@ export interface ModelDisplayData {
   quantization?: string;
   hugging_face_id?: string;
   description?: string;
-  image_price?: number;
-  tiers?: TierData[];
-  video_pricing?: VideoPricingData;
-  audio_pricing?: AudioPricingData;
-  image_pricing?: ImagePricingData;
-  embedding_pricing?: EmbeddingPricingData;
-  per_call_pricing?: PerCallPricingData;
-  per_page_pricing?: PerPagePricingData;
   time_windows?: TimeWindowData[];
   active_time_window?: string;
+  inactive_base_pricing?: ModelDisplayTariffData;
 }
 
 interface TierData {
@@ -96,7 +112,7 @@ interface PerCallPricingData {
   usd_per_call?: number;
 }
 
-/** TimeWindowData retains the source schedule and its complete pricing overlay. */
+/** TimeWindowData retains the source schedule, its sparse pricing overlay, and the merged tariff billed while it applies. */
 export interface TimeWindowData {
   name?: string;
   timezone?: string;
@@ -105,10 +121,8 @@ export interface TimeWindowData {
   date_from?: string;
   date_to?: string;
   overlay: TimeWindowOverlayData;
-  token_pricing?: Pick<
-    ModelDisplayData,
-    'input_price' | 'output_price' | 'cached_input_price' | 'cache_write_5m_price' | 'cache_write_1h_price' | 'tiers'
-  >;
+  /** effective_pricing is the complete tariff billed while this window is the first match; older servers omit it. */
+  effective_pricing?: ModelDisplayTariffData;
 }
 
 interface TimeWindowOverlayData {

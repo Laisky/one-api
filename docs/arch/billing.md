@@ -547,7 +547,7 @@ type ModelRatioTier struct {
 
 - **Tiered pricing**: Adapters can attach sorted `tiers` to alter input, completion, and cache-write prices once a request crosses input and optional output token thresholds. `pricing.ResolveEffectivePricingForUsage()` applies both dimensions at runtime and records which thresholds were selected for observability.
 - **Cache-aware pricing**: `CachedInputRatio`, `CacheWrite5mRatio`, and `CacheWrite1hRatio` let adapters express Anthropic-style prompt caching economics. Negative values mark a bucket as free; zero means “inherit the base ratio.”
-- **Time-of-day pricing**: `time_windows` attach ordered wall-clock overlays to a model config. The resolver selects the first window matching `meta.StartTime`, deep-merges its sparse pricing overlay, clears `TimeWindows`, and then applies tiers. Windows use explicit IANA timezones, support daylight-saving changes through local wall-clock conversion, midnight-crossing ranges, optional weekday filters, and optional local-date bounds.
+- **Time-of-day pricing**: `time_windows` attach ordered wall-clock overlays to a model config. The resolver selects the first window matching `meta.StartTime`, deep-merges its sparse pricing overlay, clears `TimeWindows`, and then applies tiers. The public price surfaces quote the same merge at display time (`pricing.ApplyTimeWindowOverlay`): `/api/models/display` top-level prices are the active window's tariff while one matches, each window carries its complete `effective_pricing`, and the base schedule is published as `inactive_base_pricing` only while a window replaces it; `/openrouter/v1/models` lists the tariff in effect at listing time. Coverage: `controller/model_display_window_parity_test.go`, `controller/model_display_effective_schedule_test.go`. Windows use explicit IANA timezones, support daylight-saving changes through local wall-clock conversion, midnight-crossing ranges, optional weekday filters, and optional local-date bounds.
 - **Max token policy**: `MaxTokens` carries per-model token ceilings so controllers can clamp `max_tokens` before dispatching upstream.
 - **Multimedia metadata**: `Video`, `Audio`, and `Image` pointers hold secondary pricing dimensions (per-second, per-minute, or per-image tables) alongside text token billing. These blobs travel through the three-layer resolver so channel overrides, adapter defaults, and global fallbacks stay consistent across media types.
 - **Capability metadata**: `ContextLength`, `MaxOutputTokens`, `InputModalities`, `OutputModalities`, `SupportedFeatures`, `SupportedSamplingParameters`, `Quantization`, and `HuggingFaceID` describe the model surface so adaptors, request transformers, and the admin UI can advertise what each model actually accepts.
@@ -645,6 +645,10 @@ var DefaultGlobalPricingAdapters = []int{
 #### Conflict Resolution
 
 When multiple adapters define pricing for the same model, the first adapter in the configuration list takes precedence. Conflicts are logged for transparency.
+
+#### Contributed catalog boundary
+
+The manager merges each adapter's contribution through `adaptor.GlobalFallbackPricing`, not `GetDefaultModelPricing`. An adapter whose own channel catalog holds first-party-only rules implements `adaptor.GlobalPricingContributor` to contribute a different catalog. Native OpenAI does so: an OpenAI channel (`channeltype.OpenAI`) bills GPT-5.6 Sol and its `gpt-5.6` alias with the December 2026 standard-rate schedule, while the global layer (and so every provider that prices those IDs only through it) keeps the unscheduled shared `openai.ModelRatios`. An OpenAI adaptor with no channel type bound also prices the shared catalog; only an explicit native binding selects first-party schedules. Coverage: `test/openai_sol_global_fallback_test.go`.
 
 ### Channel-specific Pricing
 

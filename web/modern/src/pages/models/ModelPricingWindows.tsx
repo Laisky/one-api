@@ -6,30 +6,40 @@ import { PerPageWindowCell } from './PerPagePricing';
 import { PriceCell, PriceGrid, PricingSection } from './PricingPrimitives';
 import { formatUsd, type TrFn } from './pricing-format';
 import { formatTierThreshold } from './tier-threshold';
-import { activeDisplayWindow } from './display-token-pricing';
-import type { TimeWindowSnapshot } from './time-window';
+import { NO_ACTIVE_TIME_WINDOW, UNRESOLVED_TIME_WINDOWS, type TimeWindowSnapshot } from './time-window';
 
-/** ModelPricingWindows preserves all source rules while collapsing expired valid schedules. */
+/**
+ * ModelPricingWindows preserves all source rules while collapsing expired valid schedules.
+ * Parameters: windows is the model's window list; snapshot is the live window
+ * snapshot shared with the current-tariff selection (see useTimeWindowSnapshot);
+ * activeWindowName is the server-evaluated window name used when the browser
+ * cannot evaluate the schedules; tr and locale localize labels and clock times.
+ * Returns: the time-of-day pricing section, or null when the model has no windows.
+ */
 export function ModelPricingWindows({
   windows,
-  activeWindowName,
   snapshot,
+  activeWindowName,
   tr,
   locale,
 }: {
   windows: TimeWindowData[] | undefined;
-  activeWindowName?: string;
   snapshot: TimeWindowSnapshot;
+  activeWindowName?: string;
   tr: TrFn;
   locale: string;
 }) {
+  const { activeIndex: activeTimeWindowIndex, historicalIndices } = snapshot;
   if (!windows?.length) return null;
-  const { historicalIndices } = snapshot;
   const historical = new Set(historicalIndices);
-  const active = activeDisplayWindow(windows, snapshot.activeIndex, activeWindowName);
   const renderWindow = (window: TimeWindowData, index: number) => {
     const label = window.name || `${tr('window_name', 'Window')} ${index + 1}`;
-    const isActive = active === window;
+    // Fall back to the server-rendered name only when the browser cannot
+    // evaluate the schedules itself (missing timezone data).
+    const isActive =
+      activeTimeWindowIndex === UNRESOLVED_TIME_WINDOWS
+        ? Boolean(activeWindowName && window.name === activeWindowName)
+        : activeTimeWindowIndex !== NO_ACTIVE_TIME_WINDOW && activeTimeWindowIndex === index;
     return (
       <div
         key={`${label}-${index}`}

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -69,5 +71,50 @@ func TestOpenRouterListModels_StableDeduplication(t *testing.T) {
 		_, dup := seen[key]
 		require.False(t, dup, "duplicate model id in listing: %s", key)
 		seen[key] = struct{}{}
+	}
+}
+
+// TestOpenRouterListModelsQuotesEffectiveGPT56SolTariff checks that the public
+// OpenRouter provider feed quotes native OpenAI's GPT-5.6 Sol at the tariff
+// billing charges at listing time: the promotional rate before the December 1
+// cutoff and the standard rate from it on, for both aliases. Parameter t
+// reports a stale quote.
+func TestOpenRouterListModelsQuotesEffectiveGPT56SolTariff(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	cutoff := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		at                         time.Time
+		prompt, completion, cached float64 // USD per million tokens
+	}{
+		{cutoff.Add(-time.Nanosecond), 4, 20, .4},
+		{cutoff, 5, 30, .5},
+		{cutoff.AddDate(0, 0, 1), 5, 30, .5},
+	} {
+		pinModelsDisplayClock(t, tc.at)
+		r := gin.New()
+		r.GET("/openrouter/v1/models", OpenRouterListModels)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/openrouter/v1/models", nil))
+		require.Equal(t, http.StatusOK, w.Code)
+		var resp openrouterprovider.ModelListResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+		found := map[string]bool{}
+		for _, m := range resp.Data {
+			if m.ID != "gpt-5.6-sol" && m.ID != "gpt-5.6" {
+				continue
+			}
+			found[m.ID] = true
+			label := m.ID + " at " + tc.at.Format(time.RFC3339Nano)
+			require.Equal(t, "openai: "+m.ID, m.Name, label)
+			for _, price := range []struct {
+				want float64
+				got  string
+			}{{tc.prompt, m.Pricing.Prompt}, {tc.completion, m.Pricing.Completion}, {tc.cached, m.Pricing.InputCacheRead}} {
+				perToken, err := strconv.ParseFloat(price.got, 64)
+				require.NoError(t, err, label)
+				require.InDelta(t, price.want, perToken*1e6, 1e-9, label)
+			}
+		}
+		require.True(t, found["gpt-5.6-sol"] && found["gpt-5.6"], "both aliases are listed")
 	}
 }

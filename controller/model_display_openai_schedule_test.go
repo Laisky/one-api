@@ -14,9 +14,11 @@ import (
 	"github.com/Laisky/one-api/relay/pricing"
 )
 
-// TestGetModelsDisplayPublishesEffectiveOpenAISchedule verifies the public
-// response contains the effective base and long-context rates without
-// changing the legacy base quote or attaching the schedule to overrides.
+// TestGetModelsDisplayPublishesEffectiveOpenAISchedule verifies a response
+// rendered before the cutoff already publishes each window's complete tariff
+// (effective_pricing) with the base and long-context rates billing applies
+// once the window matches, while the top-level quote is still the promotional
+// one and saved overrides carry no schedule.
 func TestGetModelsDisplayPublishesEffectiveOpenAISchedule(t *testing.T) {
 	setupModelsDisplayTestEnv(t)
 	const names = "gpt-5.6,gpt-5.6-sol"
@@ -26,8 +28,9 @@ func TestGetModelsDisplayPublishesEffectiveOpenAISchedule(t *testing.T) {
 		"gpt-5.6":     {Ratio: 7 * m, CompletionRatio: 3, CachedInputRatio: 2 * m},
 		"gpt-5.6-sol": {Ratio: 7 * m, CompletionRatio: 3, CachedInputRatio: 2 * m},
 	})
-	response := fetchModelsDisplay(t, 0, "")
 	cutoff := time.Date(2026, time.December, 1, 0, 0, 0, 0, time.UTC)
+	pinModelsDisplayClock(t, cutoff.Add(-time.Nanosecond))
+	response := fetchModelsDisplay(t, 0, "")
 	for _, name := range []string{"gpt-5.6", "gpt-5.6-sol"} {
 		info := response.Data[channeltype.IdToName(native.Type)+":"+native.Name].Models[name]
 		overridden := response.Data[channeltype.IdToName(custom.Type)+":"+custom.Name].Models[name]
@@ -52,17 +55,17 @@ func TestGetModelsDisplayPublishesEffectiveOpenAISchedule(t *testing.T) {
 			blob, err := json.Marshal(window)
 			require.NoError(t, err)
 			var projected struct {
-				TokenPricing *struct {
+				EffectivePricing *struct {
 					Input      float64            `json:"input_price"`
 					Output     float64            `json:"output_price"`
 					Cached     float64            `json:"cached_input_price"`
 					CacheWrite float64            `json:"cache_write_5m_price"`
 					Tiers      []ModelDisplayTier `json:"tiers"`
-				} `json:"token_pricing"`
+				} `json:"effective_pricing"`
 			}
 			require.NoError(t, json.Unmarshal(blob, &projected))
-			require.NotNil(t, projected.TokenPricing)
-			quote := projected.TokenPricing
+			require.NotNil(t, projected.EffectivePricing)
+			quote := projected.EffectivePricing
 			cfg, ok := pricing.ResolveModelConfig(name, nil, displayProvider(t, native), when)
 			require.True(t, ok)
 			current := pricing.ResolveEffectivePricingFromConfig(272_000, cfg)

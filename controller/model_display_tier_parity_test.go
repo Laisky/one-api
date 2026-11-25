@@ -238,7 +238,10 @@ func TestGetModelsDisplayMetadataEntryInheritsProviderWindows(t *testing.T) {
 	ch := createDisplayChannel(t, "provider-windows-inherited", channeltype.Ali, name, "public", map[string]model.ModelConfigLocal{name: {MaxTokens: 4096}})
 	provider := displayProvider(t, ch)
 	require.Len(t, provider.GetDefaultModelPricing()[name].TimeWindows, 1)
+	peak := time.Date(2026, 11, 24, 4, 0, 0, 0, time.UTC)     // 12:00 Asia/Shanghai
+	offPeak := time.Date(2026, 11, 24, 16, 0, 0, 0, time.UTC) // 00:00 Asia/Shanghai
 
+	pinModelsDisplayClock(t, offPeak)
 	info := fetchModelsDisplay(t, 0, "").Data[channeltype.IdToName(ch.Type)+":"+ch.Name].Models[name]
 	require.Len(t, info.TimeWindows, 1, "the entry inherits the provider's peak window")
 	window := info.TimeWindows[0]
@@ -249,12 +252,27 @@ func TestGetModelsDisplayMetadataEntryInheritsProviderWindows(t *testing.T) {
 	require.InDelta(t, convertDisplayRatio(8*r), window.Overlay.OutputPrice, 1e-9)
 
 	u := tierUsage{prompt: 10_000, cached: 4_000, completion: 1_000}
-	peak := time.Date(2026, 11, 24, 4, 0, 0, 0, time.UTC)     // 12:00 Asia/Shanghai
-	offPeak := time.Date(2026, 11, 24, 16, 0, 0, 0, time.UTC) // 00:00 Asia/Shanghai
 	require.Equal(t, billedTierQuotaAt(t, ch, name, provider, u, peak),
 		displayedTierQuota(window.Overlay.InputPrice, window.Overlay.OutputPrice, window.Overlay.CachedInputPrice, u), "the peak window quotes billing")
+	effective := window.EffectivePricing
+	require.NotNil(t, effective)
+	require.Equal(t, billedTierQuotaAt(t, ch, name, provider, u, peak),
+		displayedTierQuota(effective.InputPrice, effective.OutputPrice, effective.CachedInputPrice, u), "the window's complete tariff quotes peak billing")
+	require.Empty(t, info.ActiveTimeWindow)
+	require.Nil(t, info.InactiveBasePricing)
 	require.Equal(t, billedTierQuotaAt(t, ch, name, provider, u, offPeak),
 		displayedTierQuota(info.InputPrice, info.OutputPrice, info.CachedInputPrice, u), "the base row quotes off-peak billing")
+
+	// During the peak the top-level prices are the peak tariff billing charges.
+	pinModelsDisplayClock(t, peak)
+	atPeak := fetchModelsDisplay(t, 0, "").Data[channeltype.IdToName(ch.Type)+":"+ch.Name].Models[name]
+	require.Equal(t, "beijing-peak", atPeak.ActiveTimeWindow)
+	require.Equal(t, billedTierQuotaAt(t, ch, name, provider, u, peak),
+		displayedTierQuota(atPeak.InputPrice, atPeak.OutputPrice, atPeak.CachedInputPrice, u), "the top-level row quotes peak billing")
+	require.NotNil(t, atPeak.InactiveBasePricing)
+	base := atPeak.InactiveBasePricing
+	require.Equal(t, billedTierQuotaAt(t, ch, name, provider, u, offPeak),
+		displayedTierQuota(base.InputPrice, base.OutputPrice, base.CachedInputPrice, u), "the inactive base still quotes off-peak billing")
 }
 
 // TestGetModelsDisplayLocalRatioTiersQuoteBilling verifies a channel entry
