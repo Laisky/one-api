@@ -129,6 +129,9 @@ func (a *Adaptor) ConvertImageRequest(_ *gin.Context, request *model.ImageReques
 	request.OutputFormat = ""
 	request.Complexity = ""
 	request.SafetyIdentifier = ""
+	// Baidu image generation does not stream; keep the JSON response.
+	request.Stream = false
+	request.PartialImages = nil
 	return request, nil
 }
 

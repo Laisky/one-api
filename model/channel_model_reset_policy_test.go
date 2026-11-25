@@ -1,6 +1,7 @@
 package model
 
 import (
+	"context"
 	"testing"
 
 	"github.com/Laisky/errors/v2"
@@ -11,6 +12,13 @@ import (
 
 // resetTestString returns a pointer to the supplied test configuration string.
 func resetTestString(value string) *string { return &value }
+
+// defaultsOnlyCatalog returns a catalog whose provider knows only defaults, the
+// pre-retention contract. Parameters: defaults are the default models.
+// Returns: a catalog with no extra known models and no servability callback.
+func defaultsOnlyCatalog(defaults []string) ChannelResetCatalog {
+	return ChannelResetCatalog{Defaults: defaults}
+}
 
 // TestPlanChannelModelResetRejectsUnsafeConfigurations verifies fail-closed
 // preflight for incompatible catalogs, mapping/pricing conflicts, and invalid JSON.
@@ -49,9 +57,10 @@ func TestPlanChannelModelResetRejectsUnsafeConfigurations(t *testing.T) {
 			original := test.channel
 			original.Models = "Old"
 			before := original
-			planned, err := planChannelModelReset(&original, test.defaults)
+			planned, retained, err := planChannelModelReset(context.Background(), &original, defaultsOnlyCatalog(test.defaults))
 			require.Error(t, err)
 			require.Nil(t, planned)
+			require.Nil(t, retained)
 			var conflict *ChannelModelResetConflict
 			require.True(t, errors.As(err, &conflict))
 			require.Equal(t, test.code, conflict.Code)
@@ -77,8 +86,9 @@ func TestPlanChannelModelResetPreservesCompatibleOverrides(t *testing.T) {
 		InferenceProfileArnMap: resetTestString(`{"Foo":"private-arn"}`),
 	}
 	defaults := []string{" Foo ", "Bar", "foo", "Foo", ""}
-	planned, err := planChannelModelReset(&channel, defaults)
+	planned, retained, err := planChannelModelReset(context.Background(), &channel, defaultsOnlyCatalog(defaults))
 	require.NoError(t, err)
+	require.Empty(t, retained)
 	require.Equal(t, "Foo,Bar,foo", planned.Models)
 	require.Nil(t, planned.HiddenModels)
 	require.Equal(t, channel.ModelMapping, planned.ModelMapping)
@@ -108,7 +118,7 @@ func TestPlanChannelModelResetTestingModel(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.stored, func(t *testing.T) {
 			channel := Channel{Type: channeltype.OpenAI, TestingModel: resetTestString(tc.stored)}
-			planned, err := planChannelModelReset(&channel, []string{"Foo"})
+			planned, _, err := planChannelModelReset(context.Background(), &channel, defaultsOnlyCatalog([]string{"Foo"}))
 			require.NoError(t, err)
 			require.Equal(t, tc.want, planned.TestingModel)
 		})

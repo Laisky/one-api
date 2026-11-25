@@ -33,11 +33,17 @@ func TestSecurityNativeResponseUnknownContinuationAdmission(t *testing.T) {
 	for _, stream := range []bool{false, true} {
 		for _, scenario := range []string{"missing_usage", "empty_usage", "missing_input", "missing_output", "zero_input", "zero_output"} {
 			t.Run(fmt.Sprintf("%s/stream=%t", scenario, stream), func(t *testing.T) {
-				// Fund the first request, but leave less than the complete second
-				// quote. The legacy incremental allowance still fits this balance.
-				balance := int64(2500)
+				// Fund the first request (hold 456*5 + 20*5*100 = 12,280), but leave
+				// less than the complete second quote (486*5 + 20*5*100 = 12,430).
+				// The legacy incremental allowance (10*1 + 20*1*2 = 50) still fits
+				// this balance. Each balance is the first charge plus the full second
+				// quote minus a small gap: missing or zero input bills 20*1*2 = 40,
+				// so 40 + 12,430 - 26 = 12,444 (missing usage bills its 3,280
+				// estimate and keeps 9,164); missing or zero output bills 456*5 =
+				// 2,280, so 2,280 + 12,430 - 12 = 14,698.
+				balance := int64(12444)
 				if scenario == "missing_output" || scenario == "zero_output" {
-					balance = 2930
+					balance = 14698
 				}
 				xaiVideoSetup(t, balance, false)
 				store := enableStateForTest(t)
@@ -129,6 +135,13 @@ func TestSecurityNativeResponseUnknownContinuationAdmission(t *testing.T) {
 				require.NotNil(t, record.Binding)
 				firstCharge := consumeLogQuota(t, firstID)
 				beforeUser := reloadUserQuota(t)
+				// The tier prices the first 456-token request at 456*5 + 20*5*100 =
+				// 12,280 and the complete second quote at 486*5 + 20*5*100 = 12,430;
+				// what remains sits between the legacy incremental allowance
+				// (10*1 + 20*1*2 = 50) and that quote.
+				require.EqualValues(t, 12280, c.GetInt64(ctxkey.PreConsumedQuotaAmount), "the first hold prices the tier's input ratio")
+				require.Less(t, beforeUser, int64(12430), "the balance must not fund the complete second quote")
+				require.GreaterOrEqual(t, beforeUser, int64(50), "the legacy incremental allowance still fits")
 				var beforeToken model.Token
 				require.NoError(t, model.DB.First(&beforeToken, fallbackTokenID).Error)
 

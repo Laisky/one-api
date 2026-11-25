@@ -1,4 +1,11 @@
 import { isExpectedRequestError, markPrivateError } from '../../../../legacy/browser-sentry-privacy.mjs';
+import {
+  applyOtherFieldEdit,
+  OTHER_OVERRIDE_KEY_BY_TYPE,
+  readOtherOverride,
+  type OtherOverrideKey,
+  type StoredOtherBinding,
+} from './otherOverride';
 import type { ChannelConfigForm, ChannelForm, NormalizedToolingConfig, ToolPricingEntry } from './schemas';
 
 export const normalizeChannelType = (value: unknown): number | null => {
@@ -228,8 +235,52 @@ export const sanitizeJsonField = (jsonString: string): string => {
 
 const isClockHHMM = (value: unknown): value is string => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 
-// Enhanced model configs validation
-export const validateModelConfigs = (configStr: string) => {
+/**
+ * MODEL_CONFIG_RECOGNIZED_KEYS lists the top-level keys of one model_configs entry that the backend
+ * understands: the JSON keys of model.ModelConfigLocal (model/channel_pricing_config.go). An entry
+ * may carry any subset of them, including none at all, because every field is optional server-side
+ * (for example `{"image":{"price_per_image_usd":0.2}}`, or the `{}` the legacy image-price migration
+ * writes when the stored legacy price was zero).
+ */
+export const MODEL_CONFIG_RECOGNIZED_KEYS: ReadonlySet<string> = new Set([
+  'per_call',
+  'per_page',
+  'ratio',
+  'completion_ratio',
+  'cached_input_ratio',
+  'cache_write_5m_ratio',
+  'cache_write_1h_ratio',
+  'tiers',
+  'max_tokens',
+  'context_length',
+  'video',
+  'audio',
+  'image',
+  'embedding',
+  'time_windows',
+]);
+
+/**
+ * ModelConfigsValidationResult is the outcome of validateModelConfigs: `error` is the English
+ * message, and `errorKey`/`errorParams`, when present, let the caller localize it under
+ * `channels.edit`.
+ */
+export interface ModelConfigsValidationResult {
+  valid: boolean;
+  error?: string;
+  errorKey?: string;
+  errorParams?: Record<string, string>;
+}
+
+/**
+ * validateModelConfigs checks admin-entered (JSONC) model_configs text before saving. It takes the
+ * raw text and returns `{ valid: true }` or `{ valid: false, error }`. It accepts everything the
+ * backend accepts: an empty entry, or an entry with at least one recognized key
+ * (MODEL_CONFIG_RECOGNIZED_KEYS). It rejects only malformed JSON, non-object entries, invalid
+ * values of the fields it type-checks, and non-empty entries whose keys are all unrecognized,
+ * which are almost always typos that the backend would silently ignore.
+ */
+export const validateModelConfigs = (configStr: string): ModelConfigsValidationResult => {
   if (!configStr || configStr.trim() === '') {
     return { valid: true };
   }
@@ -312,15 +363,14 @@ export const validateModelConfigs = (configStr: string) => {
         }
       }
 
-      const hasPricingField =
-        configObj.ratio !== undefined ||
-        configObj.completion_ratio !== undefined ||
-        configObj.max_tokens !== undefined ||
-        (Array.isArray(configObj.time_windows) && configObj.time_windows.length > 0);
-      if (!hasPricingField) {
+      const entryKeys = Object.keys(configObj);
+      if (entryKeys.length > 0 && !entryKeys.some((key) => MODEL_CONFIG_RECOGNIZED_KEYS.has(key))) {
+        const keys = entryKeys.join(', ');
         return {
           valid: false,
-          error: `Model "${modelName}" must include pricing configuration`,
+          error: `Model "${modelName}" has no recognized configuration keys (unknown: ${keys})`,
+          errorKey: 'validation.model_configs_unrecognized_keys',
+          errorParams: { model: modelName, keys },
         };
       }
     }
@@ -436,6 +486,16 @@ export const validateToolingConfig = (configStr: string) => {
 };
 
 /**
+ * CONFIG_OVERRIDES_OF_OTHER lists every channel config key that overrides the legacy `other` field
+ * for some channel type (OTHER_OVERRIDE_KEY_BY_TYPE). The `other` field edits the effective value
+ * and keeps a stored override in step (applyOtherFieldEdit); changing the channel type clears all
+ * of these keys together with `other`.
+ */
+export const CONFIG_OVERRIDES_OF_OTHER: readonly string[] = [
+  ...new Set(Object.values(OTHER_OVERRIDE_KEY_BY_TYPE).filter((key): key is OtherOverrideKey => key !== undefined)),
+];
+
+/**
  * BuildChannelSubmitPayloadOptions captures all the contextual flags that
  * influence the shape of the payload but are not part of the form data
  * itself. Keeping this separate from `ChannelForm` lets us unit-test the
@@ -448,6 +508,12 @@ export interface BuildChannelSubmitPayloadOptions {
   watchType: number | null | undefined;
   /** Live config values used to derive composite key fields. */
   watchConfig: ChannelConfigForm;
+  /**
+   * The `other` binding of the channel as loaded for editing (null or absent when creating). The
+   * `other` field shows the effective value, so this decides whether the stored `other` and typed
+   * override are resent unchanged or updated to the edited value (applyOtherFieldEdit).
+   */
+  storedOther?: StoredOtherBinding | null;
 }
 
 /**
@@ -465,6 +531,7 @@ export interface BuildChannelSubmitPayloadOptions {
  *    serialised as JSON `null` (key present, value `null`) so the backend
  *    can distinguish "clear me" from "leave me alone".
  *  - JSONC inputs are sanitised to strict JSON.
+ *  - `other` and its typed config override follow applyOtherFieldEdit.
  */
 export const buildChannelSubmitPayload = (data: ChannelForm, opts: BuildChannelSubmitPayloadOptions): Record<string, any> => {
   const { isEdit, watchType, watchConfig } = opts;
@@ -493,7 +560,14 @@ export const buildChannelSubmitPayload = (data: ChannelForm, opts: BuildChannelS
   payload.group = Array.isArray(payload.groups) ? payload.groups.join(',') : '';
   delete payload.groups;
 
-  payload.config = JSON.stringify(data.config);
+  const otherSubmission = applyOtherFieldEdit(
+    opts.storedOther,
+    normalizeChannelType(watchType),
+    data.other,
+    data.config as Record<string, unknown> | undefined
+  );
+  payload.other = otherSubmission.other;
+  payload.config = JSON.stringify(otherSubmission.config);
 
   // On edit, an empty key signals "leave the existing key alone". Drop the
   // field entirely so the backend's partial-update logic skips it.
@@ -509,8 +583,13 @@ export const buildChannelSubmitPayload = (data: ChannelForm, opts: BuildChannelS
   payload.base_url = trimmedBaseURL;
 
   // Azure (type 3) requires an api_version-like value in `other`. Apply a
-  // reasonable default so existing callers keep working without manual entry.
-  if (watchType === 3 && (typeof payload.other !== 'string' || payload.other.trim() === '')) {
+  // reasonable default so existing callers keep working without manual entry,
+  // unless a typed config.api_version override already supplies the version.
+  if (
+    watchType === 3 &&
+    (typeof payload.other !== 'string' || payload.other.trim() === '') &&
+    readOtherOverride(3, otherSubmission.config) === ''
+  ) {
     payload.other = '2024-03-01-preview';
   }
 

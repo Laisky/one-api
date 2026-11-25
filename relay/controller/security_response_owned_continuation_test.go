@@ -45,12 +45,19 @@ func TestSecurityNativeResponseOwnedContinuationAdmission(t *testing.T) {
 	}}}
 	for _, scenario := range []string{"owner_low", "token_low", "funded", "store_failure"} {
 		t.Run(scenario, func(t *testing.T) {
-			userBalance, tokenBalance := int64(10000), int64(10000)
+			// Round 1 bills its 456-token prompt in the 100-token tier:
+			// 456*5 + 20*5*100 = 12,280. Round 2 inherits 456 + 20 + 10 = 486
+			// tokens: 486*5 + 20*5*100 = 12,430, so both rounds total 24,710,
+			// which 50,000 funds about twice over. A low balance of
+			// 12,280 + 1,000 = 13,280 funds round 1 and leaves 1,000: enough for
+			// the 10-token incremental base-tier quote (10*1 + 20*1*2 = 50) but
+			// not for the inherited tier quote.
+			userBalance, tokenBalance := int64(50000), int64(50000)
 			if scenario == "owner_low" {
-				userBalance = 3456
+				userBalance = 13280
 			}
 			if scenario == "token_low" {
-				tokenBalance = 3456
+				tokenBalance = 13280
 			}
 			xaiVideoSetup(t, userBalance, false)
 			require.NoError(t, model.DB.Model(&model.Token{}).Where("id = ?", fallbackTokenID).Update("remain_quota", tokenBalance).Error)
@@ -198,7 +205,7 @@ func TestSecurityNativeResponseOwnedContinuationAdmission(t *testing.T) {
 			if scenario == "funded" {
 				require.Nil(t, apiErr, "funded continuation must complete")
 				require.EqualValues(t, 2, calls.Load(), "funded control must reach both provider rounds")
-				require.EqualValues(t, 4942, finalToken.UsedQuota, "both funded rounds must settle exactly once")
+				require.EqualValues(t, 24710, finalToken.UsedQuota, "both funded rounds must settle exactly once")
 			}
 			if calls.Load() == 2 {
 				second := <-observed

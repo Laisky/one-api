@@ -77,9 +77,9 @@
         },
         "heading": "Configuración de Azure OpenAI",
         "version": {
-          "help": "Versión de API predeterminada utilizada cuando la solicitud no especifica una (ej. 2024-03-01-preview).",
+          "help": "Versión de API que este canal envía a Azure como parámetro de consulta api-version (ej. 2024-03-01-preview).",
           "label": "Versión de API",
-          "note": "Predeterminado: 2024-03-01-preview. Esto puede ser anulado por los parámetros de consulta de la solicitud.",
+          "note": "Predeterminado: 2024-03-01-preview. Los parámetros de consulta de la solicitud del cliente no pueden anularla; los modelos o1, o3, o4 y los que solo admiten Responses usan la versión que requieren.",
           "placeholder": "2024-03-01-preview",
           "warning_label": "Importante:",
           "warning_text": "El nombre del modelo debe ser tu nombre de implementación, no el nombre original del modelo."
@@ -408,7 +408,7 @@
         "pricing_description": "Las solicitudes a los siguientes modelos serán rechazadas hasta que este canal les asigne precio en Configuraciones de modelos:",
         "pricing_hint": "Añade ahora los precios que faltan, o guarda de todos modos y asigna precio a estos modelos antes de enviarles tráfico.",
         "pricing_requirement": {
-          "image_price_per_image_usd": "Define un image.price_per_image_usd positivo (el precio de reserva y de respaldo por imagen).",
+          "image_price_per_image_usd": "Asigna un precio a los tokens de salida de imagen de este modelo (ratio y completion_ratio) para que se derive la reserva por imagen predeterminada, o define un image.price_per_image_usd positivo.",
           "live_tariff": "Define los precios de Live: ratio, completion_ratio, las ratios de prompt y completion de audio, y prompt_ratio de imagen.",
           "tariff_supplement": "Define los precios de caché que exige este proveedor: cached_input_ratio y, cuando se requieran, cache_write_5m_ratio y cache_write_1h_ratio.",
           "token_tariff": "Define ratio y completion_ratio positivos, incluidos todos los tramos."
@@ -538,6 +538,7 @@
         "mapping_targets_not_recognized": "Estos destinos de mapeo no se reconocen como modelos de este canal: {{entries}}",
         "model_configs_message": "Las configuraciones de modelos son inválidas.",
         "model_configs_title": "Configuraciones inválidas",
+        "model_configs_unrecognized_keys": "El modelo \"{{model}}\" no tiene claves de configuración reconocidas (desconocidas: {{keys}})",
         "model_mapping_invalid": "El mapeo de modelos tiene un JSON inválido.",
         "model_mapping_invalid_entries": "Estas entradas de Model Mapping tienen valores vacíos o no de tipo string: {{keys}}",
         "model_mapping_parse_error": "El JSON de Model Mapping es inválido: {{error}}",

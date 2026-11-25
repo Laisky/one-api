@@ -11,23 +11,23 @@ import { LabelWithHelp } from './LabelWithHelp';
 
 const EMPTY_MODELS: string[] = [];
 
+/**
+ * ChannelModelSettingsProps configures ChannelModelSettings. `availableModels` is the complete
+ * provider catalog for the channel type: the selector options and the known Model Mapping targets.
+ * `defaultModels` are the zero-config default suggestions that Fill Related and Fill All add; they
+ * never decide whether a mapping target is valid.
+ */
 interface ChannelModelSettingsProps {
   form: ChannelFormMethods;
   availableModels: { id: string; name: string }[];
-  currentCatalogModels: string[];
+  defaultModels: string[];
   defaultPricing: string;
   tr: (key: string, defaultValue: string, options?: Record<string, unknown>) => string;
   notify: (options: any) => void;
 }
 
-export const ChannelModelSettings = ({
-  form,
-  availableModels,
-  currentCatalogModels,
-  defaultPricing,
-  tr,
-  notify,
-}: ChannelModelSettingsProps) => {
+/** ChannelModelSettings renders the supported, hidden, mapped, and priced model fields of the channel editor. */
+export const ChannelModelSettings = ({ form, availableModels, defaultModels, defaultPricing, tr, notify }: ChannelModelSettingsProps) => {
   const fieldHasError = (name: string) => !!(form.formState.errors as any)?.[name];
   const errorClass = (name: string) => (fieldHasError(name) ? 'border-destructive focus-visible:ring-destructive' : '');
   const selectedModels = form.watch('models') ?? EMPTY_MODELS;
@@ -163,19 +163,16 @@ export const ChannelModelSettings = ({
   const hasUnknownMappingTargets = mappingTargetsOutsideCatalog.length > 0;
   const hasMappingWarning = hasUnreachableMappingKeys || hasUnknownMappingTargets;
 
-  const fillRelatedModels = () => {
-    if (currentCatalogModels.length === 0) {
+  /**
+   * addDefaultModels appends the default suggestions that are not yet supported. Models outside the
+   * suggestions need operator pricing, so the admin adds them deliberately from the selector.
+   */
+  const addDefaultModels = () => {
+    if (defaultModels.length === 0) {
       return;
     }
     const currentModels = form.getValues('models') ?? [];
-    const uniqueModels = [...new Set([...currentModels, ...currentCatalogModels])];
-    form.setValue('models', uniqueModels);
-  };
-
-  const fillAllModels = () => {
-    const currentModels = form.getValues('models') ?? [];
-    const allModelIds = availableModels.map((m) => m.id);
-    const uniqueModels = [...new Set([...currentModels, ...allModelIds])];
+    const uniqueModels = [...new Set([...currentModels, ...defaultModels])];
     form.setValue('models', uniqueModels);
   };
 
@@ -239,14 +236,14 @@ export const ChannelModelSettings = ({
               noOptionsLabel={tr('models.no_match', 'No models found')}
               actions={
                 <>
-                  <Button type="button" variant="outline" size="sm" onClick={fillRelatedModels}>
+                  <Button type="button" variant="outline" size="sm" onClick={addDefaultModels}>
                     {tr('models.fill_related', 'Fill Related ({{count}})', {
-                      count: currentCatalogModels.length,
+                      count: defaultModels.length,
                     })}
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={fillAllModels}>
+                  <Button type="button" variant="outline" size="sm" onClick={addDefaultModels}>
                     {tr('models.fill_all', 'Fill All ({{count}})', {
-                      count: availableModels.length,
+                      count: defaultModels.length,
                     })}
                   </Button>
                   <Button type="button" variant="outline" onClick={clearModels} className="text-destructive hover:text-destructive">

@@ -16,7 +16,8 @@ interface ChannelSaveWarningDialogProps {
 
 /** PRICING_REQUIREMENT_DEFAULTS maps each server requirement code to its English fallback hint. */
 const PRICING_REQUIREMENT_DEFAULTS: Record<string, string> = {
-  image_price_per_image_usd: 'Set a positive image.price_per_image_usd (the per-image reservation and fallback price).',
+  image_price_per_image_usd:
+    "Price this model's image output tokens (ratio and completion_ratio) so the default per-image reservation is derived, or set a positive image.price_per_image_usd.",
   token_tariff: 'Set a positive ratio and completion_ratio, including every tier.',
   tariff_supplement:
     'Set the cache prices this provider requires: cached_input_ratio, plus cache_write_5m_ratio and cache_write_1h_ratio where required.',

@@ -39,7 +39,9 @@ func IsLiveOnlyGoogleModel(model string) bool {
 
 // WithoutLiveOnlyGoogleModels filters a specifically REST-scoped list.
 // Parameters: models are candidate IDs. Returns: a fresh slice excluding known
-// native-only IDs. Do not use this to hide administrator model suggestions.
+// native-only IDs. Do not use this to hide administrator model suggestions:
+// default channel model lists drop only models that need operator pricing
+// (controller.zeroConfigServableModels), and servable Live models stay listed.
 func WithoutLiveOnlyGoogleModels(models []string) []string {
 	filtered := make([]string, 0, len(models))
 	for _, model := range models {

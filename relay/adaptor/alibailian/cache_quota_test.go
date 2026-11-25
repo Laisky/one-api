@@ -88,8 +88,9 @@ func TestAlibailianQwenCachedInputBillsAtDiscount(t *testing.T) {
 			eff := pricing.ResolveEffectivePricing(modelName, promptTokens, provider)
 			require.Greater(t, eff.CachedInputRatio, 0.0,
 				"%s must define a positive cached input ratio", modelName)
-			require.InDelta(t, 0.2*modelRatio, eff.CachedInputRatio, modelRatio*1e-9,
-				"%s cached input ratio should be 0.2x the input ratio", modelName)
+			// A tiered model prices the whole prompt at its input band, cache included.
+			require.InDelta(t, 0.2*eff.InputRatio, eff.CachedInputRatio, eff.InputRatio*1e-9,
+				"%s cached input ratio should be 0.2x the effective input ratio", modelName)
 
 			baseUsage := &relaymodel.Usage{PromptTokens: promptTokens, CompletionTokens: completionTokens}
 			base := quotautil.Compute(quotautil.ComputeInput{

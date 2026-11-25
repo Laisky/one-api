@@ -191,7 +191,7 @@ func Compute(input ComputeInput) ComputeResult {
 
 // hasModelRatioFlatOverride reports whether overrides contains a true legacy flat model-ratio override.
 // Parameters: modelName names the model, overrides contains scalar ratios, and channelConfigs contains modern JSON configs.
-// Returns: true when the scalar override should keep precedence over windowed base ratios.
+// Returns: true when the scalar override should keep precedence over the config's windowed or tiered prices.
 func hasModelRatioFlatOverride(modelName string, overrides map[string]float64, channelConfigs map[string]modelcfg.ModelConfigLocal) bool {
 	if overrides == nil {
 		return false
@@ -202,7 +202,18 @@ func hasModelRatioFlatOverride(modelName string, overrides map[string]float64, c
 		return false
 	}
 	local, hasConfig := channelConfigs[modelName]
-	return !hasConfig || len(local.TimeWindows) == 0 || local.Ratio == 0 || local.Ratio != override
+	return !isConfigDerivedScalar(local, hasConfig, local.Ratio, override)
+}
+
+// isConfigDerivedScalar reports whether a scalar channel ratio is only the copy
+// of a structured config's own base value: the channel ratio maps are derived
+// from model_configs, so such a scalar must not suppress the config's schedule.
+// Parameters: local is the channel config, hasConfig reports whether it exists,
+// configValue is its base ratio or completion ratio, and override is the scalar.
+// Returns: true when the config has time windows or tiers and the scalar equals
+// its non-zero base value; a differing scalar stays a legacy flat override.
+func isConfigDerivedScalar(local modelcfg.ModelConfigLocal, hasConfig bool, configValue, override float64) bool {
+	return hasConfig && (len(local.TimeWindows) > 0 || len(local.Tiers) > 0) && configValue != 0 && configValue == override
 }
 
 // resolveCompletionRatio returns the effective completion ratio for modelName.
@@ -219,7 +230,7 @@ func resolveCompletionRatio(
 ) float64 {
 	if override, ok := channelOverrides[modelName]; ok {
 		local, hasConfig := channelConfigs[modelName]
-		if !hasConfig || len(local.TimeWindows) == 0 || local.CompletionRatio == 0 || local.CompletionRatio != override {
+		if !isConfigDerivedScalar(local, hasConfig, local.CompletionRatio, override) {
 			return override
 		}
 	}

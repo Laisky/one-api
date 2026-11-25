@@ -32,8 +32,19 @@ import (
 // 	return nil, nil
 // }
 
+// ImageHandler relays an Images API generation or edit response and returns
+// its usage for billing. A 2xx event stream, which GPT Image models send for
+// stream=true, is relayed as it arrives by imageStreamHandler; any other 2xx
+// body must be the JSON image response and is forwarded unchanged; a non-2xx
+// body becomes a structured upstream error. Parameters: c is the client
+// request and resp the provider response. Returns: an error for the client or
+// nil, and the usage, which is also returned with a delivery error so
+// forwarded work is still billed.
 func ImageHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
 	lg := gmw.GetLogger(c)
+	if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices && isImageEventStream(resp) {
+		return imageStreamHandler(c, resp)
+	}
 	var imageResponse ImageResponse
 	responseBody, err := io.ReadAll(resp.Body)
 

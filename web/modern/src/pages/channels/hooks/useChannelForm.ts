@@ -2,13 +2,14 @@ import { useNotifications } from '@/components/ui/notifications';
 import { api } from '@/lib/api';
 import { parseGroupList } from '@/lib/group-name';
 import { zodResolver } from '@/lib/zod-resolver';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router-dom';
 import { CHANNEL_TYPES_WITH_DEDICATED_BASE_URL } from '../constants';
 import {
   buildChannelSubmitPayload,
+  type BuildChannelSubmitPayloadOptions,
   isValidJSON,
   normalizeChannelType,
   parsePrivateChannelJSON,
@@ -19,8 +20,10 @@ import {
   toInt,
   validateModelConfigs,
 } from '../helpers';
+import { effectiveOtherValue, removeOtherOverrides, snapshotStoredOther, type StoredOtherBinding } from '../otherOverride';
 import { createChannelSchema, type ChannelConfigForm, type ChannelForm, type ChannelFormInput, type EndpointInfo } from '../schemas';
-import { fetchChannelPricingGaps, getChannelMappingWarnings, type ChannelPricingGap } from './channelSaveWarnings';
+import { loadChannelModelCatalogs, type ChannelModelCatalog } from './channelModelCatalogs';
+import { collectChannelSaveWarnings, type ChannelPricingGap, type ChannelSaveWarnings } from './channelSaveWarnings';
 /** useChannelForm manages channel loading, validation, submission, and related UI state, returning the complete page model. */
 export const useChannelForm = () => {
   const params = useParams();
@@ -35,7 +38,10 @@ export const useChannelForm = () => {
   );
   const [loading, setLoading] = useState(isEdit);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [modelsCatalog, setModelsCatalog] = useState<Record<number, string[]>>({});
+  // The complete provider catalog: model selector options and known Model Mapping targets.
+  const [modelsCatalog, setModelsCatalog] = useState<ChannelModelCatalog>({});
+  // The zero-config default suggestions used by the Fill actions (the complete catalog when unavailable).
+  const [defaultModelsCatalog, setDefaultModelsCatalog] = useState<ChannelModelCatalog>({});
   const [defaultPricing, setDefaultPricing] = useState<string>('');
   const [defaultTooling, setDefaultTooling] = useState<string>('');
   const [defaultBaseURL, setDefaultBaseURL] = useState<string>('');
@@ -44,6 +50,10 @@ export const useChannelForm = () => {
   const [allEndpoints, setAllEndpoints] = useState<EndpointInfo[]>([]);
   const [formInitialized, setFormInitialized] = useState(!isEdit);
   const [loadedChannelType, setLoadedChannelType] = useState<number | null>(null);
+  // The channel exactly as loaded for editing; save warnings report only what the edit introduces relative to it.
+  const loadedChannelRef = useRef<ChannelForm | null>(null);
+  // The stored `other` value and typed override as loaded; the form field shows their effective value.
+  const storedOtherRef = useRef<StoredOtherBinding | null>(null);
   // State for channel type change confirmation dialog
   const [pendingTypeChange, setPendingTypeChange] = useState<{
     fromType: number;
@@ -267,12 +277,16 @@ export const useChannelForm = () => {
           }
         }
 
+        const storedOther = typeof data.other === 'string' ? data.other : '';
+        // The raw stored text keeps keys that JSON.parse collapses, so the override is read as the relay reads it.
+        const storedConfig = typeof data.config === 'string' && data.config.trim() !== '' ? data.config : config;
         const formData: ChannelForm = {
           name: data.name || '',
           type: channelType,
           key: data.key || '',
           base_url: data.base_url || '',
-          other: data.other || '',
+          // The relay prefers a non-empty typed override, so the field shows that effective value.
+          other: effectiveOtherValue(channelType, storedOther, storedConfig),
           models,
           hidden_models: parseStringArrayField(data.hidden_models),
           model_mapping: formatPrivateChannelJSONField(data.model_mapping),
@@ -299,6 +313,8 @@ export const useChannelForm = () => {
         }
 
         setLoadedChannelType(channelType);
+        storedOtherRef.current = snapshotStoredOther(channelType, storedOther, storedConfig);
+        loadedChannelRef.current = formData;
         reset(formData);
         await new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -323,24 +339,10 @@ export const useChannelForm = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channelId, loadDefaultPricing]);
 
+  // loadModelsCatalog publishes each catalog as soon as its own request settles, so slow default
+  // suggestions never delay the complete catalog.
   const loadModelsCatalog = useCallback(async () => {
-    try {
-      const response = await api.get('/api/models');
-      const { success, data } = response.data;
-
-      if (success && data) {
-        const catalog: Record<number, string[]> = {};
-        Object.entries(data).forEach(([typeKey, models]) => {
-          if (!Array.isArray(models)) return;
-          const typeId = Number(typeKey);
-          if (!Number.isFinite(typeId)) return;
-          catalog[typeId] = (models as string[]).filter((model) => typeof model === 'string' && model.trim() !== '');
-        });
-        setModelsCatalog(catalog);
-      }
-    } catch (error) {
-      console.error(`Error loading models catalog: ${error instanceof Error ? error.message : String(error)}`);
-    }
+    await loadChannelModelCatalogs({ onFull: setModelsCatalog, onDefaults: setDefaultModelsCatalog });
   }, []);
 
   // The group catalog is loaded by ChannelGroups itself through useGroupCatalog.
@@ -395,21 +397,35 @@ export const useChannelForm = () => {
     }
   }, [normalizedChannelType, loadDefaultPricing]);
 
+  /** submitPayloadOptions returns the save-payload options for a validated draft. */
+  const submitPayloadOptions = (data: ChannelForm): BuildChannelSubmitPayloadOptions => ({
+    isEdit,
+    watchType: data.type,
+    watchConfig,
+    storedOther: isEdit ? storedOtherRef.current : null,
+  });
+
   /**
    * onSubmit intercepts a validated save so admins can review Model Mapping entries that look wrong
    * and supported models that request admission would refuse for missing channel pricing; it takes
-   * the form data and either opens the save warning dialog or submits. The pricing check is
-   * advisory and fails open, so it never blocks saving by itself.
+   * the form data and either opens the save warning dialog or submits. When editing a channel of an
+   * unchanged type, only warnings the edit introduced are shown. The pricing check is advisory and
+   * fails open, so it never blocks saving by itself.
    */
   const onSubmit = async (data: ChannelForm) => {
-    const { unreachableKeys, unknownTargets } = getChannelMappingWarnings(data, modelsCatalog);
-    let pricingGaps: ChannelPricingGap[] = [];
     setIsSubmitting(true);
+    let warnings: ChannelSaveWarnings;
     try {
-      pricingGaps = await fetchChannelPricingGaps(data, { isEdit, watchType: data.type, watchConfig });
+      // Known mapping targets come from the complete provider catalog, never the default suggestions.
+      warnings = await collectChannelSaveWarnings(data, {
+        baseline: isEdit ? loadedChannelRef.current : null,
+        modelsCatalog,
+        payloadOptions: submitPayloadOptions(data),
+      });
     } finally {
       setIsSubmitting(false);
     }
+    const { unreachableKeys, unknownTargets, pricingGaps } = warnings;
     if (unreachableKeys.length > 0 || unknownTargets.length > 0 || pricingGaps.length > 0) {
       setPendingSaveConfirmation({
         data,
@@ -443,13 +459,15 @@ export const useChannelForm = () => {
       if (data.model_configs) {
         const validation = validateModelConfigs(data.model_configs);
         if (!validation.valid) {
+          const validationError =
+            validation.errorKey && validation.error ? tr(validation.errorKey, validation.error, validation.errorParams) : validation.error;
           form.setError('model_configs', {
-            message: validation.error || tr('model_configs.invalid', 'Invalid model configs format'),
+            message: validationError || tr('model_configs.invalid', 'Invalid model configs format'),
           });
           notify({
             type: 'error',
             title: tr('validation.model_configs_title', 'Invalid configs'),
-            message: validation.error || tr('validation.model_configs_message', 'Model Configs are invalid.'),
+            message: validationError || tr('validation.model_configs_message', 'Model Configs are invalid.'),
           });
           return;
         }
@@ -545,11 +563,7 @@ export const useChannelForm = () => {
       }
       form.clearErrors('base_url');
 
-      const payload = buildChannelSubmitPayload(data, {
-        isEdit,
-        watchType: data.type,
-        watchConfig,
-      });
+      const payload = buildChannelSubmitPayload(data, submitPayloadOptions(data));
 
       let response;
       if (isEdit && channelId) {
@@ -624,12 +638,15 @@ export const useChannelForm = () => {
         shouldValidate: true,
         shouldDirty: true,
       });
-      // Clear related fields that may not be compatible with the new type
+      // Clear related fields that may not be compatible with the new type, including every
+      // spelling of the typed config overrides of `other`, which the relay would otherwise apply.
       setValue('base_url', '');
       setValue('other', '');
+      const config = removeOtherOverrides(getValues('config'));
+      setValue('config', config as ChannelFormInput['config']);
       setPendingTypeChange(null);
     }
-  }, [pendingTypeChange, setValue]);
+  }, [pendingTypeChange, setValue, getValues]);
 
   /**
    * Cancels a pending type change and reverts the selection.
@@ -707,6 +724,7 @@ export const useChannelForm = () => {
     loading,
     isSubmitting,
     modelsCatalog,
+    defaultModelsCatalog,
     defaultPricing,
     defaultTooling,
     defaultBaseURL,

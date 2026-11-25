@@ -1,10 +1,11 @@
 import { showError as reportUIError } from '../../../utils/common';
 import PropTypes from 'prop-types';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { CHANNEL_OPTIONS } from 'constants/ChannelConstants';
 import { useTheme } from '@mui/material/styles';
 import { API } from 'utils/api';
-import { showError, showSuccess, getChannelModels } from 'utils/common';
+import { showError, showSuccess, getChannelDefaultModels } from 'utils/common';
+import { resolveOtherSave, snapshotOther, storedOtherOverride } from 'utils/channel-other';
 import ChannelDebugPanel from '../../../components/ChannelDebugPanel';
 import {
   Dialog,
@@ -23,173 +24,37 @@ import {
   Container,
   Autocomplete,
   FormHelperText,
-  Switch,
   Checkbox,
   Box,
-  Typography,
-  Tooltip,
-  IconButton
+  Typography
 } from '@mui/material';
-import { HelpOutline } from '@mui/icons-material';
 
 import { Formik } from 'formik';
-import * as Yup from 'yup';
 import { defaultConfig, typeConfig } from '../type/Config'; //typeConfig
 import { createFilterOptions } from '@mui/material/Autocomplete';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import CheckBoxIcon from '@mui/icons-material/CheckBox';
 import { omitUnownedChannelFields } from '../../../../../legacy/channel-update-payload.mjs';
+import { validationSchema } from './editModalConfig';
+import LabelWithTooltip from './LabelWithTooltip';
+import ChannelCredentialFields from './ChannelCredentialFields';
+import ChannelAdvancedFields from './ChannelAdvancedFields';
 
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />;
 const checkedIcon = <CheckBoxIcon fontSize="small" />;
 
 const filter = createFilterOptions();
-const isClockHHMM = (value) => typeof value === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
 
-const validationSchema = Yup.object().shape({
-  is_edit: Yup.boolean(),
-  name: Yup.string().required('名称 不能为空'),
-  type: Yup.number().required('渠道 不能为空'),
-  key: Yup.string().when(['is_edit', 'type'], {
-    is: (is_edit, type) => !is_edit && type !== 33,
-    then: Yup.string().required('密钥 不能为空')
-  }),
-  other: Yup.string(),
-  models: Yup.array().min(1, '模型 不能为空'),
-  groups: Yup.array().min(1, '用户组 不能为空'),
-  base_url: Yup.string().when('type', {
-    is: (value) => [3, 50].includes(value),
-    then: Yup.string().required('渠道API地址 不能为空'), // base_url 是必需的
-    otherwise: Yup.string() // 在其他情况下，base_url 可以是任意字符串
-  }),
-  model_mapping: Yup.string().test('is-json', '必须是有效的JSON字符串', function (value) {
-    try {
-      if (value === '' || value === null || value === undefined) {
-        return true;
-      }
-      const parsedValue = JSON.parse(value);
-      if (typeof parsedValue === 'object') {
-        return true;
-      }
-    } catch (e) {
-      return false;
-    }
-    return false;
-  }),
-  // model_ratio and completion_ratio validation removed - now handled through model_configs
-  model_configs: Yup.string().nullable().test('is-valid-model-configs', '模型配置格式无效', function (value) {
-    if (value === '' || value === null || value === undefined) {
-      return true;
-    }
-
-    try {
-      const configs = JSON.parse(value);
-
-      if (typeof configs !== 'object' || configs === null || Array.isArray(configs)) {
-        return this.createError({ message: '模型配置必须是JSON对象' });
-      }
-
-      for (const [modelName, config] of Object.entries(configs)) {
-        if (!modelName || modelName.trim() === '') {
-          return this.createError({ message: '模型名称不能为空' });
-        }
-
-        if (typeof config !== 'object' || config === null || Array.isArray(config)) {
-          return this.createError({ message: `模型"${modelName}"的配置必须是对象` });
-        }
-
-        // Validate ratio
-        if (config.ratio !== undefined) {
-          if (typeof config.ratio !== 'number' || config.ratio < 0) {
-            return this.createError({ message: `模型"${modelName}"的ratio无效：必须是非负数` });
-          }
-        }
-
-        // Validate completion_ratio
-        if (config.completion_ratio !== undefined) {
-          if (typeof config.completion_ratio !== 'number' || config.completion_ratio < 0) {
-            return this.createError({ message: `模型"${modelName}"的completion_ratio无效：必须是非负数` });
-          }
-        }
-
-        // Validate max_tokens
-        if (config.max_tokens !== undefined) {
-          if (!Number.isInteger(config.max_tokens) || config.max_tokens < 0) {
-            return this.createError({ message: `模型"${modelName}"的max_tokens无效：必须是非负整数` });
-          }
-        }
-
-        if (config.time_windows !== undefined) {
-          if (!Array.isArray(config.time_windows)) {
-            return this.createError({ message: `Model "${modelName}" time_windows must be an array` });
-          }
-          for (const [index, window] of config.time_windows.entries()) {
-            if (typeof window !== 'object' || window === null || Array.isArray(window)) {
-              return this.createError({ message: `Model "${modelName}" time window ${index + 1} must be an object` });
-            }
-            if (!Array.isArray(window.ranges) || window.ranges.length === 0) {
-              return this.createError({ message: `Model "${modelName}" time window ${index + 1} ranges must be a non-empty array` });
-            }
-            for (const range of window.ranges) {
-              if (typeof range !== 'object' || range === null || !isClockHHMM(range.start) || !isClockHHMM(range.end)) {
-                return this.createError({ message: `Model "${modelName}" time window ${index + 1} ranges must use HH:MM strings` });
-              }
-            }
-            if (typeof window.overlay !== 'object' || window.overlay === null || Array.isArray(window.overlay)) {
-              return this.createError({ message: `Model "${modelName}" time window ${index + 1} overlay must be an object` });
-            }
-          }
-        }
-
-        // Check if at least one meaningful field is provided
-        if (
-          config.ratio === undefined &&
-          config.completion_ratio === undefined &&
-          config.max_tokens === undefined &&
-          (!Array.isArray(config.time_windows) || config.time_windows.length === 0)
-        ) {
-          return this.createError({ message: `模型"${modelName}"必须至少有一个配置字段（ratio、completion_ratio或max_tokens）` });
-        }
-      }
-
-      return true;
-    } catch (error) {
-      return this.createError({ message: `JSON格式无效：${error.message}` });
-    }
-  }),
-  inference_profile_arn_map: Yup.string().nullable().test('is-json', '必须是有效的JSON字符串', function (value) {
-    try {
-      if (value === '' || value === null || value === undefined) {
-        return true;
-      }
-      const parsedValue = JSON.parse(value);
-      if (typeof parsedValue === 'object') {
-        return true;
-      }
-    } catch (e) {
-      return false;
-    }
-    return false;
-  })
-});
-
-// Helper component for labels with tooltips
-const LabelWithTooltip = ({ label, helpText, children, ...props }) => (
-  <Box sx={{ display: 'flex', alignItems: 'center', ...props.sx }}>
-    <InputLabel {...props}>
-      {label}
-    </InputLabel>
-    {helpText && (
-      <Tooltip title={helpText} placement="top" arrow>
-        <IconButton size="small" sx={{ ml: 0.5, p: 0.25 }}>
-          <HelpOutline sx={{ fontSize: 16, color: 'text.secondary' }} />
-        </IconButton>
-      </Tooltip>
-    )}
-    {children}
-  </Box>
-);
-
+/**
+ * EditModal renders the Berry dialog that creates a channel or edits a stored one.
+ *
+ * @param {object} props The component props.
+ * @param {boolean} props.open Whether the dialog is shown.
+ * @param {number|string} [props.channelId] The channel to edit; a new channel is created when it is empty.
+ * @param {Function} props.onCancel Closes the dialog without saving.
+ * @param {Function} props.onOk Called with true after a successful save.
+ * @returns {JSX.Element} The channel editor dialog.
+ */
 const EditModal = ({ open, channelId, onCancel, onOk }) => {
   const theme = useTheme();
   const [loading, setLoading] = useState(false);
@@ -199,7 +64,8 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
   const [groupOptions, setGroupOptions] = useState([]);
   const [modelOptions, setModelOptions] = useState([]);
   const [batchAdd, setBatchAdd] = useState(false);
-  const [basicModels, setBasicModels] = useState([]);
+  // otherSnapshot remembers the stored `other` value and typed override of the loaded channel.
+  const otherSnapshot = useRef(null);
   const [defaultPricing, setDefaultPricing] = useState({
     model_ratio: '',
     completion_ratio: '',
@@ -249,8 +115,8 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
   };
   const handleTypeChange = (setFieldValue, typeValue, values) => {
     initChannel(typeValue);
-    let localModels = getChannelModels(typeValue);
-    setBasicModels(localModels);
+    // The new type starts from a fresh config, so no stored override remains.
+    otherSnapshot.current = null;
 
     setFieldValue('models', []);
     setFieldValue('model_configs', '');
@@ -334,47 +200,55 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
     try {
       setSubmitting(true);
-      if (values.base_url && values.base_url.endsWith('/')) {
-        values.base_url = values.base_url.slice(0, values.base_url.length - 1);
+      // The request body is a copy: Formik's values stay as displayed, so a failed save leaves the
+      // form, and the untouched-field comparison of the next save, unchanged.
+      const body = { ...values };
+      if (body.base_url && body.base_url.endsWith('/')) {
+        body.base_url = body.base_url.slice(0, body.base_url.length - 1);
       }
-      if (values.type === 3 && values.other === '') {
-        values.other = '2023-09-01-preview';
+      // An untouched field resends the stored values; an edit also replaces a stored override.
+      const otherSave = resolveOtherSave(otherSnapshot.current, values.type, values.other, values.config);
+      body.other = otherSave.other;
+      // The legacy defaults apply only when no typed override supplies the value.
+      const overridden = storedOtherOverride(values.type, otherSave.config) !== '';
+      if (!overridden && body.type === 3 && body.other === '') {
+        body.other = '2023-09-01-preview';
       }
-      if (values.type === 18 && values.other === '') {
-        values.other = 'v2.1';
+      if (!overridden && body.type === 18 && body.other === '') {
+        body.other = 'v2.1';
       }
-      if (values.key === '') {
+      if (body.key === '') {
         if (values.config.ak && values.config.sk && values.config.region) {
-          values.key = `${values.config.ak}|${values.config.sk}|${values.config.region}`;
+          body.key = `${values.config.ak}|${values.config.sk}|${values.config.region}`;
         } else if (values.config.region && values.config.vertex_ai_project_id && values.config.vertex_ai_adc) {
-          values.key = `${values.config.region}|${values.config.vertex_ai_project_id}|${values.config.vertex_ai_adc}`;
+          body.key = `${values.config.region}|${values.config.vertex_ai_project_id}|${values.config.vertex_ai_adc}`;
         }
       }
 
       let res;
       const modelsStr = values.models.map((model) => model.id).join(',');
-      const configStr = JSON.stringify(values.config);
-      values.group = values.groups.join(',');
+      const configStr = JSON.stringify(otherSave.config);
+      body.group = values.groups.join(',');
 
       // Handle pricing fields - convert empty strings to null for the API
-      if (values.model_ratio === '') {
-        values.model_ratio = null;
+      if (body.model_ratio === '') {
+        body.model_ratio = null;
       }
-      if (values.completion_ratio === '') {
-        values.completion_ratio = null;
+      if (body.completion_ratio === '') {
+        body.completion_ratio = null;
       }
-      if (values.model_configs === '') {
-        values.model_configs = null;
+      if (body.model_configs === '') {
+        body.model_configs = null;
       }
       if (channelId) {
         res = await API.put(`/api/channel/`, omitUnownedChannelFields({
-          ...values,
+          ...body,
           uuid: channelId,
           models: modelsStr,
           config: configStr
         }));
       } else {
-        res = await API.post(`/api/channel/`, { ...values, models: modelsStr, config: configStr });
+        res = await API.post(`/api/channel/`, { ...body, models: modelsStr, config: configStr });
       }
       const { success, message } = res.data;
       if (success) {
@@ -436,6 +310,8 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
         if (data.model_mapping !== '') {
           data.model_mapping = JSON.stringify(JSON.parse(data.model_mapping), null, 2);
         }
+        // The raw stored text keeps keys that JSON.parse collapses, so the override is read as the relay reads it.
+        const storedConfig = data.config;
         if (data.config !== '') {
           try {
             const parsedConfig = JSON.parse(data.config);
@@ -451,6 +327,10 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
         } else {
           data.config = { ...defaultConfig.input.config };
         }
+        // The field shows the value the relay uses: a stored typed override wins over `other`.
+        const { displayed, snapshot } = snapshotOther(data.type, data.other, typeof storedConfig === 'string' ? storedConfig : data.config);
+        otherSnapshot.current = snapshot;
+        data.other = displayed;
         // Format pricing fields for display
         if (data.model_ratio && data.model_ratio !== '') {
           try {
@@ -504,6 +384,7 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
       loadChannel().then().catch(reportUIError);
     } else {
       initChannel(1);
+      otherSnapshot.current = null;
       setInitialInput({ ...defaultConfig.input, is_edit: false });
       // Load default pricing for new channels
       loadDefaultPricing(1).catch(reportUIError);
@@ -791,7 +672,8 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                   <ButtonGroup variant="outlined" aria-label="small outlined primary button group">
                     <Button
                       onClick={() => {
-                        setFieldValue('models', initialModel(basicModels));
+                        // Related models are the zero-config recommendations for the selected type.
+                        setFieldValue('models', initialModel(getChannelDefaultModels(values.type)));
                       }}
                     >
                       填入相关模型
@@ -805,315 +687,34 @@ const EditModal = ({ open, channelId, onCancel, onOk }) => {
                     </Button>
                   </ButtonGroup>
                 </Container>
-                {inputLabel.key && (
-                  <>
-                    <FormControl fullWidth error={Boolean(touched.key && errors.key)} sx={{ ...theme.typography.otherInput }}>
-                      {!batchAdd ? (
-                        <>
-                          <InputLabel htmlFor="channel-key-label">{inputLabel.key}</InputLabel>
-                          <OutlinedInput
-                            id="channel-key-label"
-                            label={inputLabel.key}
-                            type="text"
-                            value={values.key}
-                            name="key"
-                            onBlur={handleBlur}
-                            onChange={handleChange}
-                            inputProps={{}}
-                            aria-describedby="helper-text-channel-key-label"
-                          />
-                        </>
-                      ) : (
-                        <TextField
-                          multiline
-                          id="channel-key-label"
-                          label={inputLabel.key}
-                          value={values.key}
-                          name="key"
-                          onBlur={handleBlur}
-                          onChange={handleChange}
-                          aria-describedby="helper-text-channel-key-label"
-                          minRows={5}
-                          placeholder={inputPrompt.key + '，一行一个密钥'}
-                        />
-                      )}
+                <ChannelCredentialFields
+                  inputLabel={inputLabel}
+                  inputPrompt={inputPrompt}
+                  values={values}
+                  touched={touched}
+                  errors={errors}
+                  handleBlur={handleBlur}
+                  handleChange={handleChange}
+                  batchAdd={batchAdd}
+                  setBatchAdd={setBatchAdd}
+                  channelId={channelId}
+                  theme={theme}
+                />
 
-                      {touched.key && errors.key ? (
-                        <FormHelperText error id="helper-tex-channel-key-label">
-                          {errors.key}
-                        </FormHelperText>
-                      ) : (
-                        <FormHelperText id="helper-tex-channel-key-label"> {inputPrompt.key} </FormHelperText>
-                      )}
-                    </FormControl>
-                    {!channelId && (
-                      <Container
-                        sx={{
-                          textAlign: 'right'
-                        }}
-                      >
-                        <Switch checked={batchAdd} onChange={(e) => setBatchAdd(e.target.checked)} />
-                        批量添加
-                      </Container>
-                    )}
-                  </>
-                )}
-
-                {inputLabel.config &&
-                  Object.keys(inputLabel.config).map((configName) => {
-                    return (
-                      <FormControl key={'config.' + configName} fullWidth sx={{ ...theme.typography.otherInput }}>
-                        <TextField
-                          multiline
-                          key={'config.' + configName}
-                          name={'config.' + configName}
-                          value={values.config?.[configName] || ''}
-                          label={configName}
-                          placeholder={inputPrompt.config[configName]}
-                          onChange={handleChange}
-                        />
-                        <FormHelperText id={`helper-tex-config.${configName}-label`}> {inputPrompt.config[configName]} </FormHelperText>
-                      </FormControl>
-                    );
-                  })}
-
-                <FormControl fullWidth error={Boolean(touched.model_mapping && errors.model_mapping)} sx={{ ...theme.typography.otherInput }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                    <LabelWithTooltip
-                      htmlFor="channel-model_mapping-label"
-                      label={inputLabel.model_mapping}
-                      helpText="将传入的模型请求重定向到不同的模型。例如，将'gpt-4-0314'映射到'gpt-4'以处理已弃用的模型名称。JSON格式：{&quot;请求模型&quot;: &quot;实际模型&quot;}"
-                      sx={{
-                        position: 'relative',
-                        transform: 'none',
-                        fontSize: '0.875rem',
-                        fontWeight: 500,
-                        color: theme.palette.text.primary
-                      }}
-                    />
-                    <Box>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => {
-                          const formattedValue = formatJSON(values.model_mapping);
-                          setFieldValue('model_mapping', formattedValue);
-                        }}
-                        disabled={!values.model_mapping || values.model_mapping.trim() === ''}
-                      >
-                        格式化JSON
-                      </Button>
-                    </Box>
-                  </Box>
-                  <TextField
-                    multiline
-                    id="channel-model_mapping-label"
-                    value={values.model_mapping}
-                    name="model_mapping"
-                    onBlur={handleBlur}
-                    onChange={handleChange}
-                    aria-describedby="helper-text-channel-model_mapping-label"
-                    minRows={5}
-                    placeholder={inputPrompt.model_mapping}
-                    sx={{
-                      '& .MuiInputBase-input': {
-                        fontFamily: 'JetBrains Mono, Consolas, Monaco, "Courier New", monospace',
-                        fontSize: '13px',
-                        lineHeight: '1.4',
-                        backgroundColor: '#f8f9fa',
-                      },
-                      '& .MuiOutlinedInput-root': {
-                        '& fieldset': {
-                          borderColor: isValidJSON(values.model_mapping) ? theme.palette.grey[300] : theme.palette.error.main,
-                        },
-                      }
-                    }}
-                  />
-                  {touched.model_mapping && errors.model_mapping ? (
-                    <FormHelperText error id="helper-tex-channel-model_mapping-label">
-                      {errors.model_mapping}
-                    </FormHelperText>
-                  ) : (
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <FormHelperText id="helper-tex-channel-model_mapping-label">
-                        {inputPrompt.model_mapping}
-                      </FormHelperText>
-                      {values.model_mapping && values.model_mapping.trim() !== '' && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: isValidJSON(values.model_mapping) ? theme.palette.success.main : theme.palette.error.main,
-                            fontWeight: 'bold',
-                            fontSize: '11px'
-                          }}
-                        >
-                          {isValidJSON(values.model_mapping) ? '✓ 有效JSON' : '✗ 无效JSON'}
-                        </Typography>
-                      )}
-                    </Box>
-                  )}
-                </FormControl>
-                <FormControl fullWidth error={Boolean(touched.system_prompt && errors.system_prompt)} sx={{ ...theme.typography.otherInput }}>
-                  <LabelWithTooltip
-                    htmlFor="channel-system_prompt-label"
-                    label={inputLabel.system_prompt}
-                    helpText="为通过此渠道的所有请求强制设置特定的系统提示词。适用于创建专门的AI助手或强制执行特定的行为模式。"
-                    sx={{
-                      position: 'relative',
-                      transform: 'none',
-                      fontSize: '0.875rem',
-                      fontWeight: 500,
-                      color: theme.palette.text.primary,
-                      mb: 1
-                    }}
-                  />
-                  <TextField
-                    multiline
-                    id="channel-system_prompt-label"
-                    value={values.system_prompt}
-                    name="system_prompt"
-                    onBlur={handleBlur}
-                    onChange={handleChange}
-                    aria-describedby="helper-text-channel-system_prompt-label"
-                    minRows={5}
-                    placeholder={inputPrompt.system_prompt}
-                  />
-                  {touched.system_prompt && errors.system_prompt ? (
-                    <FormHelperText error id="helper-tex-channel-system_prompt-label">
-                      {errors.system_prompt}
-                    </FormHelperText>
-                  ) : (
-                    <FormHelperText id="helper-tex-channel-system_prompt-label"> {inputPrompt.system_prompt} </FormHelperText>
-                  )}
-                </FormControl>
-
-                {/* Channel-specific pricing fields - now handled through model_configs */}
-
-                <FormControl fullWidth error={Boolean(touched.model_configs && errors.model_configs)} sx={{ ...theme.typography.otherInput }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                    <LabelWithTooltip
-                      htmlFor="channel-model_configs-label"
-                      label="模型配置"
-                      helpText="为每个模型配置定价和限制。'ratio'设置输入token成本，'completion_ratio'设置输出token成本倍数，'max_tokens'设置请求限制。覆盖默认定价。"
-                      sx={{
-                        position: 'relative',
-                        transform: 'none',
-                        fontSize: '0.875rem',
-                        fontWeight: 500,
-                        color: theme.palette.text.primary
-                      }}
-                    />
-                    <Box>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => {
-                          const formattedValue = formatJSON(defaultPricing.model_configs);
-                          setFieldValue('model_configs', formattedValue);
-                        }}
-                        sx={{ mr: 1 }}
-                      >
-                        加载默认值
-                      </Button>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        onClick={() => {
-                          const formattedValue = formatJSON(values.model_configs);
-                          setFieldValue('model_configs', formattedValue);
-                        }}
-                        disabled={!values.model_configs || values.model_configs.trim() === ''}
-                      >
-                        格式化JSON
-                      </Button>
-                    </Box>
-                  </Box>
-                  <TextField
-                    multiline
-                    id="channel-model_configs-label"
-                    value={values.model_configs}
-                    name="model_configs"
-                    onBlur={handleBlur}
-                    onChange={handleChange}
-                    aria-describedby="helper-text-channel-model_configs-label"
-                    minRows={8}
-                    placeholder='统一的模型配置包括定价和属性。JSON格式，键为模型名称，值包含ratio、completion_ratio和max_tokens字段，例如：{"gpt-3.5-turbo": {"ratio": 0.0015, "completion_ratio": 2.0, "max_tokens": 65536}}'
-                    sx={{
-                      '& .MuiInputBase-input': {
-                        fontFamily: 'JetBrains Mono, Consolas, Monaco, "Courier New", monospace',
-                        fontSize: '13px',
-                        lineHeight: '1.4',
-                        backgroundColor: '#f8f9fa',
-                      },
-                      '& .MuiOutlinedInput-root': {
-                        '& fieldset': {
-                          borderColor: isValidJSON(values.model_configs) ? theme.palette.grey[300] : theme.palette.error.main,
-                        },
-                      }
-                    }}
-                  />
-                  {touched.model_configs && errors.model_configs ? (
-                    <FormHelperText error id="helper-tex-channel-model_configs-label">
-                      {errors.model_configs}
-                    </FormHelperText>
-                  ) : (
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <FormHelperText id="helper-tex-channel-model_configs-label">
-                        JSON 格式：统一的模型配置包括定价和属性。键为模型名称，值包含ratio、completion_ratio和max_tokens字段。
-                      </FormHelperText>
-                      {values.model_configs && values.model_configs.trim() !== '' && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: isValidJSON(values.model_configs) ? theme.palette.success.main : theme.palette.error.main,
-                            fontWeight: 'bold',
-                            fontSize: '11px'
-                          }}
-                        >
-                          {isValidJSON(values.model_configs) ? '✓ 有效JSON' : '✗ 无效JSON'}
-                        </Typography>
-                      )}
-                    </Box>
-                  )}
-                </FormControl>
-
-                {/* AWS-specific inference profile ARN mapping */}
-                {values.type === 33 && (
-                  <FormControl fullWidth error={Boolean(touched.inference_profile_arn_map && errors.inference_profile_arn_map)} sx={{ ...theme.typography.otherInput }}>
-                    <InputLabel
-                      htmlFor="channel-inference_profile_arn_map-label"
-                      sx={{
-                        position: 'relative',
-                        transform: 'none',
-                        fontSize: '0.875rem',
-                        fontWeight: 500,
-                        color: theme.palette.text.primary
-                      }}
-                    >
-                      {inputLabel.inference_profile_arn_map}
-                    </InputLabel>
-                    <TextField
-                      multiline
-                      id="channel-inference_profile_arn_map-label"
-                      value={values.inference_profile_arn_map}
-                      name="inference_profile_arn_map"
-                      onBlur={handleBlur}
-                      onChange={handleChange}
-                      aria-describedby="helper-text-channel-inference_profile_arn_map-label"
-                      minRows={5}
-                      placeholder={inputPrompt.inference_profile_arn_map}
-                    />
-                    {touched.inference_profile_arn_map && errors.inference_profile_arn_map ? (
-                      <FormHelperText error id="helper-tex-channel-inference_profile_arn_map-label">
-                        {errors.inference_profile_arn_map}
-                      </FormHelperText>
-                    ) : (
-                      <FormHelperText id="helper-tex-channel-inference_profile_arn_map-label">
-                        JSON 格式：{`{"模型名称": "arn:aws:bedrock:region:account:inference-profile/profile-id"}`}。将模型名称映射到 AWS Bedrock 推理配置文件 ARN。留空则使用默认模型 ID。
-                      </FormHelperText>
-                    )}
-                  </FormControl>
-                )}
+                <ChannelAdvancedFields
+                  values={values}
+                  touched={touched}
+                  errors={errors}
+                  handleBlur={handleBlur}
+                  handleChange={handleChange}
+                  setFieldValue={setFieldValue}
+                  inputLabel={inputLabel}
+                  inputPrompt={inputPrompt}
+                  defaultPricing={defaultPricing}
+                  formatJSON={formatJSON}
+                  isValidJSON={isValidJSON}
+                  theme={theme}
+                />
 
                 {/* Rate Limit Field */}
                 <FormControl fullWidth error={Boolean(touched.ratelimit && errors.ratelimit)} sx={{ ...theme.typography.otherInput }}>

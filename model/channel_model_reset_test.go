@@ -9,8 +9,12 @@ import (
 	"github.com/Laisky/one-api/relay/channeltype"
 )
 
-// resetTestCatalog supplies a deterministic provider catalog for persistence tests.
-func resetTestCatalog(int) []string { return []string{"Foo", "Bar"} }
+// resetTestCatalog supplies a deterministic provider catalog for persistence
+// tests. Parameters: the channel type is ignored. Returns: defaults Foo and Bar
+// with no extra known models.
+func resetTestCatalog(int) ChannelResetCatalog {
+	return ChannelResetCatalog{Defaults: []string{"Foo", "Bar"}}
+}
 
 // TestResetChannelModelsToDefaultsRebuildsAbilities verifies the stored model list,
 // visibility, routing groups, and channel status change as one coherent operation.

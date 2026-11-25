@@ -20,12 +20,13 @@ const (
 // ResolveModelConfig returns the effective model configuration by applying
 // channel overrides first, then adaptor defaults, then global fallbacks.
 // A model the provider declares operator-tariff-only resolves from channel
-// overrides alone. The returned configuration is a clone callers can mutate.
+// overrides alone. A channel entry that inherits the provider's base ratio
+// also inherits its tiers and time windows (InheritProviderSchedule). The
+// returned configuration is a clone callers can mutate.
 func ResolveModelConfig(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (adaptor.ModelConfig, bool) {
 	if channelConfigs != nil {
 		if local, ok := channelConfigs[modelName]; ok {
-			cfg := convertLocalModelConfig(local)
-			return ApplyTimeWindow(cfg, at), true
+			return resolveChannelEntry(convertLocalModelConfig(local), modelName, provider, at, ApplyTimeWindow), true
 		}
 	}
 	if !providerTariffEligible(provider, modelName) {
@@ -289,12 +290,13 @@ func convertLocalTimeWindows(local []model.TimeWindowLocal) []adaptor.TimeWindow
 // ResolveModelConfigRatioOnly returns a shallow configuration by applying
 // channel overrides first, then adaptor defaults, then global fallbacks.
 // It omits media metadata to optimize for token-only billing paths, and, like
-// ResolveModelConfig, resolves operator-tariff-only models from overrides alone.
+// ResolveModelConfig, resolves operator-tariff-only models from overrides alone
+// and lets an entry that inherits the provider's base ratio inherit its tiers
+// and time windows.
 func ResolveModelConfigRatioOnly(modelName string, channelConfigs map[string]model.ModelConfigLocal, provider adaptor.Adaptor, at time.Time) (adaptor.ModelConfig, bool) {
 	if channelConfigs != nil {
 		if local, ok := channelConfigs[modelName]; ok {
-			cfg := convertLocalModelConfigRatioOnly(local)
-			return ApplyTimeWindowRatioOnly(cfg, at), true
+			return resolveChannelEntry(convertLocalModelConfigRatioOnly(local), modelName, provider, at, ApplyTimeWindowRatioOnly), true
 		}
 	}
 	if !providerTariffEligible(provider, modelName) {
@@ -326,6 +328,10 @@ func ResolveModelConfigRatioOnly(modelName string, channelConfigs map[string]mod
 	return adaptor.ModelConfig{}, false
 }
 
+// convertLocalModelConfigRatioOnly converts a channel model config into the
+// token-billing subset: token ratios, tiers, embedding prices, and time
+// windows, without image, audio, or video metadata. Parameters: local is the
+// persisted channel config. Returns: the adaptor config.
 func convertLocalModelConfigRatioOnly(local model.ModelConfigLocal) adaptor.ModelConfig {
 	cfg := adaptor.ModelConfig{
 		Ratio:             local.Ratio,
@@ -354,6 +360,11 @@ func convertLocalModelConfigRatioOnly(local model.ModelConfigLocal) adaptor.Mode
 			}
 			return cfg.Tiers[i].InputTokenThreshold < cfg.Tiers[j].InputTokenThreshold
 		})
+	}
+	if local.Embedding != nil {
+		// Embedding prices are token prices, which token billing applies; the
+		// provider-default branch keeps them too.
+		cfg.Embedding = convertLocalEmbedding(local.Embedding)
 	}
 	if len(local.TimeWindows) > 0 {
 		cfg.TimeWindows = convertLocalTimeWindows(local.TimeWindows)

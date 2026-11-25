@@ -245,6 +245,9 @@ func TestConvertImageRequest(t *testing.T) {
 				Quality: "hd",
 				Size:    "1024x1024",
 				Style:   "vivid",
+				// GPT Image stream controls are not part of xAI's contract.
+				Stream:        true,
+				PartialImages: new(2),
 			},
 			expectedRequest: &model.ImageRequest{
 				Model:      "grok-imagine-image-quality",

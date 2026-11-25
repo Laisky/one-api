@@ -11,6 +11,9 @@ import (
 // https://help.aliyun.com/zh/model-studio/context-cache
 // https://help.aliyun.com/zh/model-studio/qwen4-max
 // https://help.aliyun.com/zh/model-studio/qwen-api-via-openai-chat-completions
+// An implicit cache hit bills 20% of the input price of the request's own
+// input band (context-cache page; tiered requests price every token at the
+// band's rate), so each tier states its own cached price.
 func qwenChatModels() map[string]adaptor.ModelConfig {
 	return map[string]adaptor.ModelConfig{
 		"qwen-flash": {
@@ -19,11 +22,13 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio: nativeRate(0.03),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.6),
+				CachedInputRatio:    nativeRate(0.12),
 				CompletionRatio:     10,
 				InputTokenThreshold: 128001,
 			},
 				{
 					Ratio:               nativeRate(1.2),
+					CachedInputRatio:    nativeRate(0.24),
 					CompletionRatio:     10,
 					InputTokenThreshold: 256001,
 				},
@@ -152,11 +157,13 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio: nativeRate(0.5),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4),
+				CachedInputRatio:    nativeRate(0.8),
 				CompletionRatio:     4,
 				InputTokenThreshold: 32001,
 			},
 				{
 					Ratio:               nativeRate(7),
+					CachedInputRatio:    nativeRate(1.4),
 					CompletionRatio:     4,
 					InputTokenThreshold: 128001,
 				},
@@ -224,11 +231,13 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio: nativeRate(0.04),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(0.8),
+				CachedInputRatio:    nativeRate(0.16),
 				CompletionRatio:     10,
 				InputTokenThreshold: 128001,
 			},
 				{
 					Ratio:               nativeRate(1.2),
+					CachedInputRatio:    nativeRate(0.24),
 					CompletionRatio:     10,
 					InputTokenThreshold: 256001,
 				},
@@ -264,11 +273,13 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio: nativeRate(0.16),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(2),
+				CachedInputRatio:    nativeRate(0.4),
 				CompletionRatio:     6,
 				InputTokenThreshold: 128001,
 			},
 				{
 					Ratio:               nativeRate(4),
+					CachedInputRatio:    nativeRate(0.8),
 					CompletionRatio:     6,
 					InputTokenThreshold: 256001,
 				},
@@ -320,6 +331,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio: nativeRate(0.24),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4.8),
+				CachedInputRatio:    nativeRate(0.96),
 				CompletionRatio:     6,
 				InputTokenThreshold: 256001,
 			},
@@ -350,6 +362,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio: nativeRate(1.8),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(15),
+				CachedInputRatio:    nativeRate(3),
 				CompletionRatio:     6,
 				InputTokenThreshold: 128001,
 			},
@@ -370,6 +383,7 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 			CachedInputRatio: nativeRate(0.4),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(8),
+				CachedInputRatio:    nativeRate(1.6),
 				CompletionRatio:     6,
 				InputTokenThreshold: 256001,
 			},
@@ -459,12 +473,15 @@ func qwenChatModels() map[string]adaptor.ModelConfig {
 			CompletionRatio: 3,
 			Description:     "qwen3.7-max-preview on alibailian; official catalog snapshot 2026-09-24. Provider access and deployment configuration remain administrator-controlled.",
 		},
+		// Input is the limited-time 20%-off price (list CNY 2 / 6 per band); the
+		// cached price stays 20% of the list price, the conservative reading.
 		"qwen3.7-plus": {
 			Ratio:            nativeRate(1.6),
 			CompletionRatio:  4,
 			CachedInputRatio: nativeRate(0.4),
 			Tiers: []adaptor.ModelRatioTier{{
 				Ratio:               nativeRate(4.8),
+				CachedInputRatio:    nativeRate(1.2),
 				CompletionRatio:     4,
 				InputTokenThreshold: 256001,
 			},

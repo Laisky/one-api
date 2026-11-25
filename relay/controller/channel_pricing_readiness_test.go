@@ -36,9 +36,10 @@ func readinessGapKeys(gaps []ChannelPricingGap) []string {
 }
 
 // TestEvaluateChannelPricingReadinessCases pins the editor warning for the two
-// refusal classes the PR #624 review named: strict GPT Image IDs without a
-// per-image reservation/fallback, and operator-tariff models without a complete
-// channel tariff, through aliases, alongside ordinarily priced models.
+// refusal classes the PR #624 review named: strict GPT Image IDs with neither a
+// per-image reservation/fallback nor a token tariff to derive the default from,
+// and operator-tariff models without a complete channel tariff, through
+// aliases, alongside ordinarily priced models.
 func TestEvaluateChannelPricingReadinessCases(t *testing.T) {
 	imageFallback := model.ModelConfigLocal{Image: &model.ImagePricingLocal{PricePerImageUsd: 0.04}}
 	for _, tc := range []struct {
@@ -49,29 +50,37 @@ func TestEvaluateChannelPricingReadinessCases(t *testing.T) {
 		configs     map[string]model.ModelConfigLocal
 		want        []string
 	}{
-		{name: "openai_strict_image_unpriced", channelType: channeltype.OpenAI,
-			models: []string{"gpt-image-2.5-sunburst", "gpt-4o"},
-			want:   []string{"gpt-image-2.5-sunburst>gpt-image-2.5-sunburst:" + PricingRequirementImageFallback}},
+		// Without a per-image price, generation admission derives the default
+		// reservation from the catalog token tariff, so the channel is ready.
+		// Readiness covers generations only: /v1/images/edits still requires
+		// an explicit positive image.price_per_image_usd or a megapixel
+		// tariff and otherwise answers 503 image_billing_not_configured.
+		{name: "openai_strict_image_unpriced_uses_default", channelType: channeltype.OpenAI,
+			models: []string{"gpt-image-2.5-sunburst", "gpt-4o"}},
 		{name: "openai_strict_image_priced", channelType: channeltype.OpenAI,
 			models:  []string{"gpt-image-2.5-sunburst"},
 			configs: map[string]model.ModelConfigLocal{"gpt-image-2.5-sunburst": imageFallback}},
 		{name: "openai_strict_image_request_defaults_only", channelType: channeltype.OpenAI,
 			models:  []string{"gpt-image-2.6-flare"},
-			configs: map[string]model.ModelConfigLocal{"gpt-image-2.6-flare": {Image: &model.ImagePricingLocal{DefaultSize: "1024x1024", MaxImages: 2}}},
-			want:    []string{"gpt-image-2.6-flare>gpt-image-2.6-flare:" + PricingRequirementImageFallback}},
+			configs: map[string]model.ModelConfigLocal{"gpt-image-2.6-flare": {Image: &model.ImagePricingLocal{DefaultSize: "1024x1024", MaxImages: 2}}}},
+		// An explicit image tariff without a per-image price replaces the
+		// catalog image entry; the default is still derived from token prices.
+		{name: "openai_strict_image_prompt_ratio_only", channelType: channeltype.OpenAI,
+			models:  []string{"gpt-image-2.5-flare"},
+			configs: map[string]model.ModelConfigLocal{"gpt-image-2.5-flare": {Image: &model.ImagePricingLocal{PromptRatio: 2}}}},
 		{name: "openai_alias_to_strict_image", channelType: channeltype.OpenAI,
 			models:  []string{"house-image"},
-			mapping: map[string]string{"house-image": "gpt-image-2.5-flare"},
-			want:    []string{"house-image>gpt-image-2.5-flare:" + PricingRequirementImageFallback}},
+			mapping: map[string]string{"house-image": "gpt-image-2.5-flare"}},
 		{name: "openai_alias_priced_under_upstream_name", channelType: channeltype.OpenAI,
 			models:  []string{"house-image"},
 			mapping: map[string]string{"house-image": "gpt-image-2.5-flare"},
 			configs: map[string]model.ModelConfigLocal{"gpt-image-2.5-flare": imageFallback}},
+		// A price under the alias name prices nothing, but the upstream model
+		// still has the derived default.
 		{name: "openai_alias_priced_under_alias_name_only", channelType: channeltype.OpenAI,
 			models:  []string{"house-image"},
 			mapping: map[string]string{"house-image": "gpt-image-2.5-flare"},
-			configs: map[string]model.ModelConfigLocal{"house-image": imageFallback},
-			want:    []string{"house-image>gpt-image-2.5-flare:" + PricingRequirementImageFallback}},
+			configs: map[string]model.ModelConfigLocal{"house-image": imageFallback}},
 		{name: "openai_native_cyber_has_provider_tariff", channelType: channeltype.OpenAI,
 			models: []string{"gpt-6-cyber"}},
 		{name: "azure_cyber_unpriced", channelType: channeltype.Azure,
@@ -90,6 +99,19 @@ func TestEvaluateChannelPricingReadinessCases(t *testing.T) {
 			want:    []string{"cyber>gpt-6-cyber:" + PricingRequirementTokenTariff}},
 		{name: "azure_native_only_image_unpriced_needs_both", channelType: channeltype.Azure,
 			models: []string{"gpt-image-2.6-sunburst"},
+			want: []string{
+				"gpt-image-2.6-sunburst>gpt-image-2.6-sunburst:" + PricingRequirementImageFallback,
+				"gpt-image-2.6-sunburst>gpt-image-2.6-sunburst:" + PricingRequirementTokenTariff,
+			}},
+		// An operator-priced host derives the default only from a complete
+		// channel token tariff, which also satisfies dispatch.
+		{name: "azure_native_only_image_token_tariff_only", channelType: channeltype.Azure,
+			models:  []string{"gpt-image-2.6-sunburst"},
+			configs: map[string]model.ModelConfigLocal{"gpt-image-2.6-sunburst": {Ratio: 2, CompletionRatio: 6}}},
+		// An incomplete channel tariff never prices the default.
+		{name: "azure_native_only_image_input_price_only", channelType: channeltype.Azure,
+			models:  []string{"gpt-image-2.6-sunburst"},
+			configs: map[string]model.ModelConfigLocal{"gpt-image-2.6-sunburst": {Ratio: 2}},
 			want: []string{
 				"gpt-image-2.6-sunburst>gpt-image-2.6-sunburst:" + PricingRequirementImageFallback,
 				"gpt-image-2.6-sunburst>gpt-image-2.6-sunburst:" + PricingRequirementTokenTariff,

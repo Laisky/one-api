@@ -163,8 +163,8 @@ func TestChannelWritesPreserveAbilitySuspensionMultiDB(t *testing.T) {
 
 			t.Run("a model reset keeps a retained default's suspension", func(t *testing.T) {
 				channel, group := suspended(t, "reset")
-				_, err := ResetChannelModelsToDefaults(ctx, channel.Id, func(int) []string {
-					return []string{"gpt-4o", "gpt-4.1"}
+				_, err := ResetChannelModelsToDefaults(ctx, channel.Id, func(int) ChannelResetCatalog {
+					return ChannelResetCatalog{Defaults: []string{"gpt-4o", "gpt-4.1"}}
 				})
 				require.NoError(t, err)
 

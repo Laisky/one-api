@@ -69,6 +69,7 @@ describe('ChannelsPage default model reset', () => {
     await user.click(row);
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/Channel status and compatible mappings\/pricing remain unchanged/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/explicitly prices or maps and can serve/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: /cancel/i }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(mockPost).not.toHaveBeenCalled();
@@ -92,8 +93,11 @@ describe('ChannelsPage default model reset', () => {
   });
 
   it.each([
-    ['mapping_conflict', 'model_mapping', 'Model mappings reference models outside the default list.'],
-    ['pricing_conflict', 'model_configs', 'Custom pricing references models outside the default list.'],
+    ['mapping_conflict', 'model_mapping', 'Model mappings reference models this provider does not support.'],
+    ['pricing_conflict', 'model_configs', 'Custom pricing references models this provider does not support.'],
+    ['tariff_incomplete', 'model_configs', 'A model this channel configures needs an operator tariff that is missing or incomplete.'],
+    ['tariff_incomplete', 'model_ratio', 'A model this channel configures needs an operator tariff that is missing or incomplete.'],
+    ['tariff_incomplete', 'model_mapping', 'A model this channel configures needs an operator tariff that is missing or incomplete.'],
     ['unsupported_channel', 'type', 'Custom compatible channels cannot be reset to provider defaults.'],
   ])('shows a persistent, actionable %s rejection without a success message', async (code, field, reason) => {
     mockPost.mockRejectedValue({ response: { status: 409, data: { success: false, message: 'Rejected', conflict: { code, field, models: ['Alias'] } } } });
@@ -187,6 +191,11 @@ describe('ChannelsPage default model reset', () => {
       expect(Object.keys(locale).sort()).toEqual(Object.keys(channelResetTranslations.en).sort());
       expect(Object.keys(locale.reasons).sort()).toEqual(Object.keys(channelResetTranslations.en.reasons).sort());
       expect(Object.values(locale.reasons).every((value) => value.trim().length > 0)).toBe(true);
+      expect(locale.reasons.tariff_incomplete).not.toBe(locale.reasons.pricing_conflict);
+    }
+    // Every conflict code the server can return has a localized reason.
+    for (const code of ['unsupported_channel', 'no_default_models', 'mapping_conflict', 'pricing_conflict', 'inference_profile_conflict', 'tariff_incomplete', 'invalid_configuration']) {
+      expect(channelResetTranslations.en.reasons).toHaveProperty(code);
     }
     expect(channelResetTranslations.zh.action).toBe('重置为默认模型');
     expect(channelResetTranslations.zh.all).toBe('全部重置');

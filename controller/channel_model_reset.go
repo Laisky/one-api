@@ -32,10 +32,18 @@ type channelModelResetSummary struct {
 	Results  []channelModelResetOutcome `json:"results"`
 }
 
-// defaultChannelResetCatalog returns the same provider-specific model catalog
-// advertised by the channel editor, never the union of every provider's models.
-func defaultChannelResetCatalog(channelType int) []string {
-	return channelId2Models[channelType]
+// defaultChannelResetCatalog returns the provider-specific reset knowledge for
+// channelType, never the union of every provider's models: the zero-config
+// defaults the channel editor recommends, the complete provider catalog, and a
+// servability check that keeps non-default catalog models the channel's own
+// mapping and pricing make servable. Parameters: channelType is the locked
+// channel's type ID. Returns: the catalog for model.ResetChannelModelsToDefaults.
+func defaultChannelResetCatalog(channelType int) model.ChannelResetCatalog {
+	return model.ChannelResetCatalog{
+		Defaults: channelId2DefaultModels[channelType],
+		Known:    channelId2Models[channelType],
+		Servable: explicitlyServableModels,
+	}
 }
 
 // ResetChannelModels handles an administrator's single-channel reset request.

@@ -14,28 +14,42 @@ import (
 )
 
 // TestVertexLiveDashboardModelCatalog exercises the actual administrative
-// dashboard handler, not merely the adaptor method. Parameters: t owns the
-// test. Returns: none. Router AdminAuth remains unchanged; no IAM probe occurs.
+// dashboard handlers, not merely the adaptor method. Vertex Live models require
+// operator realtime prices, so the full catalog (/api/models) lists them for
+// operators to add and price, while the zero-config defaults
+// (/api/models/defaults) omit them: a channel filled from the defaults must be
+// servable without operator pricing. Parameters: t owns the test. Returns:
+// none. Router AdminAuth remains unchanged; no IAM probe occurs.
 func TestVertexLiveDashboardModelCatalog(t *testing.T) {
 	t.Parallel()
-	w := httptest.NewRecorder()
-	c, _ := gin.CreateTestContext(w)
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/models", nil)
-	DashboardListModels(c)
-	var body struct {
-		Success bool                `json:"success"`
-		Data    map[string][]string `json:"data"`
+	// vertexModels runs handler and returns the Vertex AI list it serves.
+	// Parameters: handler is the dashboard handler. Returns: the model list.
+	vertexModels := func(handler gin.HandlerFunc) []string {
+		w := httptest.NewRecorder()
+		c, _ := gin.CreateTestContext(w)
+		c.Request = httptest.NewRequest(http.MethodGet, "/api/models", nil)
+		handler(c)
+		var body struct {
+			Success bool                `json:"success"`
+			Data    map[string][]string `json:"data"`
+		}
+		require.Equal(t, http.StatusOK, w.Code)
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		require.True(t, body.Success)
+		return body.Data[fmt.Sprint(channeltype.VertextAI)]
 	}
-	require.Equal(t, http.StatusOK, w.Code)
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
-	require.True(t, body.Success)
-	models := body.Data[fmt.Sprint(channeltype.VertextAI)]
-	require.Contains(t, models, "gemini-3.8-live")
+	catalog := vertexModels(DashboardListModels)
+	defaults := vertexModels(DashboardListDefaultModels)
+	for _, name := range []string{"gemini-3.8-live", "gemini-live-2.5-flash-native-audio"} {
+		require.Contains(t, catalog, name, "%s stays addable from the full catalog", name)
+		require.NotContains(t, defaults, name, "%s needs operator realtime prices, so it is not a default suggestion", name)
+	}
 	for _, name := range vertexLegacyLiveModelIDs() {
-		require.NotContains(t, models, name, "dashboard suggestions do not determine operator-configured eligibility")
+		require.NotContains(t, catalog, name, "dashboard suggestions do not determine operator-configured eligibility")
+		require.NotContains(t, defaults, name, "dashboard suggestions do not determine operator-configured eligibility")
 	}
-	require.Contains(t, models, "gemini-live-2.5-flash-native-audio")
-	require.Contains(t, models, "gemini-3.8-flash")
+	require.Contains(t, catalog, "gemini-3.8-flash")
+	require.Contains(t, defaults, "gemini-3.8-flash")
 }
 
 // TestVertexLiveDefaultPricingDoesNotBorrowDeveloperRates exercises the actual
