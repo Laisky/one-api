@@ -53,6 +53,12 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return a.pricingTable()
 }
 
+// GetGlobalFallbackModelPricing returns the shared OpenAI catalog without
+// first-party-only tariffs. It takes no parameters and returns read-only defaults.
+func (a *Adaptor) GetGlobalFallbackModelPricing() map[string]adaptor.ModelConfig {
+	return ModelRatios
+}
+
 func (a *Adaptor) GetModelRatio(modelName string) float64 {
 	if price, exists := a.pricingTable()[modelName]; exists {
 		return price.Ratio

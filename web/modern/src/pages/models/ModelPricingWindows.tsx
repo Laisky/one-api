@@ -1,65 +1,35 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { AudioTariffDetails } from './AudioTariffDetails';
 import type { TimeWindowData } from './ModelPricingModal';
 import { PerPageWindowCell } from './PerPagePricing';
 import { PriceCell, PriceGrid, PricingSection } from './PricingPrimitives';
 import { formatUsd, type TrFn } from './pricing-format';
 import { formatTierThreshold } from './tier-threshold';
-import { NO_ACTIVE_TIME_WINDOW, UNRESOLVED_TIME_WINDOWS, resolveTimeWindowSnapshot, timeWindowScheduleSignature } from './time-window';
-
-/** useTimeWindowSnapshot tracks active/history membership from one instant and cleans up its timer. */
-function useTimeWindowSnapshot(windows: TimeWindowData[] | undefined) {
-  const windowsRef = useRef(windows);
-  windowsRef.current = windows;
-  const signature = useMemo(() => timeWindowScheduleSignature(windows), [windows]);
-  const [snapshot, setSnapshot] = useState(() => ({ signature, ...resolveTimeWindowSnapshot(windows, new Date()) }));
-
-  useEffect(() => {
-    const evaluate = () => {
-      const next = resolveTimeWindowSnapshot(windowsRef.current, new Date());
-      setSnapshot((previous) =>
-        previous.signature === signature &&
-        previous.activeIndex === next.activeIndex &&
-        previous.historicalIndices.length === next.historicalIndices.length &&
-        previous.historicalIndices.every((index, position) => index === next.historicalIndices[position])
-          ? previous
-          : { signature, ...next }
-      );
-    };
-    evaluate();
-    const timer = setInterval(evaluate, 1000);
-    return () => clearInterval(timer);
-  }, [signature]);
-
-  // A model/schedule replacement must never render indices from the previous list.
-  return snapshot.signature === signature ? snapshot : resolveTimeWindowSnapshot(windows, new Date());
-}
+import { activeDisplayWindow } from './display-token-pricing';
+import type { TimeWindowSnapshot } from './time-window';
 
 /** ModelPricingWindows preserves all source rules while collapsing expired valid schedules. */
 export function ModelPricingWindows({
   windows,
   activeWindowName,
+  snapshot,
   tr,
   locale,
 }: {
   windows: TimeWindowData[] | undefined;
   activeWindowName?: string;
+  snapshot: TimeWindowSnapshot;
   tr: TrFn;
   locale: string;
 }) {
-  const { activeIndex: activeTimeWindowIndex, historicalIndices } = useTimeWindowSnapshot(windows);
   if (!windows?.length) return null;
+  const { historicalIndices } = snapshot;
   const historical = new Set(historicalIndices);
+  const active = activeDisplayWindow(windows, snapshot.activeIndex, activeWindowName);
   const renderWindow = (window: TimeWindowData, index: number) => {
     const label = window.name || `${tr('window_name', 'Window')} ${index + 1}`;
-    // Fall back to the server-rendered name only when the browser cannot
-    // evaluate the schedules itself (missing timezone data).
-    const isActive =
-      activeTimeWindowIndex === UNRESOLVED_TIME_WINDOWS
-        ? Boolean(activeWindowName && window.name === activeWindowName)
-        : activeTimeWindowIndex !== NO_ACTIVE_TIME_WINDOW && activeTimeWindowIndex === index;
+    const isActive = active === window;
     return (
       <div
         key={`${label}-${index}`}

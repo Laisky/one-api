@@ -10,6 +10,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { ModelDisplayData, ModelPricingModal } from './ModelPricingModal';
+import { displayTokenPricing, usePricingMinute } from './display-token-pricing';
 
 interface ChannelInfo {
   models: Record<string, ModelDisplayData>;
@@ -73,6 +74,14 @@ export function ModelsPage() {
   const [modelsData, setModelsData] = useState<ModelsData>({});
   const [filteredData, setFilteredData] = useState<ModelsData>({});
   const [loading, setLoading] = useState(true);
+  const hasTokenSchedules = useMemo(
+    () =>
+      Object.values(modelsData).some((channel) =>
+        Object.values(channel.models).some((model) => model.time_windows?.some((window) => window.token_pricing))
+      ),
+    [modelsData]
+  );
+  const pricingMinute = usePricingMinute(hasTokenSchedules);
   const [filters, setFilters] = useState<ModelFilters>(DEFAULT_FILTERS);
   const [selectedModel, setSelectedModel] = useState<{ name: string; data: ModelDisplayData; channel: string } | null>(null);
   const modalOpen = searchParams.get('model') !== null && selectedModel !== null;
@@ -176,12 +185,12 @@ export function ModelsPage() {
       }
 
       if (filters.maxInputPrice > 0) {
-        if (model.input_price > filters.maxInputPrice) return false;
+        if (displayTokenPricing(model, pricingMinute).input_price > filters.maxInputPrice) return false;
       }
 
       return true;
     },
-    [filters]
+    [filters, pricingMinute]
   );
 
   useEffect(() => {
@@ -397,14 +406,18 @@ export function ModelsPage() {
   const renderChannelModels = (channelName: string, channelInfo: ChannelInfo) => {
     const models = Object.keys(channelInfo.models)
       .sort()
-      .map((modelName) => ({
-        model: modelName,
-        data: channelInfo.models[modelName],
-        inputPrice: channelInfo.models[modelName].input_price,
-        cachedInputPrice: channelInfo.models[modelName].cached_input_price ?? channelInfo.models[modelName].input_price,
-        outputPrice: channelInfo.models[modelName].output_price,
-        imagePrice: channelInfo.models[modelName].image_price,
-      }));
+      .map((modelName) => {
+        const data = channelInfo.models[modelName];
+        const prices = displayTokenPricing(data, pricingMinute);
+        return {
+          model: modelName,
+          data,
+          inputPrice: prices.input_price,
+          cachedInputPrice: prices.cached_input_price ?? prices.input_price,
+          outputPrice: prices.output_price,
+          imagePrice: data.image_price,
+        };
+      });
 
     return (
       <Card key={channelName} className="mb-6 border-0 shadow-none md:border md:shadow-sm">

@@ -168,17 +168,28 @@ func (gpm *GlobalPricingManager) initializeUnsafe() {
 		zap.Int("total_adapters", len(gpm.contributingAdapters)))
 }
 
+// globalFallbackPricingSource supplies an explicit catalog when shared fallback
+// pricing is different from the adaptor's channel-specific tariff.
+type globalFallbackPricingSource interface {
+	GetGlobalFallbackModelPricing() map[string]adaptor.ModelConfig
+}
+
 // mergeAdapterPricing merges pricing from a specific adapter
 // Must be called with write lock held
 // Returns true if successful, false otherwise
 func (gpm *GlobalPricingManager) mergeAdapterPricing(apiType int) bool {
-	adaptor := gpm.getAdaptorFunc(apiType)
-	if adaptor == nil {
+	provider := gpm.getAdaptorFunc(apiType)
+	if provider == nil {
 		logger.Logger.Warn(fmt.Sprintf("No adaptor found for API type %d", apiType))
 		return false
 	}
 
-	pricing := adaptor.GetDefaultModelPricing()
+	var pricing map[string]adaptor.ModelConfig
+	if source, ok := provider.(globalFallbackPricingSource); ok {
+		pricing = source.GetGlobalFallbackModelPricing()
+	} else {
+		pricing = provider.GetDefaultModelPricing()
+	}
 	if len(pricing) == 0 {
 		logger.Logger.Warn(fmt.Sprintf("Adaptor %d returned empty pricing", apiType))
 		return false

@@ -253,3 +253,68 @@ describe('ModelPricingModal historical pricing', () => {
     expect(screen.getByText('future').closest('details')).toBeNull();
   });
 });
+
+describe('December GPT-5.6 pricing', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it.each(['gpt-5.6', 'gpt-5.6-sol'])('updates the main prices and long-context row for %s at the UTC cutoff', (modelName) => {
+    vi.setSystemTime(new Date('2026-11-30T23:59:59Z'));
+    const data = {
+      input_price: 4,
+      output_price: 20,
+      cached_input_price: 0.4,
+      cache_write_5m_price: 5,
+      tiers: [{ input_price: 8, output_price: 30, cached_input_price: 0.8, cache_write_5m_price: 10, input_token_threshold: 272001 }],
+      time_windows: [
+        {
+          name: 'openai-standard',
+          timezone: 'UTC',
+          ranges: [{ start: '00:00', end: '00:00' }],
+          date_from: '2026-12-01',
+          overlay: {},
+          token_pricing: {
+            input_price: 5,
+            output_price: 30,
+            cached_input_price: 0.5,
+            cache_write_5m_price: 6.25,
+            cache_write_1h_price: 0,
+            tiers: [
+              { input_price: 10, output_price: 45, cached_input_price: 1, cache_write_5m_price: 12.5, input_token_threshold: 272001 },
+            ],
+          },
+        },
+      ],
+    } satisfies ModelDisplayData;
+    render(<ModelPricingModal open onOpenChange={() => {}} modelName={modelName} data={data} channelName="openai" />);
+
+    const section = (name: string) => within(screen.getByRole('heading', { name }).parentElement!.parentElement!);
+    expect(section('Text Token Pricing').getByText(/^\$4(?:\.0+)?$/)).toBeInTheDocument();
+    expect(section('Tiered Pricing').getByText(/^\$8(?:\.0+)?$/)).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(section('Text Token Pricing').getByText(/^\$5(?:\.0+)?$/)).toBeInTheDocument();
+    expect(section('Text Token Pricing').getByText(/^\$30(?:\.0+)?$/)).toBeInTheDocument();
+    expect(section('Cache Pricing').getByText(/^\$0\.50*$/)).toBeInTheDocument();
+    expect(section('Cache Pricing').getByText(/^\$6\.25$/)).toBeInTheDocument();
+    expect(section('Tiered Pricing').getByText(/^\$45(?:\.0+)?$/)).toBeInTheDocument();
+    expect(section('Tiered Pricing').getByText(/^\$12\.50*$/)).toBeInTheDocument();
+    expect(section('Text Token Pricing').queryByText(/^\$4(?:\.0+)?$/)).not.toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1000));
+    expect(section('Text Token Pricing').getByText(/^\$5(?:\.0+)?$/)).toBeInTheDocument();
+  });
+
+  it('preserves a saved channel price with no schedule', () => {
+    vi.setSystemTime(new Date('2026-12-01T00:00:00Z'));
+    render(
+      <ModelPricingModal
+        open
+        onOpenChange={() => {}}
+        modelName="gpt-5.6-sol"
+        data={{ input_price: 7, output_price: 21 }}
+        channelName="override"
+      />
+    );
+    expect(screen.getByText(/^\$7(?:\.0+)?$/)).toBeInTheDocument();
+    expect(screen.getByText(/^\$21(?:\.0+)?$/)).toBeInTheDocument();
+  });
+});

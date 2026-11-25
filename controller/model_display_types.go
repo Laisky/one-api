@@ -62,13 +62,25 @@ type ModelDisplayInfo struct {
 
 // TimeWindowDisplay represents one time-of-day pricing window for read-only model display.
 type TimeWindowDisplay struct {
-	Name       string                   `json:"name,omitempty"`         // Human-readable window label
-	TimeZone   string                   `json:"timezone,omitempty"`     // IANA timezone name
-	Ranges     []ClockRangeDisplay      `json:"ranges"`                 // Local wall-clock ranges
-	DaysOfWeek []int                    `json:"days_of_week,omitempty"` // Optional weekday filter, Sunday=0
-	DateFrom   string                   `json:"date_from,omitempty"`    // Inclusive local date bound
-	DateTo     string                   `json:"date_to,omitempty"`      // Exclusive local date bound
-	Overlay    TimeWindowOverlayDisplay `json:"overlay"`                // Sparse price overlay rendered for display
+	Name         string                   `json:"name,omitempty"`          // Human-readable window label
+	TimeZone     string                   `json:"timezone,omitempty"`      // IANA timezone name
+	Ranges       []ClockRangeDisplay      `json:"ranges"`                  // Local wall-clock ranges
+	DaysOfWeek   []int                    `json:"days_of_week,omitempty"`  // Optional weekday filter, Sunday=0
+	DateFrom     string                   `json:"date_from,omitempty"`     // Inclusive local date bound
+	DateTo       string                   `json:"date_to,omitempty"`       // Exclusive local date bound
+	Overlay      TimeWindowOverlayDisplay `json:"overlay"`                 // Sparse price overlay rendered for display
+	TokenPricing *TokenPricingDisplay     `json:"token_pricing,omitempty"` // Full token prices for the active quote
+}
+
+// TokenPricingDisplay is the full token tariff for a window, including
+// inherited fields. Unlike the sparse overlay, zero rates are unambiguous.
+type TokenPricingDisplay struct {
+	InputPrice        float64            `json:"input_price"`
+	CachedInputPrice  float64            `json:"cached_input_price"`
+	CacheWrite5mPrice *float64           `json:"cache_write_5m_price,omitempty"`
+	CacheWrite1hPrice *float64           `json:"cache_write_1h_price,omitempty"`
+	OutputPrice       float64            `json:"output_price"`
+	Tiers             []ModelDisplayTier `json:"tiers,omitempty"`
 }
 
 // ClockRangeDisplay represents one local wall-clock range in a display window.
@@ -315,16 +327,16 @@ func buildPerCallDisplayPricing(cfg *adaptorpkg.PerCallPricingConfig) *PerCallDi
 // Parameters: overlay is the sparse pricing overlay, baseInputPrice and baseCompletionRatio provide inherited output context, and convertRatioToPrice converts quota ratios to USD per million tokens.
 // Returns: displayable sparse overlay prices.
 func buildTimeWindowOverlayDisplayWithBase(overlay adaptorpkg.ModelConfig, baseInputPrice float64, baseCompletionRatio float64, convertRatioToPrice func(float64) float64) TimeWindowOverlayDisplay {
-	return buildTimeWindowOverlayDisplay(overlay, adaptorpkg.ModelConfig{CompletionRatio: baseCompletionRatio}, baseInputPrice, convertRatioToPrice)
+	base := adaptorpkg.ModelConfig{CompletionRatio: baseCompletionRatio}
+	tiers := buildDisplayTiers(windowTierConfig(base, overlay), convertRatioToPrice)
+	return buildTimeWindowOverlayDisplay(overlay, tiers, baseInputPrice, baseCompletionRatio, convertRatioToPrice)
 }
 
 // buildTimeWindowOverlayDisplay converts a sparse pricing overlay into display prices.
-// Parameters: overlay is the sparse pricing overlay, base holds the inherited token
-// scalars and tiers in billing order, baseInputPrice is the inherited display input
-// price, and convertRatioToPrice converts quota ratios to USD per million tokens.
-// Returns: displayable sparse overlay prices; its tiers are the ones billing applies
-// inside the window (see windowTierConfig).
-func buildTimeWindowOverlayDisplay(overlay adaptorpkg.ModelConfig, base adaptorpkg.ModelConfig, baseInputPrice float64, convertRatioToPrice func(float64) float64) TimeWindowOverlayDisplay {
+// Parameters: overlay holds the sparse changes, tiers are the full window rows,
+// baseInputPrice and baseCompletionRatio provide inherited output context, and
+// convertRatioToPrice converts quota ratios. Returns: sparse display prices.
+func buildTimeWindowOverlayDisplay(overlay adaptorpkg.ModelConfig, tiers []ModelDisplayTier, baseInputPrice, baseCompletionRatio float64, convertRatioToPrice func(float64) float64) TimeWindowOverlayDisplay {
 	display := TimeWindowOverlayDisplay{}
 	inputPrice := baseInputPrice
 	if overlay.Ratio != 0 {
@@ -341,13 +353,13 @@ func buildTimeWindowOverlayDisplay(overlay adaptorpkg.ModelConfig, base adaptorp
 		display.CacheWrite1hPrice = convertRatioToPrice(overlay.CacheWrite1hRatio)
 	}
 	if overlay.Ratio != 0 || overlay.CompletionRatio != 0 {
-		completionRatio := base.CompletionRatio
+		completionRatio := baseCompletionRatio
 		if overlay.CompletionRatio != 0 {
 			completionRatio = overlay.CompletionRatio
 		}
 		display.OutputPrice = inputPrice * completionRatio
 	}
-	display.Tiers = buildDisplayTiers(windowTierConfig(base, overlay), convertRatioToPrice)
+	display.Tiers = tiers
 	display.VideoPricing = buildVideoDisplayPricing(overlay.Video)
 	display.AudioPricing = buildAudioDisplayPricing(overlay.Audio)
 	display.ImagePricing = buildAdaptorImageDisplayPricing(overlay.Image)
@@ -383,6 +395,37 @@ func buildAdaptorImageDisplayPricing(cfg *adaptorpkg.ImagePricingConfig) *ImageD
 	return dp
 }
 
+// buildWindowTokenPricing projects the window's merged token rates. Parameters:
+// overlay and merged are the sparse and effective tariff; tiers are the already
+// resolved display rows; convert translates quota ratios. It returns nil when
+// the window does not affect token pricing.
+func buildWindowTokenPricing(overlay, merged adaptorpkg.ModelConfig, tiers []ModelDisplayTier, convert func(float64) float64) *TokenPricingDisplay {
+	if overlay.Ratio == 0 && overlay.CompletionRatio == 0 && overlay.CachedInputRatio == 0 &&
+		overlay.CacheWrite5mRatio == 0 && overlay.CacheWrite1hRatio == 0 && len(overlay.Tiers) == 0 {
+		return nil
+	}
+	input := convert(merged.Ratio)
+	cached := input
+	if merged.CachedInputRatio != 0 {
+		cached = convert(merged.CachedInputRatio)
+	}
+	out := &TokenPricingDisplay{
+		InputPrice:       input,
+		CachedInputPrice: cached,
+		OutputPrice:      input * merged.CompletionRatio,
+		Tiers:            tiers,
+	}
+	if merged.CacheWrite5mRatio != 0 {
+		price := convert(merged.CacheWrite5mRatio)
+		out.CacheWrite5mPrice = &price
+	}
+	if merged.CacheWrite1hRatio != 0 {
+		price := convert(merged.CacheWrite1hRatio)
+		out.CacheWrite1hPrice = &price
+	}
+	return out
+}
+
 // buildTimeWindowDisplays converts time windows into display data and active-window metadata.
 // Parameters: windows is the ordered window list, base holds the inherited token scalars and tiers in billing order, baseInputPrice is the inherited display input price, now is the display-time instant, and convertRatioToPrice converts quota ratios to USD per million tokens.
 // Returns: display windows and the name of the first matching window, which is
@@ -400,14 +443,18 @@ func buildTimeWindowDisplays(windows []adaptorpkg.TimeWindow, base adaptorpkg.Mo
 		for _, clockRange := range window.Ranges {
 			ranges = append(ranges, ClockRangeDisplay{Start: clockRange.Start, End: clockRange.End})
 		}
+		merged := windowTierConfig(base, window.Overlay)
+		tiers := buildDisplayTiers(merged, convertRatioToPrice)
+		overlay := buildTimeWindowOverlayDisplay(window.Overlay, tiers, baseInputPrice, base.CompletionRatio, convertRatioToPrice)
 		display = append(display, TimeWindowDisplay{
-			Name:       window.Name,
-			TimeZone:   window.TimeZone,
-			Ranges:     ranges,
-			DaysOfWeek: append([]int(nil), window.DaysOfWeek...),
-			DateFrom:   window.DateFrom,
-			DateTo:     window.DateTo,
-			Overlay:    buildTimeWindowOverlayDisplay(window.Overlay, base, baseInputPrice, convertRatioToPrice),
+			Name:         window.Name,
+			TimeZone:     window.TimeZone,
+			Ranges:       ranges,
+			DaysOfWeek:   append([]int(nil), window.DaysOfWeek...),
+			DateFrom:     window.DateFrom,
+			DateTo:       window.DateTo,
+			Overlay:      overlay,
+			TokenPricing: buildWindowTokenPricing(window.Overlay, merged, tiers, convertRatioToPrice),
 		})
 		if !matched && relaypricing.MatchTimeWindow(window, now) {
 			matched = true

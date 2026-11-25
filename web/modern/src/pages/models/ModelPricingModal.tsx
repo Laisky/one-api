@@ -105,6 +105,10 @@ export interface TimeWindowData {
   date_from?: string;
   date_to?: string;
   overlay: TimeWindowOverlayData;
+  token_pricing?: Pick<
+    ModelDisplayData,
+    'input_price' | 'output_price' | 'cached_input_price' | 'cache_write_5m_price' | 'cache_write_1h_price' | 'tiers'
+  >;
 }
 
 interface TimeWindowOverlayData {
