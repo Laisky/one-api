@@ -7,6 +7,7 @@ import (
 
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/billing/ratio"
+	"github.com/Laisky/one-api/relay/channeltype"
 )
 
 // TestGetModelListFromPricingIncludesGPT56 verifies all current GPT-5.6 and Daybreak model IDs are discoverable.
@@ -122,4 +123,33 @@ func TestGPT56ReasoningEfforts(t *testing.T) {
 	require.True(t, isModelSupportedReasoning(" GPT-5.6 "))
 	require.True(t, isReasoningEffortAllowedForModel(" GPT-5.6 ", "max"))
 	require.Equal(t, "none", *normalizeReasoningEffortForModel(" GPT-5.6 ", &legacy))
+}
+
+// TestGlobalFallbackPricingExcludesNativeSolSchedule verifies the explicit
+// catalog boundaries: only an adaptor bound to channeltype.OpenAI bills
+// GPT-5.6 Sol with its December schedule; an unbound adaptor (an embedder such
+// as Azure, or a catalog sweep) prices the shared catalog; and every OpenAI
+// adaptor contributes the unscheduled shared catalog to the global fallback
+// layer, while a compatible channel contributes its own table. Parameter t
+// reports a leaked or missing schedule.
+func TestGlobalFallbackPricingExcludesNativeSolSchedule(t *testing.T) {
+	t.Parallel()
+
+	native := &Adaptor{ChannelType: channeltype.OpenAI}
+	unbound := &Adaptor{}
+	for _, name := range []string{"gpt-5.6-sol", "gpt-5.6"} {
+		require.NotEmpty(t, native.GetDefaultModelPricing()[name].TimeWindows, "native billing keeps the schedule for %s", name)
+		require.Empty(t, unbound.GetDefaultModelPricing()[name].TimeWindows, "an unbound adaptor is no evidence of native OpenAI for %s", name)
+		require.Equal(t, ModelRatios[name], unbound.GetDefaultModelPricing()[name], name)
+		for _, provider := range []*Adaptor{native, unbound} {
+			shared, ok := provider.GetGlobalFallbackModelPricing()[name]
+			require.True(t, ok, name)
+			require.Empty(t, shared.TimeWindows, "the global contribution carries no native schedule for %s", name)
+			require.Equal(t, ModelRatios[name].Ratio, shared.Ratio, name)
+		}
+	}
+	require.Equal(t, len(ModelRatios), len(native.GetGlobalFallbackModelPricing()))
+	groq := &Adaptor{ChannelType: channeltype.Groq}
+	require.Equal(t, len(groq.GetDefaultModelPricing()), len(groq.GetGlobalFallbackModelPricing()))
+	var _ adaptor.GlobalPricingContributor = (*Adaptor)(nil)
 }

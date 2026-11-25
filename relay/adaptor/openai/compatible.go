@@ -59,11 +59,14 @@ var CompatibleChannels = []int{
 //   - channelType: the channel type from relay/channeltype.
 //
 // Return values:
-//   - map[string]adaptor.ModelConfig: pricing for that channel, or OpenAI's table
-//     for channel types that are plain OpenAI.
+//   - map[string]adaptor.ModelConfig: pricing for that channel. Only a native
+//     OpenAI channel gets first-party dated schedules (nativeModelRatios); an
+//     unset channel type and the plain OpenAI-compatible resellers get the shared
+//     ModelRatios catalog, because an adaptor whose channel is unknown (an
+//     embedder such as Azure, or a catalog sweep) is no evidence of OpenAI itself.
 func GetCompatibleChannelPricing(channelType int) map[string]adaptor.ModelConfig {
 	switch channelType {
-	case 0, channeltype.OpenAI:
+	case channeltype.OpenAI:
 		return nativeModelRatios
 	case channeltype.Azure:
 		// Azure inherits OpenAI's catalog except native-only IDs, so the
