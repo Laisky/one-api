@@ -168,17 +168,19 @@ func (gpm *GlobalPricingManager) initializeUnsafe() {
 		zap.Int("total_adapters", len(gpm.contributingAdapters)))
 }
 
-// mergeAdapterPricing merges pricing from a specific adapter
-// Must be called with write lock held
+// mergeAdapterPricing merges the catalog an adapter contributes to the global
+// fallback layer (adaptor.GlobalFallbackPricing), which keeps first-party-only
+// tariff rules such as native OpenAI's dated schedules out of the catalog other
+// providers inherit. Must be called with write lock held.
 // Returns true if successful, false otherwise
 func (gpm *GlobalPricingManager) mergeAdapterPricing(apiType int) bool {
-	adaptor := gpm.getAdaptorFunc(apiType)
-	if adaptor == nil {
+	provider := gpm.getAdaptorFunc(apiType)
+	if provider == nil {
 		logger.Logger.Warn(fmt.Sprintf("No adaptor found for API type %d", apiType))
 		return false
 	}
 
-	pricing := adaptor.GetDefaultModelPricing()
+	pricing := adaptor.GlobalFallbackPricing(provider)
 	if len(pricing) == 0 {
 		logger.Logger.Warn(fmt.Sprintf("Adaptor %d returned empty pricing", apiType))
 		return false

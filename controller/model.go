@@ -82,6 +82,10 @@ var (
 var (
 	anonymousModelsDisplayCache = gutils.NewExpCache[map[string]ChannelModelsDisplayInfo](context.Background(), time.Minute)
 	anonymousModelsDisplayGroup singleflight.Group
+	// modelsDisplayNow returns the instant the public price surfaces
+	// (/api/models/display and /openrouter/v1/models) quote tariffs at. Tests
+	// replace it to pin the clock; production always uses time.Now.
+	modelsDisplayNow = time.Now
 )
 
 func init() {

@@ -172,10 +172,15 @@ func TestGetModelsDisplay_PerPagePricingTimeWindowOverlay(t *testing.T) {
 	require.NoError(t, ch.SetModelPriceConfigs(local))
 	require.NoError(t, model.DB.Create(ch).Error)
 
+	// Monday 12:00 UTC: no window matches, so the base tariff is billed.
+	pinModelsDisplayClock(t, time.Date(2026, time.November, 23, 12, 0, 0, 0, time.UTC))
 	got := fetchPerPageDisplayModel(t, ch, modelName, 0)
 	require.Equal(t, &PerPageDisplayPricing{UsdPerThousandPages: 10, UsdPerPage: 0.01}, got.info.PerPagePricing)
 	require.Zero(t, got.info.InputPrice)
 	require.Zero(t, got.info.OutputPrice)
+	require.Empty(t, got.info.ActiveTimeWindow)
+	require.Nil(t, got.info.InactiveBasePricing)
+	require.NotContains(t, got.raw, "inactive_base_pricing")
 
 	require.Len(t, got.info.TimeWindows, 2)
 	require.Equal(t, "off-peak", got.info.TimeWindows[0].Name)
@@ -191,6 +196,27 @@ func TestGetModelsDisplay_PerPagePricingTimeWindowOverlay(t *testing.T) {
 	require.Len(t, windows, 2)
 	require.JSONEq(t, `{"usd_per_thousand_pages":4,"usd_per_page":0.004}`, string(windows[0].Overlay["per_page_pricing"]))
 	require.JSONEq(t, `{"usd_per_thousand_pages":0,"usd_per_page":0}`, string(windows[1].Overlay["per_page_pricing"]))
+	// Every window publishes the complete page tariff it bills, free included.
+	require.Equal(t, &PerPageDisplayPricing{UsdPerThousandPages: 4, UsdPerPage: 0.004}, got.info.TimeWindows[0].EffectivePricing.PerPagePricing)
+	require.Equal(t, &PerPageDisplayPricing{}, got.info.TimeWindows[1].EffectivePricing.PerPagePricing)
+
+	// Monday 03:00 UTC: the off-peak window bills, and the base is inactive.
+	// The anonymous cache must not replay the response from the earlier minute.
+	pinModelsDisplayClock(t, time.Date(2026, time.November, 23, 3, 0, 0, 0, time.UTC))
+	active := fetchPerPageDisplayModel(t, ch, modelName, 0)
+	require.Equal(t, "off-peak", active.info.ActiveTimeWindow)
+	require.Equal(t, &PerPageDisplayPricing{UsdPerThousandPages: 4, UsdPerPage: 0.004}, active.info.PerPagePricing)
+	require.Zero(t, active.info.InputPrice)
+	require.NotNil(t, active.info.InactiveBasePricing)
+	require.Equal(t, &PerPageDisplayPricing{UsdPerThousandPages: 10, UsdPerPage: 0.01}, active.info.InactiveBasePricing.PerPagePricing)
+	require.Len(t, active.info.TimeWindows, 2, "the schedule stays published while a window is active")
+
+	// Sunday 08:30 UTC: the off-peak window has ended and the free promo bills.
+	pinModelsDisplayClock(t, time.Date(2026, time.November, 22, 8, 30, 0, 0, time.UTC))
+	promo := fetchPerPageDisplayModel(t, ch, modelName, 0)
+	require.Equal(t, "promo", promo.info.ActiveTimeWindow)
+	require.Equal(t, &PerPageDisplayPricing{}, promo.info.PerPagePricing)
+	require.JSONEq(t, `{"usd_per_thousand_pages":0,"usd_per_page":0}`, string(promo.raw["per_page_pricing"]))
 }
 
 // TestBuildPerPageDisplayPricing verifies nil, free, and paid per-page tariffs

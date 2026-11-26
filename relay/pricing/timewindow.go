@@ -26,6 +26,15 @@ func ApplyTimeWindowRatioOnly(cfg adaptor.ModelConfig, at time.Time) adaptor.Mod
 	return applyTimeWindow(cfg, at, true)
 }
 
+// ApplyTimeWindowOverlay merges one window's sparse overlay into cfg exactly as
+// ApplyTimeWindow does when that window is the first match, so a price display
+// can quote any window's tariff with billing's own merge rules instead of
+// reimplementing them. Parameters: cfg is the unwindowed configuration and
+// overlay the window's overlay. Returns: a merged clone with TimeWindows cleared.
+func ApplyTimeWindowOverlay(cfg, overlay adaptor.ModelConfig) adaptor.ModelConfig {
+	return mergePricing(cfg, overlay)
+}
+
 // ActiveTimeWindowName returns the first window name that matches at.
 // Parameters: cfg is the resolved model config and at is the instant to evaluate.
 // Returns: the matching window name, or an empty string when no named window is active.

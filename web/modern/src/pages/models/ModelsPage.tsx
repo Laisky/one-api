@@ -9,6 +9,8 @@ import { ChevronRight } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
+import { currentDisplayTariff } from './effective-tariff';
+import { usePricingMinute } from './use-time-window-snapshot';
 import { ModelDisplayData, ModelPricingModal } from './ModelPricingModal';
 
 interface ChannelInfo {
@@ -73,6 +75,12 @@ export function ModelsPage() {
   const [modelsData, setModelsData] = useState<ModelsData>({});
   const [filteredData, setFilteredData] = useState<ModelsData>({});
   const [loading, setLoading] = useState(true);
+  // Scheduled tariffs change at minute boundaries; re-select them while any model has windows.
+  const hasPriceSchedules = useMemo(
+    () => Object.values(modelsData).some((channel) => Object.values(channel.models).some((model) => (model.time_windows?.length ?? 0) > 0)),
+    [modelsData]
+  );
+  const pricingMinute = usePricingMinute(hasPriceSchedules);
   const [filters, setFilters] = useState<ModelFilters>(DEFAULT_FILTERS);
   const [selectedModel, setSelectedModel] = useState<{ name: string; data: ModelDisplayData; channel: string } | null>(null);
   const modalOpen = searchParams.get('model') !== null && selectedModel !== null;
@@ -176,12 +184,12 @@ export function ModelsPage() {
       }
 
       if (filters.maxInputPrice > 0) {
-        if (model.input_price > filters.maxInputPrice) return false;
+        if (currentDisplayTariff(model, pricingMinute).input_price > filters.maxInputPrice) return false;
       }
 
       return true;
     },
-    [filters]
+    [filters, pricingMinute]
   );
 
   useEffect(() => {
@@ -395,16 +403,21 @@ export function ModelsPage() {
   };
 
   const renderChannelModels = (channelName: string, channelInfo: ChannelInfo) => {
+    // Price columns show the server-computed tariff in effect this minute.
+    const now = pricingMinute;
     const models = Object.keys(channelInfo.models)
       .sort()
-      .map((modelName) => ({
-        model: modelName,
-        data: channelInfo.models[modelName],
-        inputPrice: channelInfo.models[modelName].input_price,
-        cachedInputPrice: channelInfo.models[modelName].cached_input_price ?? channelInfo.models[modelName].input_price,
-        outputPrice: channelInfo.models[modelName].output_price,
-        imagePrice: channelInfo.models[modelName].image_price,
-      }));
+      .map((modelName) => {
+        const current = currentDisplayTariff(channelInfo.models[modelName], now);
+        return {
+          model: modelName,
+          data: channelInfo.models[modelName],
+          inputPrice: current.input_price,
+          cachedInputPrice: current.cached_input_price ?? current.input_price,
+          outputPrice: current.output_price,
+          imagePrice: current.image_price,
+        };
+      });
 
     return (
       <Card key={channelName} className="mb-6 border-0 shadow-none md:border md:shadow-sm">

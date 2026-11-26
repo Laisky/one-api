@@ -28,36 +28,53 @@ type ChannelModelsDisplayInfo struct {
 	Models      map[string]ModelDisplayInfo `json:"models"`
 }
 
-// ModelDisplayInfo represents display information for a single model
+// ModelDisplayTariff is one complete display price list: what billing charges
+// for a model while one tariff state is in effect, either the base schedule or
+// one time window while it is the first match. Prices are USD per million
+// tokens unless a field says otherwise.
+type ModelDisplayTariff struct {
+	InputPrice        float64                  `json:"input_price"`                    // Price per 1M input tokens in USD
+	CachedInputPrice  float64                  `json:"cached_input_price"`             // Price per 1M cached input tokens in USD (falls back to input price when unspecified)
+	CacheWrite5mPrice float64                  `json:"cache_write_5m_price,omitempty"` // Price per 1M tokens for 5-minute cache write
+	CacheWrite1hPrice float64                  `json:"cache_write_1h_price,omitempty"` // Price per 1M tokens for 1-hour cache write
+	OutputPrice       float64                  `json:"output_price"`                   // Price per 1M output tokens in USD
+	ImagePrice        float64                  `json:"image_price,omitempty"`          // USD per image (image models only)
+	Tiers             []ModelDisplayTier       `json:"tiers,omitempty"`                // Tiered pricing (volume-based)
+	VideoPricing      *VideoDisplayPricing     `json:"video_pricing,omitempty"`        // Video generation pricing
+	AudioPricing      *AudioDisplayPricing     `json:"audio_pricing,omitempty"`        // Audio prompt/completion pricing
+	ImagePricing      *ImageDisplayPricing     `json:"image_pricing,omitempty"`        // Detailed image pricing with size/quality multipliers
+	EmbeddingPricing  *EmbeddingDisplayPricing `json:"embedding_pricing,omitempty"`    // Embedding pricing by modality
+	PerCallPricing    *PerCallDisplayPricing   `json:"per_call_pricing,omitempty"`     // Flat per-invocation pricing (mutually exclusive with token pricing)
+	PerPagePricing    *PerPageDisplayPricing   `json:"per_page_pricing,omitempty"`     // Flat per-processed-page pricing (mutually exclusive with token and per-call pricing)
+}
+
+// ModelDisplayInfo represents display information for a single model.
+//
+// Its top-level price fields (the embedded ModelDisplayTariff) are the tariff
+// billing applies at display time: the first-matching time window's tariff
+// while one is active, otherwise the base schedule. time_windows keeps the full
+// schedule, and while a window is active the base schedule is published only as
+// inactive_base_pricing, which is not the price billed at that moment.
 type ModelDisplayInfo struct {
-	InputPrice                float64                  `json:"input_price"`                             // Price per 1M input tokens in USD
-	CachedInputPrice          float64                  `json:"cached_input_price"`                      // Price per 1M cached input tokens in USD (falls back to input price when unspecified)
-	CacheWrite5mPrice         float64                  `json:"cache_write_5m_price,omitempty"`          // Price per 1M tokens for 5-minute cache write
-	CacheWrite1hPrice         float64                  `json:"cache_write_1h_price,omitempty"`          // Price per 1M tokens for 1-hour cache write
-	OutputPrice               float64                  `json:"output_price"`                            // Price per 1M output tokens in USD
-	MaxTokens                 int32                    `json:"max_tokens"`                              // Maximum tokens limit, 0 means unlimited
-	ContextLength             int32                    `json:"context_length,omitempty"`                // Maximum total context window (input + output)
-	MaxOutputTokens           int32                    `json:"max_output_tokens,omitempty"`             // Maximum output tokens per response
-	InputModalities           []string                 `json:"input_modalities,omitempty"`              // Supported request input modalities
-	OutputModalities          []string                 `json:"output_modalities,omitempty"`             // Supported response output modalities
-	SupportedFeatures         []string                 `json:"supported_features,omitempty"`            // Capability flags such as tools/json_mode/reasoning
-	SupportedSampling         []string                 `json:"supported_sampling_parameters,omitempty"` // Supported OpenAI-compatible sampling parameters
-	SupportedReasoningEfforts []string                 `json:"supported_reasoning_efforts,omitempty"`   // Discrete reasoning_effort levels accepted (minimal/low/medium/high)
-	DefaultReasoningEffort    string                   `json:"default_reasoning_effort,omitempty"`      // Default reasoning_effort the relay applies when omitted
-	MaxReasoningTokens        int32                    `json:"max_reasoning_tokens,omitempty"`          // Upstream reasoning/thinking budget cap (Anthropic/Gemini style)
-	Quantization              string                   `json:"quantization,omitempty"`                  // Numeric precision label (for OpenRouter-compatible metadata)
-	HuggingFaceID             string                   `json:"hugging_face_id,omitempty"`               // HuggingFace model identifier when applicable
-	Description               string                   `json:"description,omitempty"`                   // Human-readable short model description
-	ImagePrice                float64                  `json:"image_price,omitempty"`                   // USD per image (image models only)
-	Tiers                     []ModelDisplayTier       `json:"tiers,omitempty"`                         // Tiered pricing (volume-based)
-	VideoPricing              *VideoDisplayPricing     `json:"video_pricing,omitempty"`                 // Video generation pricing
-	AudioPricing              *AudioDisplayPricing     `json:"audio_pricing,omitempty"`                 // Audio prompt/completion pricing
-	ImagePricing              *ImageDisplayPricing     `json:"image_pricing,omitempty"`                 // Detailed image pricing with size/quality multipliers
-	EmbeddingPricing          *EmbeddingDisplayPricing `json:"embedding_pricing,omitempty"`             // Embedding pricing by modality
-	PerCallPricing            *PerCallDisplayPricing   `json:"per_call_pricing,omitempty"`              // Flat per-invocation pricing (mutually exclusive with token pricing)
-	PerPagePricing            *PerPageDisplayPricing   `json:"per_page_pricing,omitempty"`              // Flat per-processed-page pricing (mutually exclusive with token and per-call pricing)
-	TimeWindows               []TimeWindowDisplay      `json:"time_windows,omitempty"`                  // Time-of-day pricing windows
-	ActiveTimeWindow          string                   `json:"active_time_window,omitempty"`            // First active window name at display time
+	ModelDisplayTariff
+	MaxTokens                 int32               `json:"max_tokens"`                              // Maximum tokens limit, 0 means unlimited
+	ContextLength             int32               `json:"context_length,omitempty"`                // Maximum total context window (input + output)
+	MaxOutputTokens           int32               `json:"max_output_tokens,omitempty"`             // Maximum output tokens per response
+	InputModalities           []string            `json:"input_modalities,omitempty"`              // Supported request input modalities
+	OutputModalities          []string            `json:"output_modalities,omitempty"`             // Supported response output modalities
+	SupportedFeatures         []string            `json:"supported_features,omitempty"`            // Capability flags such as tools/json_mode/reasoning
+	SupportedSampling         []string            `json:"supported_sampling_parameters,omitempty"` // Supported OpenAI-compatible sampling parameters
+	SupportedReasoningEfforts []string            `json:"supported_reasoning_efforts,omitempty"`   // Discrete reasoning_effort levels accepted (minimal/low/medium/high)
+	DefaultReasoningEffort    string              `json:"default_reasoning_effort,omitempty"`      // Default reasoning_effort the relay applies when omitted
+	MaxReasoningTokens        int32               `json:"max_reasoning_tokens,omitempty"`          // Upstream reasoning/thinking budget cap (Anthropic/Gemini style)
+	Quantization              string              `json:"quantization,omitempty"`                  // Numeric precision label (for OpenRouter-compatible metadata)
+	HuggingFaceID             string              `json:"hugging_face_id,omitempty"`               // HuggingFace model identifier when applicable
+	Description               string              `json:"description,omitempty"`                   // Human-readable short model description
+	TimeWindows               []TimeWindowDisplay `json:"time_windows,omitempty"`                  // Time-of-day pricing windows
+	ActiveTimeWindow          string              `json:"active_time_window,omitempty"`            // First active window name at display time
+	// InactiveBasePricing is the base schedule's price list. It is present only
+	// while a time window is active, and is then not what billing charges.
+	InactiveBasePricing *ModelDisplayTariff `json:"inactive_base_pricing,omitempty"`
 }
 
 // TimeWindowDisplay represents one time-of-day pricing window for read-only model display.
@@ -69,6 +86,9 @@ type TimeWindowDisplay struct {
 	DateFrom   string                   `json:"date_from,omitempty"`    // Inclusive local date bound
 	DateTo     string                   `json:"date_to,omitempty"`      // Exclusive local date bound
 	Overlay    TimeWindowOverlayDisplay `json:"overlay"`                // Sparse price overlay rendered for display
+	// EffectivePricing is the complete price list billing charges while this
+	// window is the first match: the overlay merged into the base schedule.
+	EffectivePricing *ModelDisplayTariff `json:"effective_pricing,omitempty"`
 }
 
 // ClockRangeDisplay represents one local wall-clock range in a display window.

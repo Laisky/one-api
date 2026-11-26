@@ -39,13 +39,29 @@ func (a *Adaptor) UsesNativeOpenAIPricing() bool {
 // pricingTable returns the pricing map for the channel this adaptor instance serves.
 //
 // This adaptor backs every entry in CompatibleChannels, not just OpenAI, so all
-// four pricing methods must key off a.ChannelType. Callers that want OpenAI's own
-// table leave ChannelType at its zero value, which falls to the default branch.
+// four pricing methods must key off a.ChannelType. Only channeltype.OpenAI
+// selects native OpenAI's first-party table with its dated schedules; an unset
+// ChannelType selects the shared catalog (see GetCompatibleChannelPricing). The
+// global fallback catalog never reads this table: see GetGlobalFallbackModelPricing.
 //
 // Return values:
 //   - map[string]adaptor.ModelConfig: the channel's audited pricing.
 func (a *Adaptor) pricingTable() map[string]adaptor.ModelConfig {
 	return GetCompatibleChannelPricing(a.ChannelType)
+}
+
+// GetGlobalFallbackModelPricing returns the catalog this adaptor contributes to
+// the global fallback layer, implementing adaptor.GlobalPricingContributor. For
+// native OpenAI that is the shared ModelRatios catalog, without first-party
+// dated schedules (nativeModelRatios): a provider that prices an OpenAI model
+// only through the global layer has no evidence that OpenAI's own price
+// changes apply to it. A compatible channel type contributes its own table.
+// It takes no parameters and returns shared read-only catalog data.
+func (a *Adaptor) GetGlobalFallbackModelPricing() map[string]adaptor.ModelConfig {
+	if a.UsesNativeOpenAIPricing() {
+		return ModelRatios
+	}
+	return a.pricingTable()
 }
 
 // GetDefaultModelPricing returns the pricing map for this adaptor's channel type.

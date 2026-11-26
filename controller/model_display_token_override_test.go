@@ -48,11 +48,13 @@ func TestGetModelsDisplayLocalTokenTariffMatchesBilling(t *testing.T) {
 			fixtures = append(fixtures, fixture{ch: ch, name: name, kind: kind, local: local})
 		}
 	}
+	// Display and billing must price the same instant.
+	at := time.Now()
+	pinModelsDisplayClock(t, at)
 	for _, f := range fixtures {
 		t.Run(f.ch.Name, func(t *testing.T) {
 			info := fetchPerPageDisplayModel(t, f.ch, f.name, 0).info
 			configs := f.ch.GetModelPriceConfigs()
-			at := time.Now()
 			provider := &deepseek.Adaptor{}
 			input := pricing.ResolveModelRatioAt(f.name, configs, f.ch.GetModelRatioFromConfigs(), provider, at)
 			resolved, ok := pricing.ResolveModelConfig(f.name, configs, provider, at)
@@ -103,6 +105,10 @@ func TestGetModelsDisplayLocalTokenTariffMatchesBilling(t *testing.T) {
 			require.InDelta(t, input/ratio.MilliTokensUsd, displayedInput, 1e-12)
 			require.InDelta(t, input*completion/ratio.MilliTokensUsd, displayedOutput, 1e-12)
 			require.InDelta(t, expectedCache/ratio.MilliTokensUsd, displayedCache, 1e-12)
+			// The top-level prices are the tariff billed at display time.
+			require.InDelta(t, displayedInput, info.InputPrice, 1e-12)
+			require.InDelta(t, displayedOutput, info.OutputPrice, 1e-12)
+			require.InDelta(t, displayedCache, info.CachedInputPrice, 1e-12)
 			billed := quota.Compute(quota.ComputeInput{Usage: &relaymodel.Usage{PromptTokens: 10000, CompletionTokens: 5000, PromptTokensDetails: &relaymodel.UsagePromptTokensDetails{CachedTokens: 2000}}, ModelName: f.name, ModelRatio: input, ChannelModelRatio: f.ch.GetModelRatioFromConfigs(), ChannelCompletionRatio: f.ch.GetCompletionRatioFromConfigs(), GroupRatio: 1, ChannelModelConfigs: configs, PricingAdaptor: provider, RequestTime: at})
 			displayedQuota := int64(math.Ceil((8000*displayedInput + 2000*displayedCache + 5000*displayedOutput) * ratio.MilliTokensUsd))
 			require.Equal(t, displayedQuota, billed.TotalQuota, "displayed token rates must quote actual billing")

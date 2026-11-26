@@ -2,16 +2,24 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { formatTierThreshold } from './tier-threshold';
 import { AudioTariffDetails } from './AudioTariffDetails';
+import { CurrentTariffNotice } from './CurrentTariffNotice';
+import { applyDisplayTariff, selectEffectiveTariff } from './effective-tariff';
 import type { ModelDisplayData } from './ModelPricingModal';
 import { ModelPricingWindows } from './ModelPricingWindows';
 import { PerPagePricingSection } from './PerPagePricing';
 import { formatUsd, formatUsdRaw, type TrFn } from './pricing-format';
 import { PriceCell, PriceGrid, PricingSection } from './PricingPrimitives';
+import { useTimeWindowSnapshot } from './use-time-window-snapshot';
 
-/** PricingContent renders the unchanged pricing sections and model metadata. */
+/**
+ * PricingContent renders the pricing sections and model metadata of one model.
+ * Parameters: data is the server display payload; tr and locale localize labels.
+ * Returns: the pricing body. Price sections render the tariff in effect now,
+ * selected from the server-computed tariffs by the live window snapshot.
+ */
 export function PricingContent({
   modelName: _modelName,
-  data,
+  data: source,
   channelName: _channelName,
   tr,
   locale,
@@ -22,10 +30,16 @@ export function PricingContent({
   tr: TrFn;
   locale: string;
 }) {
+  // One live snapshot drives both the current tariff and the window cards.
+  const windowSnapshot = useTimeWindowSnapshot(source.time_windows);
+  const tariffSelection = selectEffectiveTariff(source, windowSnapshot.activeIndex);
+  const data = applyDisplayTariff(source, tariffSelection.tariff);
   const hasCache =
     (data.cached_input_price !== undefined && data.cached_input_price !== data.input_price) ||
     (data.cache_write_5m_price !== undefined && data.cache_write_5m_price > 0) ||
     (data.cache_write_1h_price !== undefined && data.cache_write_1h_price > 0);
+  const hasTierCacheWrite5m = data.tiers?.some((tier) => (tier.cache_write_5m_price ?? 0) > 0);
+  const hasTierCacheWrite1h = data.tiers?.some((tier) => (tier.cache_write_1h_price ?? 0) > 0);
   const hasMetadata =
     (data.description && data.description.trim().length > 0) ||
     (data.context_length !== undefined && data.context_length > 0) ||
@@ -144,7 +158,9 @@ export function PricingContent({
         </PricingSection>
       )}
 
-      {/* Base text token pricing — hidden for flat per-call and per-page billing models */}
+      <CurrentTariffNotice selection={tariffSelection} tr={tr} />
+
+      {/* Text token pricing — hidden for flat per-call and per-page billing models */}
       {!data.per_call_pricing && !data.per_page_pricing && (
         <PricingSection title={tr('text_tokens', 'Text Token Pricing')} icon="text">
           <PriceGrid>
@@ -216,7 +232,13 @@ export function PricingContent({
         </PricingSection>
       )}
 
-      <ModelPricingWindows windows={data.time_windows} activeWindowName={data.active_time_window} tr={tr} locale={locale} />
+      <ModelPricingWindows
+        windows={source.time_windows}
+        snapshot={windowSnapshot}
+        activeWindowName={source.active_time_window}
+        tr={tr}
+        locale={locale}
+      />
 
       {/* Tiered pricing */}
       {data.tiers && data.tiers.length > 0 && (
@@ -231,6 +253,8 @@ export function PricingContent({
                   {data.tiers.some((t) => t.cached_input_price && t.cached_input_price > 0) && (
                     <th className="text-left py-2 pl-3 font-medium">{tr('cached_read', 'Cache Read')}</th>
                   )}
+                  {hasTierCacheWrite5m && <th className="text-left py-2 px-3 font-medium">{tr('cache_write_5m', '5-min Cache Write')}</th>}
+                  {hasTierCacheWrite1h && <th className="text-left py-2 px-3 font-medium">{tr('cache_write_1h', '1-hour Cache Write')}</th>}
                 </tr>
               </thead>
               <tbody>
@@ -246,6 +270,16 @@ export function PricingContent({
                   {data.tiers.some((t) => t.cached_input_price && t.cached_input_price > 0) && (
                     <td className="py-2 pl-3 font-mono text-sm">{formatUsd(data.cached_input_price ?? data.input_price)}</td>
                   )}
+                  {hasTierCacheWrite5m && (
+                    <td className="py-2 px-3 font-mono">
+                      {data.cache_write_5m_price === undefined ? '-' : formatUsd(data.cache_write_5m_price)}
+                    </td>
+                  )}
+                  {hasTierCacheWrite1h && (
+                    <td className="py-2 px-3 font-mono">
+                      {data.cache_write_1h_price === undefined ? '-' : formatUsd(data.cache_write_1h_price)}
+                    </td>
+                  )}
                 </tr>
                 {data.tiers.map((tier, i) => (
                   <tr key={i} className="border-b border-dashed last:border-0">
@@ -258,6 +292,16 @@ export function PricingContent({
                     <td className="py-2 px-3 font-mono text-sm">{formatUsd(tier.output_price)}</td>
                     {data.tiers!.some((t) => t.cached_input_price && t.cached_input_price > 0) && (
                       <td className="py-2 pl-3 font-mono text-sm">{tier.cached_input_price ? formatUsd(tier.cached_input_price) : '-'}</td>
+                    )}
+                    {hasTierCacheWrite5m && (
+                      <td className="py-2 px-3 font-mono">
+                        {tier.cache_write_5m_price === undefined ? '-' : formatUsd(tier.cache_write_5m_price)}
+                      </td>
+                    )}
+                    {hasTierCacheWrite1h && (
+                      <td className="py-2 px-3 font-mono">
+                        {tier.cache_write_1h_price === undefined ? '-' : formatUsd(tier.cache_write_1h_price)}
+                      </td>
                     )}
                   </tr>
                 ))}

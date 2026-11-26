@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/Laisky/errors/v2"
 	gmw "github.com/Laisky/gin-middlewares/v7"
@@ -19,6 +18,7 @@ import (
 	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 	"github.com/Laisky/one-api/relay/openrouterprovider"
+	relaypricing "github.com/Laisky/one-api/relay/pricing"
 )
 
 // OpenRouterListModels serves GET /openrouter/v1/models in the OpenRouter
@@ -46,9 +46,13 @@ func OpenRouterListModels(c *gin.Context) {
 // two important differences: it returns the per-model adaptor.ModelConfig (not
 // just the OpenAI-compatible permission record), and it deduplicates by
 // case-insensitive model id keeping the first occurrence so the catalog
-// remains stable across calls.
+// remains stable across calls. Each entry quotes the tariff billing applies at
+// listing time (relaypricing.ApplyTimeWindow), the same contract as the
+// top-level prices of /api/models/display, because the OpenRouter schema has
+// no field for a dated or time-of-day schedule.
 func collectOpenRouterModelInputs() ([]openrouterprovider.ModelInput, error) {
-	created := time.Now().Unix()
+	at := modelsDisplayNow()
+	created := at.Unix()
 	seen := make(map[string]struct{})
 	inputs := make([]openrouterprovider.ModelInput, 0, 128)
 
@@ -65,7 +69,7 @@ func collectOpenRouterModelInputs() ([]openrouterprovider.ModelInput, error) {
 		inputs = append(inputs, openrouterprovider.ModelInput{
 			Name:    trimmed,
 			Owner:   strings.TrimSpace(owner),
-			Config:  cfg,
+			Config:  relaypricing.ApplyTimeWindow(cfg, at),
 			Created: created,
 		})
 	}
@@ -80,7 +84,10 @@ func collectOpenRouterModelInputs() ([]openrouterprovider.ModelInput, error) {
 		if adp == nil {
 			continue
 		}
-		adp.Init(&meta.Meta{})
+		// Price each adaptor as the channel type that routes to it would be
+		// billed, so first-party rules (such as native OpenAI's dated
+		// schedules) apply exactly where billing applies them.
+		adp.Init(&meta.Meta{ChannelType: canonicalChannelType(apiType)})
 		owner := adp.GetChannelName()
 		pricing := adp.GetDefaultModelPricing()
 		for _, modelName := range adp.GetModelList() {
@@ -110,4 +117,17 @@ func collectOpenRouterModelInputs() ([]openrouterprovider.ModelInput, error) {
 		return strings.ToLower(inputs[i].Name) < strings.ToLower(inputs[j].Name)
 	})
 	return inputs, nil
+}
+
+// canonicalChannelType returns the first channel type whose requests route to
+// apiType, which is the provider's own channel type for every first-party
+// adaptor (channeltype.OpenAI for apitype.OpenAI). Parameters: apiType is a
+// relay/apitype value. Returns: the channel type, or 0 when none routes there.
+func canonicalChannelType(apiType int) int {
+	for channelType := channeltype.Unknown + 1; channelType < channeltype.Dummy; channelType++ {
+		if channeltype.ToAPIType(channelType) == apiType {
+			return channelType
+		}
+	}
+	return channeltype.Unknown
 }

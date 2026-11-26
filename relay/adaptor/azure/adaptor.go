@@ -149,6 +149,14 @@ func (a *Adaptor) GetDefaultModelPricing() map[string]adaptor.ModelConfig {
 	return merged
 }
 
+// GetGlobalFallbackModelPricing returns the merged Foundry catalog, so an Azure
+// adaptor never contributes the embedded OpenAI adaptor's native catalog to
+// the global fallback layer. It implements adaptor.GlobalPricingContributor,
+// takes no parameters and returns a fresh map.
+func (a *Adaptor) GetGlobalFallbackModelPricing() map[string]adaptor.ModelConfig {
+	return a.GetDefaultModelPricing()
+}
+
 func (a *Adaptor) GetModelRatio(modelName string) float64 {
 	if a.RequiresOperatorTariff(modelName) {
 		// No Foundry tariff exists; dispatch requires an operator channel price.

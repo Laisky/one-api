@@ -1,6 +1,8 @@
 package openai
 
 import (
+	"maps"
+
 	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/billing/ratio"
 )
@@ -53,8 +55,8 @@ var gpt56LunaLongContextTier = adaptor.ModelRatioTier{
 
 // gpt56ModelRatios contains complete GPT-5.6 and Daybreak alias definitions.
 var gpt56ModelRatios = map[string]adaptor.ModelConfig{
-	"gpt-5.6":     newGPT56SolConfig("GPT-5.6 Sol: frontier reasoning model with 1.05M context and promotional API pricing."),
-	"gpt-5.6-sol": newGPT56SolConfig("GPT-5.6 Sol: frontier reasoning model with 1.05M context and promotional API pricing."),
+	"gpt-5.6":     newGPT56SolConfig("GPT-5.6 Sol: frontier reasoning model with 1.05M context."),
+	"gpt-5.6-sol": newGPT56SolConfig("GPT-5.6 Sol: frontier reasoning model with 1.05M context."),
 	"gpt-5.6-terra": {
 		Ratio:                       2.0 * ratio.MilliTokensUsd,
 		CompletionRatio:             12.0 / 2.0,
@@ -124,4 +126,45 @@ func newGPT56CyberConfig(description string) adaptor.ModelConfig {
 	config.Tiers = []adaptor.ModelRatioTier{gpt56CyberLongContextTier}
 	config.ContextLength = 400_000
 	return config
+}
+
+// gpt56SolStandardLongContextTier applies OpenAI's full-request multiplier
+// above 272,000 input tokens: 2× input, cache reads and writes, and 1.5× output.
+var gpt56SolStandardLongContextTier = adaptor.ModelRatioTier{
+	Ratio:               10.0 * ratio.MilliTokensUsd,
+	CompletionRatio:     45.0 / 10.0,
+	CachedInputRatio:    1.0 * ratio.MilliTokensUsd,
+	CacheWrite5mRatio:   12.5 * ratio.MilliTokensUsd,
+	InputTokenThreshold: 272_001,
+}
+
+// nativeModelRatios adds first-party dated tariffs without changing the
+// catalog inherited by other providers.
+var nativeModelRatios = withNativeGPT56SolSchedule(ModelRatios)
+
+// withNativeGPT56SolSchedule returns a catalog copy with the native Sol
+// promotion cutoff applied to the two public IDs. Parameters: shared is the
+// unscheduled catalog for providers that inherit OpenAI model defaults.
+func withNativeGPT56SolSchedule(shared map[string]adaptor.ModelConfig) map[string]adaptor.ModelConfig {
+	native := maps.Clone(shared)
+	for _, name := range []string{"gpt-5.6-sol", "gpt-5.6"} {
+		cfg := native[name]
+		cfg.TimeWindows = []adaptor.TimeWindow{{
+			Name:     "gpt-5.6-sol-standard-from-december-2026",
+			TimeZone: "UTC",
+			// OpenAI's notice specifies December 1, not a time zone.
+			// Follow the UTC convention used by other dated catalog entries.
+			DateFrom: "2026-12-01",
+			Ranges:   []adaptor.ClockRange{{Start: "00:00", End: "00:00"}},
+			Overlay: adaptor.ModelConfig{
+				Ratio:             5.0 * ratio.MilliTokensUsd,
+				CompletionRatio:   30.0 / 5.0,
+				CachedInputRatio:  0.5 * ratio.MilliTokensUsd,
+				CacheWrite5mRatio: 6.25 * ratio.MilliTokensUsd, // OpenAI 30m; the field name is legacy.
+				Tiers:             []adaptor.ModelRatioTier{gpt56SolStandardLongContextTier},
+			},
+		}}
+		native[name] = cfg
+	}
+	return native
 }

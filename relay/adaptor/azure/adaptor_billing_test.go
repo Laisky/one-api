@@ -5,8 +5,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/Laisky/one-api/relay/adaptor"
 	"github.com/Laisky/one-api/relay/adaptor/anthropic"
 	"github.com/Laisky/one-api/relay/adaptor/openai"
+	"github.com/Laisky/one-api/relay/channeltype"
 	"github.com/Laisky/one-api/relay/meta"
 )
 
@@ -97,5 +99,36 @@ func TestFoundryClaudeModelsHaveRealAnthropicPricing(t *testing.T) {
 			"Foundry Claude model %q input ratio must match the Anthropic catalog", name)
 		require.Equalf(t, antCfg.CompletionRatio, mergedCfg.CompletionRatio,
 			"Foundry Claude model %q completion ratio must match the Anthropic catalog", name)
+	}
+}
+
+// TestGlobalFallbackPricingIsTheFoundryCatalog verifies an Azure adaptor, bound
+// or not, contributes its own Foundry catalog to the global fallback layer
+// rather than the embedded OpenAI adaptor's native catalog: no native-only IDs,
+// no native GPT-5.6 Sol schedule, and the Foundry Claude models included.
+// Parameter t reports a leaked native tariff.
+func TestGlobalFallbackPricingIsTheFoundryCatalog(t *testing.T) {
+	t.Parallel()
+
+	bound := &Adaptor{}
+	bound.Init(&meta.Meta{ChannelType: channeltype.Azure})
+	for _, provider := range []*Adaptor{{}, bound} {
+		contribution := adaptor.GlobalFallbackPricing(provider)
+		require.Equal(t, provider.GetDefaultModelPricing(), contribution)
+		for name := range contribution {
+			require.False(t, openai.IsNativeOnlyModel(name), "%s is native-only", name)
+		}
+		for _, name := range []string{"gpt-5.6-sol", "gpt-5.6"} {
+			require.Contains(t, contribution, name)
+			require.Empty(t, contribution[name].TimeWindows, "%s must not carry native OpenAI's schedule", name)
+		}
+		hasClaude := false
+		for name := range contribution {
+			if meta.IsClaudeModelName(name) {
+				hasClaude = true
+				break
+			}
+		}
+		require.True(t, hasClaude, "the Foundry Claude models are part of the contribution")
 	}
 }

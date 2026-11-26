@@ -610,6 +610,34 @@ type ChannelTypeAware interface {
 	SetChannelType(channelType int)
 }
 
+// GlobalPricingContributor is implemented by an adaptor whose own channel
+// catalog holds first-party tariff rules, such as a dated native price
+// schedule, that providers falling back to the global catalog must not
+// inherit. The global pricing manager reads GetGlobalFallbackModelPricing
+// instead of GetDefaultModelPricing for such an adaptor, so the boundary between a
+// provider's own billing and the shared fallback is explicit and never
+// depends on how the adaptor instance happens to be initialized.
+type GlobalPricingContributor interface {
+	// GetGlobalFallbackModelPricing returns the model catalog this adaptor
+	// contributes to the global fallback layer. It takes no parameters; the
+	// returned map is shared read-only catalog data callers must not mutate.
+	GetGlobalFallbackModelPricing() map[string]ModelConfig
+}
+
+// GlobalFallbackPricing returns the catalog provider contributes to the
+// global fallback layer. Parameters: provider is any adaptor (nil allowed).
+// Returns: GetGlobalFallbackModelPricing for a GlobalPricingContributor, otherwise
+// GetDefaultModelPricing, and nil for a nil provider.
+func GlobalFallbackPricing(provider Adaptor) map[string]ModelConfig {
+	if provider == nil {
+		return nil
+	}
+	if contributor, ok := provider.(GlobalPricingContributor); ok {
+		return contributor.GetGlobalFallbackModelPricing()
+	}
+	return provider.GetDefaultModelPricing()
+}
+
 type Adaptor interface {
 	Init(meta *meta.Meta)
 	GetRequestURL(meta *meta.Meta) (string, error)

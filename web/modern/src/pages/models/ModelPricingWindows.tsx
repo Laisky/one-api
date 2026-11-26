@@ -1,55 +1,35 @@
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useEffect, useMemo, useRef, useState } from 'react';
 import { AudioTariffDetails } from './AudioTariffDetails';
 import type { TimeWindowData } from './ModelPricingModal';
 import { PerPageWindowCell } from './PerPagePricing';
 import { PriceCell, PriceGrid, PricingSection } from './PricingPrimitives';
 import { formatUsd, type TrFn } from './pricing-format';
 import { formatTierThreshold } from './tier-threshold';
-import { NO_ACTIVE_TIME_WINDOW, UNRESOLVED_TIME_WINDOWS, resolveTimeWindowSnapshot, timeWindowScheduleSignature } from './time-window';
+import { NO_ACTIVE_TIME_WINDOW, UNRESOLVED_TIME_WINDOWS, type TimeWindowSnapshot } from './time-window';
 
-/** useTimeWindowSnapshot tracks active/history membership from one instant and cleans up its timer. */
-function useTimeWindowSnapshot(windows: TimeWindowData[] | undefined) {
-  const windowsRef = useRef(windows);
-  windowsRef.current = windows;
-  const signature = useMemo(() => timeWindowScheduleSignature(windows), [windows]);
-  const [snapshot, setSnapshot] = useState(() => ({ signature, ...resolveTimeWindowSnapshot(windows, new Date()) }));
-
-  useEffect(() => {
-    const evaluate = () => {
-      const next = resolveTimeWindowSnapshot(windowsRef.current, new Date());
-      setSnapshot((previous) =>
-        previous.signature === signature &&
-        previous.activeIndex === next.activeIndex &&
-        previous.historicalIndices.length === next.historicalIndices.length &&
-        previous.historicalIndices.every((index, position) => index === next.historicalIndices[position])
-          ? previous
-          : { signature, ...next }
-      );
-    };
-    evaluate();
-    const timer = setInterval(evaluate, 1000);
-    return () => clearInterval(timer);
-  }, [signature]);
-
-  // A model/schedule replacement must never render indices from the previous list.
-  return snapshot.signature === signature ? snapshot : resolveTimeWindowSnapshot(windows, new Date());
-}
-
-/** ModelPricingWindows preserves all source rules while collapsing expired valid schedules. */
+/**
+ * ModelPricingWindows preserves all source rules while collapsing expired valid schedules.
+ * Parameters: windows is the model's window list; snapshot is the live window
+ * snapshot shared with the current-tariff selection (see useTimeWindowSnapshot);
+ * activeWindowName is the server-evaluated window name used when the browser
+ * cannot evaluate the schedules; tr and locale localize labels and clock times.
+ * Returns: the time-of-day pricing section, or null when the model has no windows.
+ */
 export function ModelPricingWindows({
   windows,
+  snapshot,
   activeWindowName,
   tr,
   locale,
 }: {
   windows: TimeWindowData[] | undefined;
+  snapshot: TimeWindowSnapshot;
   activeWindowName?: string;
   tr: TrFn;
   locale: string;
 }) {
-  const { activeIndex: activeTimeWindowIndex, historicalIndices } = useTimeWindowSnapshot(windows);
+  const { activeIndex: activeTimeWindowIndex, historicalIndices } = snapshot;
   if (!windows?.length) return null;
   const historical = new Set(historicalIndices);
   const renderWindow = (window: TimeWindowData, index: number) => {
