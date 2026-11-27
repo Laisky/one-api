@@ -358,76 +358,125 @@ class WorkflowTests(unittest.TestCase):
         self.assertEqual(deploy["concurrency"], {
             "group": "deploy-oneapi-b1", "cancel-in-progress": "false",
         })
-        self.assertEqual(len(deploy["steps"]), 1)
-        caller = deploy["steps"][0]
+        self.assertEqual(len(deploy["steps"]), 2)
+        self.assertEqual(deploy["steps"][0]["with"]["persist-credentials"], "false")
+        caller = deploy["steps"][1]
         self.assertTrue(caller["uses"].startswith("appleboy/ssh-action@"))
         self.assertEqual(caller["with"]["command_timeout"], "20m")
         self.assertGreater(int(deploy["timeout-minutes"]), 20)
         for key in ("key", "fingerprint", "host", "username", "port"):
             self.assertIn(key, caller["with"])
-        script = caller["with"]["script"]
+        self.assertEqual(caller["with"]["script_path"], ".github/scripts/deploy-oneapi-b1.sh")
+        script = (ROOT / caller["with"]["script_path"]).read_text()
         for forbidden in ("python", "deploy_oneapi", "--remove-orphans", "down", "prune"):
             self.assertNotIn(forbidden, script)
 
     def test_remote_pull_recreate_and_failure_propagation(self) -> None:
-        """test_remote_pull_recreate_and_failure_propagation runs the real caller with fake executables."""
-        script = self.delivery["jobs"]["deploy"]["steps"][0]["with"]["script"]
+        """Run the real shell entry point; no Docker mutation or HTTP leaves the fixture."""
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             bootstrap = root / "bootstrap"
             bootstrap.write_text('export INJECTOR_BOOTSTRAPPED=yes\n')
+            script_path = self.delivery["jobs"]["deploy"]["steps"][1]["with"]["script_path"]
+            script = (ROOT / script_path).read_text()
             script = script.replace("/home/laisky/.zshrc", str(bootstrap))
             script = script.replace("/home/laisky/repo/VPS", directory)
-            # A reverted workflow must never invoke a real host deployer during tests.
-            retired = root / "deploy_oneapi.py"
-            retired.write_text(">>>>>>> 9a3e2ec (fix)\n")
-            script = script.replace("/opt/configs/observability/deploy_oneapi.py", str(retired))
             calls = root / "calls.jsonl"
+            model = {"services": {"oneapi": {
+                "environment": {
+                    "OTEL_EXPORTER_OTLP_ENDPOINT": "https://b1.snake-carp.ts.net:14319",
+                    "OTEL_EXPORTER_OTLP_INSECURE": "false",
+                    "OTEL_EXPORTER_OTLP_CERTIFICATE": "/run/observability/ca.crt",
+                    "OTEL_EXPORTER_OTLP_HEADERS": "Authorization=Bearer%20fixture-token",
+                },
+                "extra_hosts": ["b1.snake-carp.ts.net=100.122.41.16"],
+                "volumes": [{
+                    "type": "bind", "source": "/opt/configs/observability/secrets/ca.crt",
+                    "target": "/run/observability/ca.crt", "read_only": True,
+                }],
+            }}}
             shim = (
                 f"#!{sys.executable}\n"
                 "import json, os, pathlib, sys\n"
                 "name = pathlib.Path(sys.argv[0]).name\n"
                 "args = sys.argv[1:]\n"
+                "fail = os.environ['FAIL_AT']\n"
                 "with open(os.environ['CALLS'], 'a') as out: out.write(json.dumps([name, *args]) + '\\n')\n"
                 "if name == 'op':\n"
                 "    assert os.environ.get('INJECTOR_BOOTSTRAPPED') == 'yes'\n"
-                "    if os.environ['FAIL_AT'] == 'op': sys.exit(24)\n"
+                "    if fail == 'op': sys.exit(24)\n"
                 "    command = args[args.index('--') + 1:]\n"
                 "    os.execvp(command[0], command)\n"
-                "if 'pull' in args and os.environ['FAIL_AT'] == 'pull': sys.exit(23)\n"
-                "if 'up' in args and os.environ['FAIL_AT'] == 'up': sys.exit(25)\n"
+                "if name == 'curl':\n"
+                "    assert 'fixture-token' not in ' '.join(args)\n"
+                "    if fail == 'transport': sys.exit(7)\n"
+                "    if '@-' in args:\n"
+                "        assert sys.stdin.read() == 'Authorization: Bearer fixture-token\\n'\n"
+                "        print({'drift': 401, 'redirect': 307, 'busy': 503}.get(fail, 415))\n"
+                "    else: print(415 if fail == 'open' else 401)\n"
+                "if 'config' in args:\n"
+                "    assert 'EDGE_TOKEN' not in os.environ\n"
+                "    if fail == 'config': sys.exit(9)\n"
+                "    print(os.environ['MODEL'])\n"
+                "if 'pull' in args and fail == 'pull': sys.exit(23)\n"
+                "if 'up' in args:\n"
+                "    assert os.environ['EDGE_TOKEN'] == 'fixture-token'\n"
+                "    if fail == 'up': sys.exit(25)\n"
             )
-            for name in ("docker", "op"):
+            for name in ("docker", "op", "curl"):
                 executable = root / name
                 executable.write_text(shim)
                 executable.chmod(0o700)
-            for failure, status in (("", 0), ("pull", 23), ("op", 24), ("up", 25)):
+
+            base_env = {
+                **os.environ, "PATH": directory + ":" + os.environ["PATH"],
+                "CALLS": str(calls), "ZDOTDIR": directory, "EDGE_TOKEN": "ambient-token",
+            }
+            compose = ["docker", "compose", "--compatibility",
+                       "--env-file", "/opt/configs/observability/.env", "-f", "b1-docker-compose.yml",
+                       "-f", "observability/one-api.override.yml"]
+            for failure, status, expected_names in (
+                ("", 0, ["op", "docker", "curl", "curl", "docker", "docker"]),
+                ("op", 24, ["op"]),
+                ("config", 1, ["op", "docker"]),
+                ("endpoint", 1, ["op", "docker"]),
+                ("signal_override", 1, ["op", "docker"]),
+                ("open", 1, ["op", "docker", "curl"]),
+                ("transport", 1, ["op", "docker", "curl"]),
+                ("drift", 1, ["op", "docker", "curl", "curl"]),
+                ("redirect", 1, ["op", "docker", "curl", "curl"]),
+                ("busy", 1, ["op", "docker", "curl", "curl"]),
+                ("pull", 23, ["op", "docker", "curl", "curl", "docker"]),
+                ("up", 25, ["op", "docker", "curl", "curl", "docker", "docker"]),
+            ):
                 with self.subTest(failure=failure):
                     calls.write_text("")
-                    result = subprocess.run(["/bin/sh", "-c", script], capture_output=True,
-                                            text=True, check=False, env={
-                                                **os.environ, "PATH": directory + ":" + os.environ["PATH"],
-                                                "CALLS": str(calls), "FAIL_AT": failure, "ZDOTDIR": directory,
-                                                "RELEASE_SHA": "a" * 40,
-                                                "IMAGE_DIGEST": "sha256:" + "b" * 64,
-                                            })
+                    candidate = json.loads(json.dumps(model))
+                    env = candidate["services"]["oneapi"]["environment"]
+                    if failure == "endpoint":
+                        env["OTEL_EXPORTER_OTLP_ENDPOINT"] = "https://localhost:14319"
+                    if failure == "signal_override":
+                        env["OTEL_EXPORTER_OTLP_METRICS_HEADERS"] = "Authorization=Bearer%20another"
+                    result = subprocess.run(
+                        ["/bin/sh", "-c", script], capture_output=True, text=True, check=False,
+                        env={**base_env, "FAIL_AT": failure, "MODEL": json.dumps(candidate)},
+                    )
                     self.assertEqual(result.returncode, status, result.stderr)
                     actual = [json.loads(line) for line in calls.read_text().splitlines()]
-                    expected = [["docker", "pull", "ppcelery/one-api:latest"]]
-                    compose = ["docker", "compose", "--compatibility",
-                               "--env-file", "/opt/configs/observability/.env",
-                               "-f", "b1-docker-compose.yml", "-f", "observability/one-api.override.yml",
-                               "up", "-d", "--no-deps", "--force-recreate", "--timeout", "420", "oneapi"]
-                    if failure != "pull":
-                        expected.append(["op", "run", "--env-file=one-api/b1.env", "--", *compose])
-                    if failure not in ("pull", "op"):
-                        expected.append(compose)
-                    self.assertEqual(actual, expected)
+                    self.assertEqual([c[0] for c in actual], expected_names)
+                    if len(actual) >= 2:
+                        self.assertEqual(actual[1], compose + ["config", "--format", "json", "oneapi"])
+                    if len(actual) == 6:
+                        self.assertEqual(actual[4], ["docker", "pull", "ppcelery/one-api:latest"])
+                        self.assertEqual(actual[5], compose +
+                                         ["up", "-d", "--no-deps", "--force-recreate", "--timeout", "420", "oneapi"])
+                    self.assertNotIn("fixture-token", result.stdout + result.stderr + calls.read_text())
             bootstrap.unlink()
             calls.write_text("")
-            result = subprocess.run(["/bin/sh", "-c", script], capture_output=True, text=True,
-                                    check=False, env={**os.environ, "PATH": directory + ":" + os.environ["PATH"],
-                                                      "CALLS": str(calls), "FAIL_AT": "", "ZDOTDIR": directory})
+            result = subprocess.run(
+                ["/bin/sh", "-c", script], capture_output=True, text=True, check=False,
+                env={**base_env, "FAIL_AT": "", "MODEL": json.dumps(model)},
+            )
             self.assertNotEqual(result.returncode, 0)
             self.assertEqual(calls.read_text(), "", "Missing bootstrap must not reach Docker")
 
@@ -438,7 +487,9 @@ class WorkflowTests(unittest.TestCase):
                 for step in job.get("steps", []):
                     scripts = [step["run"]] if "run" in step else []
                     if step.get("uses", "").startswith("appleboy/ssh-action@"):
-                        scripts.append(step["with"]["script"])
+                        inputs = step["with"]
+                        scripts.append((ROOT / inputs["script_path"]).read_text()
+                                       if "script_path" in inputs else inputs["script"])
                     for source in scripts:
                         script = re.sub(r"\$\{\{.*?\}\}", "expression", source)
                         result = subprocess.run(["bash", "-n"], input=script, text=True, capture_output=True, check=False)
