@@ -92,6 +92,9 @@ jobs:
       group: deploy-oneapi-b1
       cancel-in-progress: false
     steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Pull and recreate oneapi with Docker Compose
         uses: appleboy/ssh-action@v1.2.5
         with:
@@ -101,18 +104,7 @@ jobs:
           fingerprint: ${{ secrets.TARGET_HOST_FINGERPRINT }}
           port: ${{ secrets.TARGET_HOST_SSH_PORT }}
           command_timeout: 20m
-          script: |
-            /usr/bin/zsh -c '
-              source /home/laisky/.zshrc >/dev/null 2>&1 || exit $?
-              set -eu
-              cd /home/laisky/repo/VPS
-              docker pull ppcelery/one-api:latest
-              op run --env-file=one-api/b1.env -- \
-                docker compose --compatibility \
-                  --env-file /opt/configs/observability/.env \
-                  -f b1-docker-compose.yml -f observability/one-api.override.yml \
-                  up -d --no-deps --force-recreate --timeout 420 oneapi
-            '
+          script_path: .github/scripts/deploy-oneapi-b1.sh
 
   build_arm64_hash:
     needs: check_skip
